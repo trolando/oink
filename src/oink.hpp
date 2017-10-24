@@ -112,6 +112,12 @@ protected:
 
     std::vector<int> todo;   // internal queue for solved nodes for flushing
     int *outcount;           // number of unsolved outgoing edges per node (for fast attraction)
+    int *outa;               // index array for outgoing edges
+    int *ina;                // index array for incoming edges
+    int *outs;               // all outgoing edges
+    int *ins;                // all incoming edges
+
+    friend class pg::Solver; // to allow access to edges
 };
 
 }

@@ -396,64 +396,103 @@ Oink::run()
         logger << "\033[1;7mWARNING\033[m: running PSI solver without removing winner-controlled winning cycles!" << std::endl;
     }
 
-    if (solver != NONE) {
-        game->buildArrays();
-
-        bool exit_lace = false;
-        if (solverIsParallel(solver)) {
-            if (workers >= 0 and lace_workers() == 0) {
-                lace_init(workers, 100*1000*1000);
-                lace_startup(0, 0, 0);
-                logger << "initialized Lace with " << lace_workers() << " workers" << std::endl;
-                exit_lace = true;
-            } else {
-                if (lace_workers() == 0) logger << "running sequentially" << std::endl;
-                else logger << "running parallel (Lace already initialized)" << std::endl;
-            }
-        }
-
-        logger << "solving using " << solverToString(solver) << std::endl;
-
-        while (!game->solved()) {
-            // compute a SCC
-            std::vector<int> sel;
-            if (bottomSCC) {
-                // solve bottom SCC
-                getBottomSCC(*game, sel);
-                assert(sel.size() != 0);
-                game->restrict(sel);
-                logger << "solving bottom SCC of " << sel.size() << " nodes (";
-                logger << game->countUnsolved() << " nodes left)" << std::endl;
-            } else {
-                // solve remaining nodes
-                int counter = 0;
-                for (int i=0; i<game->n_nodes; i++) {
-                    if (game->disabled[i]) continue; // assuming...
-                    if (game->dominion[i] == -1) {
-                        game->disabled[i] = 0;
-                        counter++;
-                    } else {
-                        game->disabled[i] = 1;
-                    }
-                }
-            }
-
-            // solve current subgame
-            Solver *s = constructSolver(solver, this, game, logger);
-            s->setTrace(trace);
-            s->run();
-
-            // flush the todo buffer
-            flush();
-
-            // report number of nodes left
-            logger << game->countUnsolved() << " nodes left." << std::endl;
-        }
-
-        if (exit_lace) lace_exit();
+    if (solver == NONE) {
+        delete[] outcount;
+        return;
     }
 
+    /***
+     * Build arrays
+     */
+    {
+        // count number of edges
+        size_t len = game->edgecount() + game->n_nodes;
+
+        outa = new int[game->n_nodes];
+        ina = new int[game->n_nodes];
+        outs = new int[len];
+        ins = new int[len];
+
+        int outi = 0;
+        int ini = 0;
+
+        for (int i=0; i<game->n_nodes; i++) {
+            outa[i] = outi;
+            ina[i] = ini;
+            for (int to : game->out[i]) outs[outi++] = to;
+            for (int fr : game->in[i]) ins[ini++] = fr;
+            outs[outi++] = -1;
+            ins[ini++] = -1;
+        }
+    }
+
+    /***
+     * Start Lace if we are parallel
+     */
+
+    bool with_lace = false;
+    if (solverIsParallel(solver)) {
+        if (workers >= 0 and lace_workers() == 0) {
+            lace_init(workers, 100*1000*1000);
+            lace_startup(0, 0, 0);
+            logger << "initialized Lace with " << lace_workers() << " workers" << std::endl;
+            with_lace = true;
+        } else {
+            if (lace_workers() == 0) logger << "running sequentially" << std::endl;
+            else logger << "running parallel (Lace already initialized)" << std::endl;
+        }
+    }
+
+    /***
+     * Start solving
+     */
+
+    logger << "solving using " << solverToString(solver) << std::endl;
+
+    while (!game->solved()) {
+        // compute a SCC
+        std::vector<int> sel;
+        if (bottomSCC) {
+            // solve bottom SCC
+            getBottomSCC(*game, sel);
+            assert(sel.size() != 0);
+            game->restrict(sel);
+            logger << "solving bottom SCC of " << sel.size() << " nodes (";
+            logger << game->countUnsolved() << " nodes left)" << std::endl;
+        } else {
+            // solve remaining nodes
+            int counter = 0;
+            for (int i=0; i<game->n_nodes; i++) {
+                if (game->disabled[i]) continue; // assuming...
+                if (game->dominion[i] == -1) {
+                    game->disabled[i] = 0;
+                    counter++;
+                } else {
+                    game->disabled[i] = 1;
+                }
+            }
+        }
+
+        // solve current subgame
+        Solver *s = constructSolver(solver, this, game, logger);
+        s->setTrace(trace);
+        s->run();
+        delete s;
+
+        // flush the todo buffer
+        flush();
+
+        // report number of nodes left
+        logger << game->countUnsolved() << " nodes left." << std::endl;
+    }
+
+    if (with_lace) lace_exit();
+
     delete[] outcount;
+    delete[] outa;
+    delete[] ina;
+    delete[] outs;
+    delete[] ins;
 }
 
 }

@@ -15,7 +15,7 @@ public:
         oink(oink), game(game), logger(lgr),
         n_nodes(game->n_nodes), priority(game->priority), owner(game->owner),
         out(game->out), in(game->in), disabled(game->disabled),
-        outa(game->outa), ina(game->ina), outs(game->outs), ins(game->ins) { }
+        outa(oink->outa), ina(oink->ina), outs(oink->outs), ins(oink->ins) { }
     virtual ~Solver() { }
     virtual void run() = 0;
 

@@ -526,28 +526,4 @@ Game::restrict(std::vector<int> &selection)
     for (int i : selection) disabled[i] = 0;
 }
 
-void
-Game::buildArrays(void)
-{
-    // count number of edges
-    size_t len = edgecount() + n_nodes;
-
-    outa = new int[n_nodes];
-    ina = new int[n_nodes];
-    outs = new int[len];
-    ins = new int[len];
-
-    int outi = 0;
-    int ini = 0;
-
-    for (int i=0; i<n_nodes; i++) {
-        outa[i] = outi;
-        ina[i] = ini;
-        for (int to : out[i]) outs[outi++] = to;
-        for (int fr : in[i]) ins[ini++] = fr;
-        outs[outi++] = -1;
-        ins[ini++] = -1;
-    }
-}
-
 }

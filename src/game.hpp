@@ -146,13 +146,7 @@ public:
     int *dominion;         // winner of node (or -1 if unknown)
     int *strategy;         // strategy for the winner
 
-    int *outa;             //
-    int *ina;              //
-    int *outs;             // 
-    int *ins;              //
     int *disabled;         // if the node is disabled (for restricting to subgames)
-
-    void buildArrays(void);
 };
 
 }
