@@ -36,6 +36,7 @@ Oink implements various modern algorithms.
   * Maciej' Modified SPM algorithm
   * Fast SPM, which is traditional SPM but instead of slowly increasing winning measures,
     it directly computes the best escape.
+6. APT algorithm by Kupferman and Vardi
 
 The priority promotion family of algorithms have been proposed in 2016.
 The Zielonka implementation is inspired by work in 2017.
@@ -43,6 +44,7 @@ The parallel strategy improvement implementation is inspired by
 work in 2017 but uses a different approach with work-stealing.
 The QPT progress measures algorithm was published in 2016.
 The fast SPM approach is a new approach.
+The APT algorithm was published in 1998 and again in 2016.
 
 The parallel Zielonka algorithm and parallel strategy improvement
 are parallelized using the work-stealing framework Lace.

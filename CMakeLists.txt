@@ -44,6 +44,7 @@ add_library(oink
     src/rr.cpp
     src/dp.cpp
     src/rrdp.cpp
+    src/apt.cpp
     src/psi.cpp
     src/spm.cpp
     src/mspm.cpp
