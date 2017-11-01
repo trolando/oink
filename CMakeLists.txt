@@ -29,7 +29,27 @@ option(BUILD_SHARED_LIBS "Enable/disable creation of shared libraries" OFF)
 option(BUILD_STATIC_LIBS "Enable/disable creation of static libraries" ON)
 option(BUILD_EXTRA_TOOLS "Enable/disable building of extra tools" OFF)
 
-add_library(oink src/game.cpp src/verifier.cpp src/scc.cpp src/pp.cpp src/rr.cpp src/oink.cpp src/ppp.cpp src/dp.cpp src/rrdp.cpp src/qpt.cpp src/psi.cpp src/lace.c src/zlk.cpp src/spm.cpp src/mspm.cpp src/tspm.cpp src/solvers.cpp)
+add_library(oink
+    # Core files
+    src/game.cpp
+    src/lace.c
+    src/oink.cpp
+    src/scc.cpp
+    src/solvers.cpp
+    src/verifier.cpp
+    # Solvers
+    src/zlk.cpp
+    src/pp.cpp
+    src/ppp.cpp
+    src/rr.cpp
+    src/dp.cpp
+    src/rrdp.cpp
+    src/psi.cpp
+    src/spm.cpp
+    src/mspm.cpp
+    src/tspm.cpp
+    src/qpt.cpp
+)
 target_link_libraries(oink pthread)
 
 add_executable(solve src/tools/solve.cpp)
