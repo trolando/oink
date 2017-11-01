@@ -22,7 +22,7 @@ public:
     /**
      * Instruct Oink to use the given solver.
      */
-    void setSolver(Solvers s) { solver = s; }
+    void setSolver(int solverid) { solver = solverid; }
 
     /**
      * Instruct Oink to inflate as a preprocessing step.
@@ -99,7 +99,7 @@ protected:
 
     Game *game;              // game being solved
     std::ostream &logger;    // logger for trace/debug messages
-    Solvers solver = NONE;   // which solver to use
+    int solver = -1;         // which solver to use
     int workers = -1;        // number of workers, 0 = autodetect, -1 = use non parallel
     int trace = 0;           // verbosity (0 for normal, 1 for trace, 2 for debug)
     bool inflate = false;    // inflate the game before solving

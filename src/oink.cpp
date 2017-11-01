@@ -321,6 +321,8 @@ Oink::flush()
 void
 Oink::run()
 {
+    Solvers solvers;
+
     // NOTE: we assume that the game is already reindexed...
 
     // first initialize outcount (for flush/attract)
@@ -396,7 +398,7 @@ Oink::run()
         logger << "\033[1;7mWARNING\033[m: running PSI solver without removing winner-controlled winning cycles!" << std::endl;
     }
 
-    if (solver == NONE) {
+    if (solver == -1) {
         delete[] outcount;
         return;
     }
@@ -431,7 +433,7 @@ Oink::run()
      */
 
     bool with_lace = false;
-    if (solverIsParallel(solver)) {
+    if (solvers.isParallel(solver)) {
         if (workers >= 0 and lace_workers() == 0) {
             lace_init(workers, 100*1000*1000);
             lace_startup(0, 0, 0);
@@ -447,7 +449,7 @@ Oink::run()
      * Start solving
      */
 
-    logger << "solving using " << solverToString(solver) << std::endl;
+    logger << "solving using " << solvers.desc(solver) << std::endl;
 
     while (!game->solved()) {
         // compute a SCC
@@ -474,7 +476,7 @@ Oink::run()
         }
 
         // solve current subgame
-        Solver *s = constructSolver(solver, this, game, logger);
+        Solver *s = solvers.construct(solver, this, game, logger);
         s->setTrace(trace);
         s->run();
         delete s;

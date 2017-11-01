@@ -152,21 +152,18 @@ int main(int argc, char **argv)
         ("no-wcwc", "Do not solve winner-controlled winning cycles during preprocessing")
         /* Solving */
         ("scc", "Iteratively solve bottom SCCs")
-        ("pp", "Use PP solver")
-        ("ppp", "Use PP+ solver")
-        ("rr", "Use RR solver")
-        ("dp", "Use DP solver")
-        ("rrdp", "Use RRDP solver")
-        ("qpt", "Use QPT PM solver")
-        ("psi", "Use Parallel SI solver")
-        ("zlk", "Use improved Zielonka solver")
-        ("spm", "Use SPM solver")
-        ("mspm", "Use Maciej' Modified SPM solver")
-        ("tspm", "Use Traditional SPM solver")
         ("s,solver", "Use given solver (--solvers for info)", cxxopts::value<std::string>())
         ("solvers", "List available solvers")
         ("w,workers", "Number of workers for parallel code", cxxopts::value<int>())
         ;
+
+    /* Add solvers */
+    Solvers solvers;
+    for (unsigned id=0; id<solvers.count(); id++) {
+        opts.add_options()(solvers.label(id), solvers.desc(id));
+    }
+
+    /* Parse command line */
     opts.parse_positional(std::vector<std::string>({"input", "output"}));
     opts.parse(argc, argv);
 
@@ -176,7 +173,7 @@ int main(int argc, char **argv)
     }
 
     if (opts.count("solvers")) {
-        listSolvers(std::cout);
+        solvers.list(std::cout);
         return 0;
     }
 
@@ -269,21 +266,13 @@ int main(int argc, char **argv)
     if (opts.count("no-wcwc")) en.setRemoveWCWC(false);
 
     // solver
-    if (opts.count("solver")) en.setSolver(solverToId(opts["solver"].as<std::string>()));
-    else en.setSolver(Solvers::TL);
-
-    if (opts.count("zlk")) en.setSolver(Solvers::ZLK);
-    if (opts.count("pp")) en.setSolver(Solvers::PP);
-    if (opts.count("ppp")) en.setSolver(Solvers::PPP);
-    if (opts.count("rr")) en.setSolver(Solvers::RR);
-    if (opts.count("dp")) en.setSolver(Solvers::DP);
-    if (opts.count("rrdp")) en.setSolver(Solvers::RRDP);
-    if (opts.count("psi")) en.setSolver(Solvers::PSI);
-    if (opts.count("spm")) en.setSolver(Solvers::SPM);
-    if (opts.count("tspm")) en.setSolver(Solvers::TSPM);
-    if (opts.count("mspm")) en.setSolver(Solvers::MSPM);
-    if (opts.count("qpt")) en.setSolver(Solvers::QPT);
-    if (opts.count("tl")) en.setSolver(Solvers::TL);
+    if (opts.count("solver")) {
+        en.setSolver(solvers.id(opts["solver"].as<std::string>()));
+    } else {
+        for (unsigned id=0; id<solvers.count(); id++) {
+            if (opts.count(solvers.label(id))) en.setSolver(id);
+        }
+    }
 
     // solving options
     if (opts.count("scc")) en.setBottomSCC(true);
