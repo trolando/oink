@@ -319,6 +319,18 @@ Oink::flush()
 }
 
 void
+Oink::setSolver(int solverid)
+{
+    solver = solverid;
+}
+
+void
+Oink::setSolver(std::string label)
+{
+    solver = Solvers().id(label);
+}
+
+void
 Oink::run()
 {
     Solvers solvers;

@@ -4,9 +4,10 @@
 #include <iostream>
 #include <vector>
 #include "game.hpp"
-#include "solvers.hpp"
 
 namespace pg {
+
+class Solver;
 
 class Oink
 {
@@ -22,7 +23,8 @@ public:
     /**
      * Instruct Oink to use the given solver.
      */
-    void setSolver(int solverid) { solver = solverid; }
+    void setSolver(int solverid);
+    void setSolver(std::string label);
 
     /**
      * Instruct Oink to inflate as a preprocessing step.

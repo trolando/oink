@@ -13,6 +13,7 @@
 #include "cxxopts.hpp" 
 #include "game.hpp"
 #include "oink.hpp"
+#include "solvers.hpp"
 #include "verifier.hpp"
 
 using namespace pg;
