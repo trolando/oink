@@ -22,32 +22,29 @@ Implemented algorithms
 
 Oink implements various modern algorithms.
 
-1. Various algorithms from the ''priority promotion'' family
-  * PP (standard priority promotion)
-  * PPP (priority promotion plus, improved reset heuristic)
-  * RR (PP with an even better improved reset heuristic)
-  * DP (PPP with the delayed promotion strategy)
-  * RRDP (RR with the delayed promotion strategy)
-2. Zielonka's recursive algorithm (recursion-free)
-3. QPT progress measures (theoretically quasi-polynomial)
-4. Parallel strategy improvement
-5. Three variations of small progress measures
-  * Traditional SPM, extended with updates to priority caps and regular cross-parity updates
-  * Maciej' Modified SPM algorithm
-  * Fast SPM, which is traditional SPM but instead of slowly increasing winning measures,
-    it directly computes the best escape.
-6. APT algorithm by Kupferman and Vardi
+Algorithm       | Description
+:-------------- | :----------
+PP   | Priority promotion (basic algorithm)
+PPP  | Priority promotion PP+ (better reset heuristic)
+RR   | Priority promotion RR (even better improved reset heuristic)
+DP   | Priority promotion PP+ with the delayed promotion strategy
+RRDP | Priority promotion RR with the delayed promotion strategy
+ZLK  | (parallel) Zielonka's recursive algorithm
+APT  | APT algorithm by Kupferman and Vardi
+PSI  | (parallel) strategy improvement
+TSPM | Traditional small progress measures
+SPM  | Accelerated version of small progress measures
+MSPM | Maciej Gazda's modified small progress measures
+QPT  | Quasi-polynomial time progress measures
 
-The priority promotion family of algorithms have been proposed in 2016.
-The Zielonka implementation is inspired by work in 2017.
-The parallel strategy improvement implementation is inspired by
-work in 2017 but uses a different approach with work-stealing.
-The QPT progress measures algorithm was published in 2016.
-The fast SPM approach is a new approach.
-The APT algorithm was published in 1998 and again in 2016.
+* The priority promotion family of algorithms has been proposed in 2016.
+* The Zielonka implementation is inspired by work in 2017.
+* The APT algorithm was published in 1998 and again in 2016.
+* The parallel strategy improvement implementation is inspired by work in 2017 but uses a different approach with work-stealing.
+* The accelerated SPM approach is a novel approach.
+* The QPT progress measures algorithm was published in 2016.
 
-The parallel Zielonka algorithm and parallel strategy improvement
-are parallelized using the work-stealing framework Lace.
+The parallel algorithms use the work-stealing framework Lace.
 
 The solver can further be tuned using several pre-processors.
 
@@ -61,30 +58,25 @@ Tools
 -----
 
 Oink comes with several simple tools that are built around the library
-liboink. 
+liboink.
 
-oink
+Main tools:
 
-verify
+Tool    | Description
+:------ | :-------------
+oink    | The main tool for solving parity games
+verify  | Small tool that just verifies a solution (can be done by Oink too)
+nudge   | Swiss army knife for transforming parity games
+dotty   | Small tool that just generates a .dot graph of a parity game
 
-For generating games:
+Tools to generate games:
 
-rngame
-Similar to the random game generator that comes with PGSOLVER but faster.
-
-stgame
-Similar to the steady game generator that comes with PGSOLVER but faster.
-
-counter\_rr
-
-counter\_dp
-
-counter\_m
-
-counter\_qpt
-
-counter\_core
-
-For transforming games:
-
-nudge
+Tool           | Description
+:------------- | :----------
+rngame         | Faster version of the random game generator of PGSolver
+stgame         | Faster version of the steady game generator of PGSolver
+counter\_rr    | Counterexample to the RR solver
+counter\_dp    | Counterexample to the DP solver
+counter\_m     | Counterexample of Maciej Gazda, PhD Thesis, Sec. 3.5
+counter\_qpt   | Counterexample of Fearnley et al, An ordered approach to solving parity games in quasi polynomial time and quasi linear space, SPIN 2017
+counter\_core  | Counterexample of Benerecetti et al, Robust Exponential Worst Cases for Divide-et-Impera Algorithms for Parity Games, GandALF 2017
