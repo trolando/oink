@@ -286,7 +286,7 @@ Oink::solve(int node, int winner, int strategy)
 {
     if (game->dominion[node] != -1) LOGIC_ERROR;
     if (game->disabled[node]) LOGIC_ERROR;
-    if (game->owner[node] == winner and strategy == -1) LOGIC_ERROR;
+    // if (game->owner[node] == winner and strategy == -1) LOGIC_ERROR;
     if (game->owner[node] != winner and strategy != -1) LOGIC_ERROR;
     game->dominion[node] = winner;
     game->strategy[node] = strategy;
