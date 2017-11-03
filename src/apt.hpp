@@ -14,8 +14,6 @@ public:
     virtual ~APTSolver();
 
     virtual void run();
-
-    int iterations;
 };
 
 }
