@@ -3,11 +3,121 @@
 #include <fstream>
 #include <random>
 
-#include "cxxopts.hpp" 
+#include "cxxopts.hpp"
 #include "game.hpp"
 #include "scc.hpp"
 
+using namespace std;
 using namespace pg;
+
+int
+rng(int low, int high)
+{
+    static random_device rand_dev;
+    static mt19937 generator(rand_dev());
+    return uniform_int_distribution<int>(low, high)(generator);
+}
+
+bool
+nudge(Game *game, int profile)
+{
+    /**
+     * Select a random node
+     */
+    int n = rng(0, game->n_nodes-1);
+
+    /**
+     * Select a random action
+     * action=0: change owner of the node
+     * action=1: change priority of the node
+     * action=2: remove the node without forwarding edges
+     * action=3: remove the node and forward edges if it has only 1 outgoing edge
+     * action=4: for one predecessor replace the edge to me by all my edges
+     * action=5: remove a random edge (if 2+ outgoing edges)
+     * action=6: add a random edge
+     */
+    int action;
+    if (profile == 0) {
+        // only actions 0 1 2 3 5 : only change/remove, no adding edges
+        action = (int[5]){0,1,2,3,5}[rng(0, 4)];
+    } else if (profile == 1) {
+        // only actions 0 1 5 6 : just change edges and owner/priority
+        action = (int[4]){0,1,5,6}[rng(0, 3)];
+    } else if (profile == 2) {
+        // only actions 0 1 2 3 4 5 : only add edge when removing nodes
+        action = (int[6]){0,1,2,3,4,5}[rng(0, 5)];
+    } else {
+        action = rng(0, 6);
+    }
+
+    /**
+     * Perform the action
+     */
+    if (action == 0) {
+        // change owner of the node
+        game->owner[n] = 1 - game->owner[n];
+        return true;
+    } else if (action == 1) {
+        // change priority of the node
+        game->priority[n] = rng(0, game->n_nodes*2);
+        return true;
+    } else if (action == 2) {
+        // remove the node
+        std::vector<int> tokeep;
+        for (int i=0; i<game->n_nodes; i++) if (n != i) tokeep.push_back(i);
+        Game *sub = game->extract_subgame(tokeep, NULL);
+        *game = *sub;
+        delete sub;
+        return true;
+    } else if (action == 3) {
+        // remove the node and forward edges if it has only 1 outgoing edge
+        if (game->out[n].size() == 1 && game->out[n][0] != n) {
+            for (auto &from : game->in[n]) {
+                // add each <to> to <from>
+                for (auto &to : game->out[n]) game->addEdge(from, to);
+            }
+            // remove the node
+            std::vector<int> tokeep;
+            for (int i=0; i<game->n_nodes; i++) if (n != i) tokeep.push_back(i);
+            Game *sub = game->extract_subgame(tokeep, NULL);
+            *game = *sub;
+            delete sub;
+            return true;
+        }
+    } else if (action == 4) {
+        // for one predecessor replace the edge to me by all my edges
+        if (game->in[n].size() > 0) {
+            int from = game->in[n][rng(0, game->in[n].size()-1)];
+            if (from != n) {
+                auto &out = game->out[from];
+                out.erase(std::remove(out.begin(), out.end(), n), out.end());
+
+                // add each <to> to <from>
+                for (auto &to : game->out[n]) {
+                    if (std::find(game->out[from].begin(), game->out[from].end(), to) == game->out[from].end()) {
+                        game->out[from].push_back(to);
+                        game->in[to].push_back(from);
+                    }
+                }
+                return true;
+            }
+        }
+    } else if (action == 5) {
+        // remove a random edge (if there are outgoing edges to remove)
+        if (game->out[n].size() > 1) {
+            int edge = rng(0, game->out[n].size()-1);
+            int m = game->out[n][edge];
+            game->out[n].erase(game->out[n].begin()+edge);
+            auto &in = game->in[m];
+            in.erase(std::remove(in.begin(), in.end(), n), in.end());
+            return true;
+        }
+    } else if (action == 6) {
+        // add a random edge
+        if (game->addEdge(n, rng(0, game->n_nodes-1))) return true;
+    }
+    return false;
+}
 
 /**
  * Change the game a bit.
@@ -20,12 +130,12 @@ main(int argc, char **argv)
         ("input", "Input parity game", cxxopts::value<std::string>())
         ("output", "Output parity game", cxxopts::value<std::string>())
         ("help", "Print help")
-        ("m,modify", "Modify graph with profile 0=only remove, 1=remove or add edges", cxxopts::value<int>())
+        ("m,modify", "Modify graph with profile 0=only remove, 1=stable #nodes, 2=everything", cxxopts::value<int>())
         ("b,bottom-scc", "Obtain random bottom SCC before writing")
         ("i,inflate", "Inflate before writing")
         ("c,compress", "Compress before writing")
         ("r,renumber", "Renumber before writing")
-        ("o,order", "Order by priority before writing")
+        ("o,order", "Order nodes by priority before writing")
         ("evenodd", "Swap players")
         ("minmax", "Turn a mingame into a maxgame and vice versa")
         ;
@@ -55,112 +165,11 @@ main(int argc, char **argv)
     }
 
     /**
-     * Initialize the random number generator.
-     */
-    std::random_device gen;
-    auto rng = [&](int i, int j){ return std::uniform_int_distribution<int>(i, j)(gen); };
-
-    /**
      * Check if we have to modify the game randomly.
      */
-    int left, profile;
     if (opts.count("modify")) {
-        left = 1;
-        profile = opts["modify"].as<int>();
-    } else {
-        left = 0;
-    }
-
-    while (left > 0) {
-        /**
-         * Select a random node
-         */
-        int n = rng(0, game->n_nodes-1);
-
-        /**
-         * Select a random action
-         * action=0: remove a random edge if it has 2+ outgoing edges
-         * action=1: remove the node and forward edges if it has only 1 outgoing edge
-         * action=2: remove the node
-         * action=3: change owner of the node
-         * action=4: for one predecessor replace the edge to me by all my edges
-         * action=5: add a random edge
-         */
-        int action;
-        if (profile == 0) {
-            // only actions 0 1 2 3
-            action = rng(0, 3); 
-        } else if (profile == 1) {
-            // only actions 0 3 5
-            action = rng(0, 2); 
-            if (action == 1) action = 3;
-            else if (action == 2) action = 5;
-        } else {
-            action = rng(0, 5);
-        }
-
-        /**
-         * Perform the action
-         */
-        if (action == 0) {
-            // remove a random edge (if there are outgoing edges to remove)
-            if (game->out[n].size() > 1) {
-                int edge = rng(0, game->out[n].size()-1);
-                int m = game->out[n][edge];
-                game->out[n].erase(game->out[n].begin()+edge);
-                auto &in = game->in[m];
-                in.erase(std::remove(in.begin(), in.end(), n), in.end());
-                left--;
-            }
-        } else if (action == 1) {
-            // remove the node and forward edges if it has only 1 outgoing edge
-            if (game->out[n].size() == 1 && game->out[n][0] != n) {
-                for (auto &from : game->in[n]) {
-                    // add each <to> to <from>
-                    for (auto &to : game->out[n]) game->addEdge(from, to);
-                }
-                // remove the node
-                std::vector<int> tokeep;
-                for (int i=0; i<game->n_nodes; i++) if (n != i) tokeep.push_back(i);
-                Game *sub = game->extract_subgame(tokeep, NULL);
-                delete game;
-                game = sub;
-                left--;
-            }
-        } else if (action == 2) {
-            // remove the node
-            std::vector<int> tokeep;
-            for (int i=0; i<game->n_nodes; i++) if (n != i) tokeep.push_back(i);
-            Game *sub = game->extract_subgame(tokeep, NULL);
-            delete game;
-            game = sub;
-            left--;
-        } else if (action == 3) {
-            // change owner of the node
-            game->owner[n] = 1 - game->owner[n];
-            left--;
-        } else if (action == 4) {
-            // for one predecessor replace the edge to me by all my edges
-            if (game->in[n].size() > 0) {
-                int from = game->in[n][rng(0, game->in[n].size()-1)];
-                if (from != n) {
-                     auto &out = game->out[from];
-                     out.erase(std::remove(out.begin(), out.end(), n), out.end());
-
-                     // add each <to> to <from>
-                     for (auto &to : game->out[n]) {
-                         if (std::find(game->out[from].begin(), game->out[from].end(), to) == game->out[from].end()) {
-                             game->out[from].push_back(to);
-                             game->in[to].push_back(from);
-                         }
-                     }
-                     left--;
-                 }
-             }
-        } else if (action == 5) {
-            // add a random edge
-            if (game->addEdge(n, rng(0, game->n_nodes-1))) left--;
-        }
+        int profile = opts["modify"].as<int>();
+        while (nudge(game, profile) == false) {}
     }
 
     /**
