@@ -88,7 +88,7 @@ main(int argc, char** argv)
     pg::Game game(n);
 
     // initialize <n> nodes
-    for (int i=0; i<n; i++) game.initNode(n, n, rng(0, 1));
+    for (int i=0; i<n; i++) game.initNode(i, i, rng(0, 1));
 
     while ((outtodo > 0 and tgt_count > 0) or (intodo > 0 and src_count > 0)) {
         // obtain source node
