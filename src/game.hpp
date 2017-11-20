@@ -21,6 +21,11 @@ public:
     Game(int count);
 
     /**
+     * Construct a copy of an existing parity game.
+     */
+    Game(const Game& other);
+
+    /**
      * Deconstructor.
      */
     ~Game();
@@ -136,6 +141,16 @@ public:
      * Set disabled to 0 for all nodes in <selection>, to 1 otherwise.
      */
     void restrict(std::vector<int> &selection);
+
+    /**
+     * Reset <dominion>, <strategy> and <disabled>.
+     */
+    void reset();
+
+    /**
+     * Copy the game.
+     */
+    Game &operator=(const Game &other);
 
     int n_nodes;           // number of nodes
     int *priority;         // priority of each node

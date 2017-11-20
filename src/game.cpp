@@ -45,6 +45,31 @@ Game::Game(int count)
     }
 }
 
+Game::Game(const Game& other)
+{
+    n_nodes = other.n_nodes;
+    if (n_nodes > 0) {
+        priority = new int[n_nodes];
+        owner = new int[n_nodes];
+        label = new std::string[n_nodes];
+        out = new std::vector<int>[n_nodes];
+        in = new std::vector<int>[n_nodes];
+        dominion = new int[n_nodes];
+        strategy = new int[n_nodes];
+        disabled = new int[n_nodes];
+    }
+    for (int i=0; i<n_nodes; i++) {
+        priority[i] = other.priority[i];
+        owner[i] = other.owner[i];
+        label[i] = other.label[i];
+        dominion[i] = other.dominion[i];
+        strategy[i] = other.strategy[i];
+        disabled[i] = other.disabled[i];
+        out[i] = other.out[i];
+        in[i] = other.in[i];
+    }
+}
+
 Game::~Game()
 {
     if (n_nodes > 0) {
@@ -481,24 +506,50 @@ Game::extract_subgame(std::vector<int> &selection, int *mapping)
     // order selection
     sort(selection.begin(), selection.end());
 
-    // construct subgame
-    Game* res = new Game(selection.size());
-
-    // temporary helper mapping
+    // analyse subgame to remove vertices without outgoing edges
     int *inv = new int[n_nodes];
-    int *map = mapping != NULL ? mapping : new int[res->n_nodes];
     for (int i=0; i<n_nodes; i++) inv[i] = -1;
-    int counter = 0;
+
+    // set inv[i] := 0 for every selected vertex
+    std::vector<int> q;
     for (int i : selection) {
         assert(i >= 0 and i < n_nodes);
         assert(inv[i] == -1);
+        inv[i] = 0;
+    }
+
+    // count number of successors in selection for every vertex
+    for (int i : selection) {
+        int count = 0;
+        for (int j : out[i]) if (inv[j] != -1) count++;
+        inv[i] = count;
+        if (count == 0) q.push_back(i);
+    }
+
+    // handle dead ends (turn into -1)
+    while (!q.empty()) {
+        int i = q.back();
+        q.pop_back();
+        inv[i] = -1;
+        for (int j : in[i]) {
+            if (inv[j] != -1 and --inv[j] == 0) q.push_back(j);
+        }
+    }
+
+    // temporary helper mapping
+    int *map = mapping != NULL ? mapping : new int[selection.size()];
+    int counter = 0;
+    for (int i : selection) {
+        if (inv[i] == -1) continue;
         inv[i] = counter;
         map[counter++] = i;
     }
-    assert(counter == res->n_nodes);
+
+    // construct subgame
+    Game* res = new Game(counter);
 
     // create nodes of subgame
-    for (int i=0; i<res->n_nodes; i++) {
+    for (int i=0; i<counter; i++) {
         int k = map[i];
         res->priority[i] = priority[k];
         res->owner[i] = owner[k];
@@ -524,6 +575,33 @@ Game::restrict(std::vector<int> &selection)
 {
     for (int i=0; i<n_nodes; i++) disabled[i] = 1;
     for (int i : selection) disabled[i] = 0;
+}
+
+Game&
+Game::operator=(const Game &other)
+{
+    initGame(other.n_nodes);
+    for (int i=0; i<n_nodes; i++) {
+        priority[i] = other.priority[i];
+        owner[i] = other.owner[i];
+        label[i] = other.label[i];
+        dominion[i] = other.dominion[i];
+        strategy[i] = other.strategy[i];
+        disabled[i] = other.disabled[i];
+        out[i] = other.out[i];
+        in[i] = other.in[i];
+    }
+    return *this;
+}
+
+void
+Game::reset()
+{
+    for (int i=0; i<n_nodes; i++) {
+        dominion[i] = -1;
+        strategy[i] = -1;
+        disabled[i] = 0;
+    }
 }
 
 }
