@@ -3,8 +3,9 @@
 
 #include "game.hpp"
 #include "oink.hpp"
+#include <signal.h>
 
-#define LOGIC_ERROR { printf("\033[1;7mlogic error %s:%d!\033[m\n", __FILE__, __LINE__); exit(-1); }
+#define LOGIC_ERROR { printf("\033[1;7mlogic error %s:%d!\033[m\n", __FILE__, __LINE__); raise(SIGABRT); }
 
 namespace pg {
 
