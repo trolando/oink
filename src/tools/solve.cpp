@@ -55,6 +55,7 @@ template<typename Sink>
 bool timestamp_filter::put(Sink& dest, char c)
 {
     if (is_start) {
+        if (c == '\n') return true;  // ignore consecutive endl
         is_start = false;
         pos = sz;
         end = sz + snprintf(sz, 16, "[% 8.2f] ", wctime() - t_start);
@@ -98,6 +99,7 @@ static void (*sig_int_handler)(int);
 static void (*sig_segv_handler)(int);
 static void (*sig_abrt_handler)(int);
 static void (*sig_term_handler)(int);
+static void (*sig_alrm_handler)(int);
 
 static void
 resetsighandlers(void)
@@ -106,16 +108,37 @@ resetsighandlers(void)
     (void)signal(SIGSEGV, sig_segv_handler);
     (void)signal(SIGABRT, sig_abrt_handler);
     (void)signal(SIGTERM, sig_term_handler);
+    (void)signal(SIGALRM, sig_alrm_handler);
 }
 
 static void
 catchsig(int sig)
 {
-    resetsighandlers();
-    out << "terminated due to signal " << sig << std::endl;
-    out.flush();
-    exit(-1);
-    // raise(sig);
+    // note: this can actually deadlock because we are writing to stdout...
+
+    if (sig == SIGALRM) {
+        resetsighandlers();
+        out << std::endl << "terminated due to timeout" << std::endl;
+        out.flush();
+        exit(-1);
+    } else if (sig == SIGINT) {
+        // CTRL-C
+        resetsighandlers();
+        out << std::endl << "received INT signal" << std::endl;
+        out.flush();
+        exit(-1);
+    } else if (sig == SIGABRT) {
+        // really bad
+        resetsighandlers();
+        out << std::endl << "terminated due to ABORT signal" << std::endl;
+        out.flush();
+        raise(sig);
+    } else {
+        resetsighandlers();
+        out << std::endl << "terminated due to signal " << sig << std::endl;
+        out.flush();
+        exit(-1);
+    }
 }
 
 static void
@@ -125,6 +148,7 @@ setsighandlers(void)
     sig_segv_handler = signal(SIGSEGV, catchsig);
     sig_abrt_handler = signal(SIGABRT, catchsig);
     sig_term_handler = signal(SIGTERM, catchsig);
+    sig_alrm_handler = signal(SIGALRM, catchsig);
 }
 
 /*------------------------------------------------------------------------*/
@@ -156,6 +180,7 @@ int main(int argc, char **argv)
         ("s,solver", "Use given solver (--solvers for info)", cxxopts::value<std::string>())
         ("solvers", "List available solvers")
         ("w,workers", "Number of workers for parallel code", cxxopts::value<int>())
+        ("z,timeout", "Number of seconds for timeout", cxxopts::value<int>())
         ;
 
     /* Add solvers */
@@ -284,6 +309,7 @@ int main(int argc, char **argv)
      * Run the solver and report the time.
      */
 
+    if (opts.count("timeout")) alarm(opts["timeout"].as<int>());
     double begin = wctime();
     en.run();
     double end = wctime();
