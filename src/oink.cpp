@@ -345,14 +345,14 @@ Oink::run()
     }
 
     if (inflate) {
-        game->inflate();
-        logger << "parity game inflated" << std::endl;
+        int d = game->inflate();
+        logger << "parity game inflated (" << d << " priorities)" << std::endl;
     } else if (compress) {
-        game->compress();
-        logger << "parity game compressed" << std::endl;
+        int d = game->compress();
+        logger << "parity game compressed (" << d << " priorities)" << std::endl;
     } else if (renumber) {
-        game->renumber();
-        logger << "parity game renumbered" << std::endl;
+        int d = game->renumber();
+        logger << "parity game renumbered (" << d << " priorities)" << std::endl;
     }
 
     // in case some nodes already have a dominion but are not yet disabled

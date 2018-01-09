@@ -388,52 +388,64 @@ Game::permute(int *mapping)
     }
 }
 
-void
+int
 Game::inflate()
 {
     // assumption: reindex has been called first!!!
+    if (n_nodes == 0) return 0;
+    int d = 1;
 
     // reassign priorities and reindex nodes
     int prio = -1;
     for (int i=0; i<n_nodes; i++) {
         const int p_mod_i = priority[i]&1;
         if (prio == -1) prio = p_mod_i;
-        else if (p_mod_i != prio%2) prio += 1;
-        else prio += 2;
+        else if (p_mod_i != prio%2) { prio += 1; d++; }
+        else { prio += 2; d++; }
         priority[i] = prio;
     }
+
+    return d;
 }
 
-void
+int
 Game::compress()
 {
     // assumption: reindex has been called first!!!
+    if (n_nodes == 0) return 0;
+    int d = 1;
 
     // reassign priorities and reindex nodes
     int prio = -1;
     for (int i=0; i<n_nodes; i++) {
         const int p_mod_i = priority[i]&1;
         if (prio == -1) prio = p_mod_i;
-        else if (p_mod_i != prio%2) prio += 1;
+        else if (p_mod_i != prio%2) { prio += 1; d++; }
         priority[i] = prio;
     }
+
+    return d;
 }
 
-void
+int
 Game::renumber()
 {
     // assumption: reindex has been called first!!!
+    if (n_nodes == 0) return 0;
+    int d = 1;
 
     // reassign priorities and reindex nodes
     int prio = -1, last = -1;
     for (int i=0; i<n_nodes; i++) {
         const int p_mod_i = priority[i]&1;
         if (prio == -1) prio = p_mod_i;
-        else if (p_mod_i != prio%2) prio += 1;
-        else if (last != priority[i]) prio += 2;
+        else if (p_mod_i != prio%2) { prio += 1; d++; }
+        else if (last != priority[i]) { prio += 2; d++; }
         last = priority[i];
         priority[i] = prio;
     }
+
+    return d;
 }
 
 void

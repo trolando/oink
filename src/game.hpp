@@ -87,20 +87,23 @@ public:
     /**
      * Reassign priorities such that every node has a unique priority.
      * (Assumes reindex() has been called earlier.)
+     * Returns number of distinct priorities.
      */
-    void inflate(void);
+    int inflate(void);
 
     /**
      * Reassign priorities such that no priority is skipped. ("compression")
      * (Assumes reindex() has been called earlier.)
+     * Returns number of distinct priorities.
      */
-    void compress(void);
+    int compress(void);
 
     /**
      * Reassign priorities in order, but do not inflate or compress.
      * (Assumes reindex() has been called earlier.)
+     * Returns number of distinct priorities.
      */
-    void renumber(void);
+    int renumber(void);
 
     /**
      * Swap players (priorities and ownership)
