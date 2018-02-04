@@ -435,10 +435,8 @@ PSISolver::run()
     // Now set dominions and derive strategy for odd.
     for (int i=0; i<n_nodes; i++) {
         if (disabled[i]) continue;
-        game->solved[i] = true;
-        game->won1[i] = won[i] ? 0 : 1;
-        if (game->owner[i] == 1 && won[i] == 0) game->strategy[i] = str[i];
-        if (game->owner[i] == 0 && won[i] == 1) game->strategy[i] = str[i];
+        bool winner = won[i] ? 0 : 1;
+        oink->solve(i, winner, game->owner[i] == winner ? str[i] : -1);
     }
 
     delete[] val;

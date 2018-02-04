@@ -303,7 +303,6 @@ void
 Oink::solve(int node, int win, int strategy)
 {
     if (game->solved[node] or game->disabled[node]) LOGIC_ERROR;
-    if (game->owner[node] != winner and strategy != -1) LOGIC_ERROR;
 
     game->solved[node] = true;
     game->winner[node] = win;
