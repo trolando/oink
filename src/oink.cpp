@@ -34,8 +34,8 @@ Oink::attractDominion(int i)
     // check if we already did this node
     if (outcount[i] == -1) return;
 
-    int winner = game->dominion[i];
-    assert(winner != -1);
+    assert(game->solved[i]);
+    bool winner = game->winner[i];
 
     std::queue<int> nodes;
     nodes.push(i);
@@ -48,17 +48,19 @@ Oink::attractDominion(int i)
 
         for (int in : game->in[n]) {
             if (outcount[in] == -1) continue;
-            if (game->dominion[in] != -1) continue;
+            if (game->solved[in]) continue;
             if (game->owner[in] == winner) {
                 // node of winner
                 game->strategy[in] = n;
-                game->dominion[in] = winner;
-                game->disabled[in] = 1;
+                game->solved[in] = true;
+                game->winner[in] = winner;
+                game->disabled[in] = true;
                 nodes.push(in);
             } else {
                 // node of loser
                 if (--outcount[in] == 0) {
-                    game->dominion[in] = winner;
+                    game->solved[in] = true;
+                    game->winner[in] = winner;
                     game->disabled[in] = 1;
                     nodes.push(in);
                 }
@@ -298,15 +300,15 @@ Oink::solveSelfloops()
 }
 
 void
-Oink::solve(int node, int winner, int strategy)
+Oink::solve(int node, int win, int strategy)
 {
-    if (game->dominion[node] != -1) LOGIC_ERROR;
-    if (game->disabled[node]) LOGIC_ERROR;
-    // if (game->owner[node] == winner and strategy == -1) LOGIC_ERROR;
+    if (game->solved[node] or game->disabled[node]) LOGIC_ERROR;
     if (game->owner[node] != winner and strategy != -1) LOGIC_ERROR;
-    game->dominion[node] = winner;
-    game->strategy[node] = strategy;
-    game->disabled[node] = 1; // disable
+
+    game->solved[node] = true;
+    game->winner[node] = win;
+    game->strategy[node] = (win == game->owner[node]) ? strategy : -1;
+    game->disabled[node] = true; // disable
     todo.push_back(node);
 
     /*
@@ -373,7 +375,7 @@ Oink::run()
 
     // in case some nodes already have a dominion but are not yet disabled
     for (int i=0; i<game->n_nodes; i++) {
-        if (game->dominion[i] != -1 and game->disabled[i] == 0) {
+        if (game->solved[i] and !game->disabled[i]) {
             game->disabled[i] = 1;
             todo.push_back(i);
         }
@@ -479,28 +481,18 @@ Oink::run()
 
     logger << "solving using " << solvers.desc(solver) << std::endl;
 
-    while (!game->solved()) {
-        // compute a SCC
-        std::vector<int> sel;
+    while (!game->gameSolved()) {
+        // disabled all solved vertices
+        game->disabled = game->solved;
+
         if (bottomSCC) {
             // solve bottom SCC
+            std::vector<int> sel;
             getBottomSCC(*game, sel);
             assert(sel.size() != 0);
             game->restrict(sel);
             logger << "solving bottom SCC of " << sel.size() << " nodes (";
             logger << game->countUnsolved() << " nodes left)" << std::endl;
-        } else {
-            // solve remaining nodes
-            int counter = 0;
-            for (int i=0; i<game->n_nodes; i++) {
-                if (game->disabled[i]) continue; // assuming...
-                if (game->dominion[i] == -1) {
-                    game->disabled[i] = 0;
-                    counter++;
-                } else {
-                    game->disabled[i] = 1;
-                }
-            }
         }
 
         // solve current subgame

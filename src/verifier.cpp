@@ -53,13 +53,13 @@ Verifier::verify(bool fullgame, bool even, bool odd)
      * Also some trivial checks are performed.
      */
     for (int i=0; i<n_nodes; i++) {
-        const int dom = game->dominion[i];
-
         // (for full solutions) check whether every node is won
-        if (dom == -1) {
+        if (!game->solved[i]) {
             if (fullgame) throw "not every node is won";
             else continue;
         }
+
+        const bool dom = game->winner[i];
 
         if (game->strategy[i] == -1) {
             // no strategy, copy all edges
@@ -75,7 +75,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 int s = game->strategy[i];
                 if (s == -1) {
                     throw "winning node has no strategy";
-                } else if (game->dominion[s] != dom) {
+                } else if (!game->solved[s] or game->winner[s] != dom) {
                     throw "strategy leaves dominion";
                 }
                 // check whether the strategy is actually a valid move
@@ -87,7 +87,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         } else {
             // if loser, check whether the loser can escape
             for (auto to : game->out[i]) {
-                if (game->dominion[to] != dom) throw "loser can escape";
+                if (!game->solved[to] or game->winner[to] != dom) throw "loser can escape";
             }
             // and of course that no strategy is set
             if (game->strategy[i] != -1) throw "losing node has strategy";
@@ -114,7 +114,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         /**
          * Only search when loser would win
          */
-        if (game->dominion[i] == (p&1)) continue;
+        if (!game->solved[i] or game->winner[i] == (p&1)) continue;
         if (!odd && (p&1) == 0) continue; // test odd strategies?
         if (!even && (p&1) == 1) continue; // test even strategies?
 

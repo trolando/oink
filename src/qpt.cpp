@@ -636,7 +636,8 @@ QPTSolver::run()
         if (disabled[i]) continue;
         int *pm = pm_nodes + i*k;
         int winner = pm[0]&1;
-        game->dominion[i] = winner;
+        game->solved[i] = true;
+        game->won1[i] = winner;
         if (game->owner[i] == 1 && winner == 1) game->strategy[i] = strategy[i];
     }
 

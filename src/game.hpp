@@ -21,7 +21,11 @@
 #include <vector>
 #include <map>
 
+#include <boost/dynamic_bitset.hpp>
+
 namespace pg {
+
+typedef boost::dynamic_bitset<unsigned long long> bitset;
 
 class Game
 {
@@ -40,6 +44,11 @@ public:
      * Construct a copy of an existing parity game.
      */
     Game(const Game& other);
+
+    /**
+     * Parse a pgsolver game.
+     */
+    Game(std::istream &inp);
 
     /**
      * Deconstructor.
@@ -64,9 +73,15 @@ public:
     bool addEdge(int from, int to);
 
     /**
-     * Parse a pgsolver game and return the number of edges.
+     * Remove an edge from <from> to <to>.
+     * Returns true if the edge was removed or false if it did not exist.
      */
-    size_t parse_pgsolver(std::istream &inp);
+    bool removeEdge(int from, int to);
+
+    /**
+     * Parse a pgsolver game.
+     */
+    void parse_pgsolver(std::istream &in);
 
     /**
      * Parse a [full or partial] pgsolver solution.
@@ -134,19 +149,24 @@ public:
     void minmax(void);
 
     /**
+     * Return the number of vertices.
+     */
+    inline size_t nodecount() { return n_nodes; }
+
+    /**
      * Count and return the number of edges.
      */
-    size_t edgecount();
+    inline size_t edgecount() { return n_edges; }
 
     /**
      * Returns whether every node has dominion 0 or 1.
      */
-    bool solved();
+    inline bool gameSolved() { return solved.count() == nodecount(); }
 
     /**
      * Count and return how many nodes have dominion -1.
      */
-    int countUnsolved();
+    inline int countUnsolved() { return n_nodes - solved.count(); }
 
     /**
      * Create a new Game of the subgame of the nodes given in <selection>.
@@ -162,7 +182,7 @@ public:
     void restrict(std::vector<int> &selection);
 
     /**
-     * Reset <dominion>, <strategy> and <disabled>.
+     * Reset <solved>, <winner> and <strategy>.
      */
     void reset();
 
@@ -171,16 +191,27 @@ public:
      */
     Game &operator=(const Game &other);
 
+    /**
+     * Swap with other game.
+     */
+    void swap(Game& other);
+
+    /**
+     * Game fields
+     */
+
     int n_nodes;           // number of nodes
+    int n_edges;           // number of edges
     int *priority;         // priority of each node
-    int *owner;            // owner of each node
+    bitset owner;          // owner of each node (1 for odd, 0 for even)
+    std::string *label;    // (optional) node labels
     std::vector<int> *out; // outgoing edges
     std::vector<int> *in;  // incoming edges
-    std::string *label;    // (optional) node labels
-    int *dominion;         // winner of node (or -1 if unknown)
-    int *strategy;         // strategy for the winner
 
-    int *disabled;         // if the node is disabled (for restricting to subgames)
+    bitset solved;         // set true if node solved
+    bitset winner;         // for solved vertices, set 1 if won by 1, else 0
+    int *strategy;         // strategy for winning vertices
+    bitset disabled;       // set true if disabled, else false
 };
 
 }

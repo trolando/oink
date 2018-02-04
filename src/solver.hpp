@@ -46,10 +46,10 @@ protected:
 
     const int n_nodes;
     const int * const priority;
-    const int * const owner;
+    const bitset &owner;
     const std::vector<int> * const out;
     const std::vector<int> * const in;
-    const int * const disabled;
+    const bitset &disabled;
 
     const int* const outa;
     const int* const ina;

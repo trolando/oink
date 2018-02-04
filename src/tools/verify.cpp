@@ -41,10 +41,8 @@ main(int argc, const char **argv)
     }
 
     try {
-        Game pg;
-
         std::ifstream inp(argv[1]);
-        pg.parse_pgsolver(inp);
+        Game pg(inp);
         inp.close();
         std::cout << "game loaded." << std::endl;
 

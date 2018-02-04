@@ -427,14 +427,16 @@ MSPMSolver::run()
                 const int pl = owner[n];
                 bool escapes = false;
                 for (int to : out[n]) {
-                    if (game->dominion[to] == pl) {
-                        oink->solve(n, pl, to);
-                        cover[n] = -1;
-                        pms[k*n+pl] = -1;
-                        q.push(n);
-                        todo_push(n);
-                        break;
-                    } else if (game->dominion[to] == -1) {
+                    if (game->solved[to]) {
+                        if (game->winner[to] == pl) {
+                            oink->solve(n, pl, to);
+                            cover[n] = -1;
+                            pms[k*n+pl] = -1;
+                            q.push(n);
+                            todo_push(n);
+                            break;
+                        }
+                    } else {
                         escapes = true;
                     }
                 }
@@ -459,8 +461,8 @@ MSPMSolver::run()
             while (!q.empty()) {
                 int n = q.front();
                 q.pop();
-                const int pl = game->dominion[n];
-                if (pl != 0 and pl != 1) LOGIC_ERROR;
+                if (!game->solved[n]) LOGIC_ERROR;
+                const bool pl = game->winner[n];
                 for (int from : in[n]) {
                     if (cover[from]) continue;
                     if (owner[from] != pl) {

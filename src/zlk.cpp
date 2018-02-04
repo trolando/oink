@@ -594,7 +594,8 @@ ZLKSolver::run()
     for (int i=0; i<n_nodes; i++) {
         if (region[i] == -2) continue;
         if (winning[i] == -1) LOGIC_ERROR;
-        int winner = game->dominion[i] = winning[i];
+        game->solved[i] = true;
+        bool winner = game->won1[i] = winning[i];
         if (winner == game->owner[i]) {
             if (strategy[i] == -1) LOGIC_ERROR;
             if (winning[strategy[i]] != winner) LOGIC_ERROR;

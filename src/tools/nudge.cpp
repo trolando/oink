@@ -166,14 +166,14 @@ main(int argc, char **argv)
     /**
      * Read a game from file or stdin.
      */
-    Game *game = new Game();
+    Game *game;
     try {
         if (opts.count("input")) {
             std::ifstream file(opts["input"].as<std::string>());
-            game->parse_pgsolver(file);
+            game = new Game(file);
             file.close();
         } else {
-            game->parse_pgsolver(std::cin);
+            game = new Game(std::cin);
         }
     } catch (const char *err) {
         std::cerr << "parsing error: " << err << std::endl;

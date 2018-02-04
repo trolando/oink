@@ -15,6 +15,7 @@
  */
 
 #include <cassert>
+#include <cstring> // memset
 #include <iostream>
 #include <algorithm>
 
@@ -24,149 +25,40 @@ using namespace std;
 
 namespace pg {
 
-Game::Game()
+Game::Game() :
+    n_nodes(0), n_edges(0),
+    priority(new int[n_nodes]), owner(n_nodes), label(new std::string[n_nodes]),
+    out(new std::vector<int>[n_nodes]), in(new std::vector<int>[n_nodes]),
+    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes]), disabled(n_nodes)
 {
-    n_nodes = 0;
-    priority = NULL;
-    owner = NULL;
-    out = NULL;
-    in = NULL;
-    label = NULL;
-    dominion = NULL;
-    strategy = NULL;
-    disabled = NULL;
 }
 
-Game::Game(int count)
+Game::Game(int count) :
+    n_nodes(count), n_edges(0),
+    priority(new int[n_nodes]), owner(n_nodes), label(new std::string[n_nodes]),
+    out(new std::vector<int>[n_nodes]), in(new std::vector<int>[n_nodes]),
+    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes]), disabled(n_nodes)
 {
-    n_nodes = count < 0 ? 0 : count;
-    if (n_nodes > 0) {
-        priority = new int[n_nodes+1];
-        owner = new int[n_nodes+1];
-        label = new std::string[n_nodes+1];
-        out = new std::vector<int>[n_nodes+1];
-        in = new std::vector<int>[n_nodes+1];
-        dominion = new int[n_nodes+1];
-        strategy = new int[n_nodes+1];
-        disabled = new int[n_nodes+1];
-    } else {
-        priority = NULL;
-        owner = NULL;
-        out = NULL;
-        in = NULL;
-        label = NULL;
-        dominion = NULL;
-        strategy = NULL;
-        disabled = NULL;
-    }
+    assert(count > 0);
+    memset(strategy, -1, sizeof(int[n_nodes]));
 }
 
-Game::Game(const Game& other)
+Game::Game(const Game& other) : Game(other.n_nodes)
 {
-    n_nodes = other.n_nodes;
-    if (n_nodes > 0) {
-        priority = new int[n_nodes];
-        owner = new int[n_nodes];
-        label = new std::string[n_nodes];
-        out = new std::vector<int>[n_nodes];
-        in = new std::vector<int>[n_nodes];
-        dominion = new int[n_nodes];
-        strategy = new int[n_nodes];
-        disabled = new int[n_nodes];
-    }
-    for (int i=0; i<n_nodes; i++) {
-        priority[i] = other.priority[i];
-        owner[i] = other.owner[i];
-        label[i] = other.label[i];
-        dominion[i] = other.dominion[i];
-        strategy[i] = other.strategy[i];
-        disabled[i] = other.disabled[i];
-        out[i] = other.out[i];
-        in[i] = other.in[i];
-    }
+    n_edges = other.n_edges;
+    memcpy(priority, other.priority, sizeof(int[n_nodes]));
+    owner = other.owner;
+    for (int i=0; i<n_nodes; i++) label[i] = other.label[i];
+    for (int i=0; i<n_nodes; i++) out[i] = other.out[i];
+    for (int i=0; i<n_nodes; i++) in[i] = other.in[i];
+
+    solved = other.solved;
+    winner = other.winner;
+    memcpy(strategy, other.strategy, sizeof(int[n_nodes]));
+    disabled = other.disabled;
 }
 
-Game::~Game()
-{
-    if (n_nodes > 0) {
-        delete[] priority;
-        delete[] owner;
-        delete[] out;
-        delete[] in;
-        delete[] label;
-        delete[] dominion;
-        delete[] strategy;
-        delete[] disabled;
-        n_nodes = 0;
-    }
-}
-
-void
-Game::initGame(int count)
-{
-    if (n_nodes > 0) {
-        delete[] priority;
-        delete[] owner;
-        delete[] out;
-        delete[] in;
-        delete[] label;
-        delete[] dominion;
-        delete[] strategy;
-        delete[] disabled;
-    }
-
-    n_nodes = count < 0 ? 0 : count;
-    if (n_nodes > 0) {
-        priority = new int[n_nodes+1];
-        owner = new int[n_nodes+1];
-        label = new std::string[n_nodes+1];
-        out = new std::vector<int>[n_nodes+1];
-        in = new std::vector<int>[n_nodes+1];
-        dominion = new int[n_nodes+1];
-        strategy = new int[n_nodes+1];
-        disabled = new int[n_nodes+1];
-    } else {
-        priority = NULL;
-        owner = NULL;
-        out = NULL;
-        in = NULL;
-        label = NULL;
-        dominion = NULL;
-        strategy = NULL;
-        disabled = NULL;
-    }
-}
-
-void
-Game::initNode(int node, int priority, int owner, std::string label)
-{
-    assert(node < n_nodes and node >= 0);
-
-    this->priority[node] = priority;
-    this->owner[node] = owner;
-    this->label[node] = label;
-    this->dominion[node] = -1;
-    this->strategy[node] = -1;
-    this->disabled[node] = 0;
-}
-
-bool
-Game::addEdge(int from, int to)
-{
-    assert(from >= 0 and from < n_nodes);
-    assert(to >= 0 and to < n_nodes);
-
-    if (std::find(out[from].begin(), out[from].end(), to) == out[from].end()) {
-        out[from].push_back(to);
-        in[to].push_back(from);
-        return true;
-    } else {
-        return false;
-    }
-}
-
-size_t
-Game::parse_pgsolver(istream &inp)
+Game::Game(istream &inp)
 {
     string line;
     while (getline(inp, line)) {
@@ -182,14 +74,23 @@ Game::parse_pgsolver(istream &inp)
         break;
     }
 
-    initGame(n_nodes);
+    n_edges = 0;
 
-    for (int i=0; i<=n_nodes; i++) dominion[i] = -1;
-    for (int i=0; i<=n_nodes; i++) strategy[i] = -1;
-    for (int i=0; i<=n_nodes; i++) disabled[i] = 1; // !
+    priority = new int[n_nodes];
+    owner.resize(n_nodes);
+    label = new std::string[n_nodes];
+    out = new std::vector<int>[n_nodes];
+    in = new std::vector<int>[n_nodes];
+
+    solved.resize(n_nodes);
+    winner.resize(n_nodes);
+    strategy = new int[n_nodes];
+    disabled.resize(n_nodes);
+
+    memset(strategy, -1, sizeof(int[n_nodes]));
+    disabled.set();
 
     size_t node_count = 0;
-    size_t edge_count = 0;
 
     while (getline(inp, line)) {
         stringstream ss(line);
@@ -206,27 +107,32 @@ Game::parse_pgsolver(istream &inp)
             // ignore lines starting with a non number
             continue;
         }
-        if (id == n_nodes) n_nodes++; // work-around
         if (id >= n_nodes || id < 0) {
-            throw "invalid id";
+            // a parity game where <count> is the HIGHEST index is not supported
+            throw "invalid id or old file format";
         }
 
-        if (disabled[id] != 1) {
+        if (!disabled[id]) {
             throw "duplicate id";
         }
 
-        disabled[id] = 0;
+        disabled[id] = false;
         node_count++;
 
         if (!(ss >> priority[id])) {
             throw "missing priority";
         }
 
-        if (!(ss >> owner[id])) {
+        int o;
+        if (!(ss >> o)) {
             throw "missing owner";
         }
 
-        if (owner[id] != 0 && owner[id] != 1) {
+        if (o == 0) {
+            // nothing
+        } else if (o == 1) {
+            owner[id] = true;
+        } else {
             throw "invalid owner";
         }
 
@@ -234,13 +140,11 @@ Game::parse_pgsolver(istream &inp)
         for (;;) {
             int to;
             if (!(ss >> to)) throw "missing successor";
-
-            if (to == n_nodes) n_nodes++; // work-around
-            if (to >= n_nodes) throw "invalid successor";
+            if (to < 0 or to >= n_nodes) throw "invalid successor";
 
             out[id].push_back(to);
             in[to].push_back(id);
-            edge_count++;
+            n_edges++;
 
             char ch;
             if (!(ss >> ch)) throw "missing ; to end line";
@@ -252,10 +156,73 @@ Game::parse_pgsolver(istream &inp)
         }
     }
 
-    if ((int)node_count != n_nodes) throw "missing nodes";
-    for (int i=0; i<n_nodes; i++) if (disabled[i]) throw "missing nodes";
+    if (disabled.any()) throw "missing nodes";
+}
 
-    return edge_count;
+Game::~Game()
+{
+    delete[] priority;
+    delete[] out;
+    delete[] in;
+    delete[] label;
+    delete[] strategy;
+}
+
+void
+Game::initGame(int count)
+{
+    Game g(count);
+    swap(g);
+}
+
+void
+Game::initNode(int node, int priority, int owner, std::string label)
+{
+    assert(node >= 0 and node < n_nodes);
+    assert(owner == 0 or owner == 1);
+
+    this->priority[node] = priority;
+    this->owner[node] = owner;
+    this->label[node] = label;
+}
+
+bool
+Game::addEdge(int from, int to)
+{
+    assert(from >= 0 and from < n_nodes);
+    assert(to >= 0 and to < n_nodes);
+
+    if (std::find(out[from].begin(), out[from].end(), to) == out[from].end()) {
+        out[from].push_back(to);
+        in[to].push_back(from);
+        n_edges++;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool
+Game::removeEdge(int from, int to)
+{
+    assert(from >= 0 and from < n_nodes);
+    assert(to >= 0 and to < n_nodes);
+
+    auto &o = out[from];
+    auto &i = in[to];
+
+    auto pre = o.size();
+    o.erase(std::remove(o.begin(), o.end(), to), o.end());
+    if (o.size() == pre) return false;
+    i.erase(std::remove(i.begin(), i.end(), from), i.end());
+    return true;
+}
+
+void
+Game::parse_pgsolver(std::istream &in)
+{
+    Game g(in);
+    swap(g);
 }
 
 void
@@ -278,18 +245,19 @@ Game::parse_solution(std::istream &in)
             throw "node index out of bounds";
         }
 
-        if (dominion[ident] != -1) throw "node appears twice in solution";
+        if (solved[ident]) throw "node already solved";
 
         // parse winner
-        int winner;
-        if (!(ss >> winner)) throw "missing winner";
-        if (winner != 0 && winner != 1) throw "invalid winner";
+        int w;
+        if (!(ss >> w)) throw "missing winner";
+        if (w!= 0 && w!= 1) throw "invalid winner";
 
         // set winner
-        dominion[ident] = winner;
+        solved[ident] = true;
+        winner[ident] = w;
 
         // parse strategy
-        if (winner == owner[ident]) {
+        if (w == owner[ident]) {
             int str;
             if (!(ss >> str)) throw "missing strategy for winning node";
 
@@ -343,17 +311,13 @@ Game::write_dot(std::ostream &out)
 void
 Game::write_sol(std::ostream &out)
 {
-    // count size of solution
-    int size = 0;
-    for (int i=0; i<n_nodes; i++) if (dominion[i] != -1) size++;
-
     // print banner
-    out << "paritysol " << size << ";" << endl;
+    out << "paritysol " << solved.count() << ";" << endl;
 
     // print solution
     for (int i=0; i<n_nodes; i++) {
-        if (dominion[i] != -1) {
-            out << i << " " << dominion[i];
+        if (solved[i]) {
+            out << i << " " << (winner[i] ? "1" : "0");
             if (strategy[i] != -1) out << " " << strategy[i];
             out << ";" << endl;
         }
@@ -391,15 +355,16 @@ Game::permute(int *mapping)
             if (k == i) break;
             // swap i and mapping[i]
             std::swap(priority[i], priority[k]);
-            std::swap(owner[i], owner[k]);
+            { bool b = owner[k]; owner[k] = owner[i]; owner[i] = b; }
             std::swap(in[i], in[k]);
             std::swap(out[i], out[k]);
             std::swap(label[i], label[k]);
-            std::swap(dominion[i], dominion[k]);
+            { bool b = solved[k]; solved[k] = solved[i]; solved[i] = b; }
+            { bool b = winner[k]; winner[k] = winner[i]; winner[i] = b; }
             std::swap(strategy[i], strategy[k]);
-            std::swap(disabled[i], disabled[k]);
+            { bool b = disabled[k]; disabled[k] = disabled[i]; disabled[i] = b; }
             mapping[i] = mapping[k];
-            mapping[k] = k;            
+            mapping[k] = k;
         }
     }
 }
@@ -501,33 +466,6 @@ Game::minmax()
     }
 }
 
-size_t
-Game::edgecount()
-{
-    size_t res = 0;
-    for (int i=0; i<n_nodes; i++) res += out[i].size();
-    return res;
-}
-
-bool
-Game::solved()
-{
-    for (int i=0; i<n_nodes; i++) {
-        if (dominion[i] == -1) return false;
-    }
-    return true;
-}
-
-int
-Game::countUnsolved()
-{
-    int count = 0;
-    for (int i=0; i<n_nodes; i++) {
-        if (dominion[i] == -1) count++;
-    }
-    return count;
-}
-
 Game *
 Game::extract_subgame(std::vector<int> &selection, int *mapping)
 {
@@ -582,7 +520,8 @@ Game::extract_subgame(std::vector<int> &selection, int *mapping)
         res->priority[i] = priority[k];
         res->owner[i] = owner[k];
         res->label[i] = label[k];
-        res->dominion[i] = dominion[k];
+        res->solved[i] = solved[k];
+        res->winner[i] = winner[k];
         res->strategy[i] = strategy[k];
         res->disabled[i] = disabled[k];
         for (auto j : in[k]) {
@@ -598,38 +537,44 @@ Game::extract_subgame(std::vector<int> &selection, int *mapping)
     return res;
 }
 
-void 
+void
 Game::restrict(std::vector<int> &selection)
 {
-    for (int i=0; i<n_nodes; i++) disabled[i] = 1;
-    for (int i : selection) disabled[i] = 0;
+    disabled.set();
+    for (int i : selection) disabled[i] = false;
 }
 
 Game&
 Game::operator=(const Game &other)
 {
-    initGame(other.n_nodes);
-    for (int i=0; i<n_nodes; i++) {
-        priority[i] = other.priority[i];
-        owner[i] = other.owner[i];
-        label[i] = other.label[i];
-        dominion[i] = other.dominion[i];
-        strategy[i] = other.strategy[i];
-        disabled[i] = other.disabled[i];
-        out[i] = other.out[i];
-        in[i] = other.in[i];
-    }
+    Game g(other);
+    swap(g);
     return *this;
+}
+
+void
+Game::swap(Game &other)
+{
+    std::swap(n_nodes, other.n_nodes);
+    std::swap(n_edges, other.n_edges);
+    std::swap(priority, other.priority);
+    std::swap(owner, other.owner);
+    std::swap(label, other.label);
+    std::swap(out, other.out);
+    std::swap(in, other.in);
+    std::swap(solved, other.solved);
+    std::swap(winner, other.winner);
+    std::swap(strategy, other.strategy);
+    std::swap(disabled, other.disabled);
 }
 
 void
 Game::reset()
 {
-    for (int i=0; i<n_nodes; i++) {
-        dominion[i] = -1;
-        strategy[i] = -1;
-        disabled[i] = 0;
-    }
+    solved.reset();
+    winner.reset();
+    disabled.reset();
+    memset(strategy, -1, sizeof(int[n_nodes]));
 }
 
 }

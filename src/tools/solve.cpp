@@ -233,7 +233,6 @@ int main(int argc, char **argv)
     Game pg;
 
     try {
-        size_t edgecount;
         if (opts.count("input")) {
             std::string filename = opts["input"].as<std::string>();
             std::ifstream file(filename, std::ios_base::binary);
@@ -241,12 +240,12 @@ int main(int argc, char **argv)
             if (boost::algorithm::ends_with(filename, ".bz2")) in.push(io::bzip2_decompressor());
             if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
             in.push(file);
-            edgecount = pg.parse_pgsolver(in);
+            pg.parse_pgsolver(in);
             file.close();
         } else {
-            edgecount = pg.parse_pgsolver(std::cin);
+            pg.parse_pgsolver(std::cin);
         }
-        out << "parity game with " << pg.n_nodes << " nodes and " << edgecount << " edges." << std::endl;
+        out << "parity game with " << pg.nodecount() << " nodes and " << pg.edgecount() << " edges." << std::endl;
     } catch (const char *err) {
         out << "parsing error: " << err << std::endl;
         return -1;
@@ -370,7 +369,7 @@ int main(int argc, char **argv)
         // print winning nodes
         bool banner = false;
         for (int i=0; i<pg.n_nodes; i++) {
-            if (pg.dominion[i] == 0) {
+            if (pg.solved[i] and pg.winner[i] == 0) {
                 if (!banner) out << "won by even:";
                 banner = true;
                 out << " " << i; // << "(" << pg.priority[i] << ")";
@@ -379,7 +378,7 @@ int main(int argc, char **argv)
         if (banner) out << std::endl;
         banner = false;
         for (int i=0; i<pg.n_nodes; i++) {
-            if (pg.dominion[i] == 1) {
+            if (pg.solved[i] and pg.winner[i] == 1) {
                 if (!banner) out << "won by odd:";
                 banner = true;
                 out << " " << i; // << "(" << pg.priority[i] << ")";
