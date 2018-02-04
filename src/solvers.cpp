@@ -28,12 +28,14 @@
 #include "tspm.hpp"
 #include "mspm.hpp"
 #include "qpt.hpp"
+#include "npp.hpp"
 
 namespace pg {
 
 Solvers::Solvers()
 {
     add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game, std::ostream& lgr) { return new ZLKSolver(oink, game, lgr); });
+    add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new NPPSolver(oink, game, lgr); });
     add("pp", "priority promotion PP", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new PPSolver(oink, game, lgr); });
     add("ppp", "priority promotion PP+", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new PPPSolver(oink, game, lgr); });
     add("rr", "priority promotion RR", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new RRSolver(oink, game, lgr); });
