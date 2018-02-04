@@ -62,7 +62,6 @@ public:
 
     /**
      * Initialize a node <node> with given <priority>, <owner> and <label>.
-     * Also resets disabled, dominion and strategy.
      */
     void initNode(int node, int priority, int owner, std::string label="");
 
@@ -177,11 +176,6 @@ public:
     Game *extract_subgame(std::vector<int> &selection, int *mapping=NULL);
 
     /**
-     * Set disabled to 0 for all nodes in <selection>, to 1 otherwise.
-     */
-    void restrict(std::vector<int> &selection);
-
-    /**
      * Reset <solved>, <winner> and <strategy>.
      */
     void reset();
@@ -211,7 +205,6 @@ public:
     bitset solved;         // set true if node solved
     bitset winner;         // for solved vertices, set 1 if won by 1, else 0
     int *strategy;         // strategy for winning vertices
-    bitset disabled;       // set true if disabled, else false
 };
 
 }

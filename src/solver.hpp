@@ -31,7 +31,7 @@ public:
     Solver(Oink *oink, Game *game, std::ostream &lgr = std::cout) :
         oink(oink), game(game), logger(lgr),
         n_nodes(game->n_nodes), priority(game->priority), owner(game->owner),
-        out(game->out), in(game->in), disabled(game->disabled),
+        out(game->out), in(game->in), disabled(oink->disabled),
         outa(oink->outa), ina(oink->ina), outs(oink->outs), ins(oink->ins) { }
     virtual ~Solver() { }
     virtual void run() = 0;

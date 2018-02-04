@@ -18,7 +18,8 @@
 #include <iostream>
 #include <deque>
 #include <stack>
-#include "scc.hpp"
+#include <cstring> // for memset
+#include "oink.hpp"
 
 namespace pg {
 
@@ -26,12 +27,12 @@ namespace pg {
  * Tarjan's SCC algorithm, modified to only compute the bottom SCC and avoid disabled nodes.
  */
 void
-tarjan(Game &game, int n, std::vector<int> &res, bool nonempty)
+Oink::tarjan(int n, std::vector<int> &res, bool nonempty)
 {
     // initialize
-    unsigned n_nodes = game.n_nodes;
+    unsigned n_nodes = game->n_nodes;
     int *low = new int[n_nodes];
-    for (unsigned i=0; i<n_nodes; i++) low[i] = 0;
+    memset(low, 0, sizeof(int[n_nodes]));
     int pre = 0;
 
     // search stack "st"
@@ -47,8 +48,8 @@ tarjan(Game &game, int n, std::vector<int> &res, bool nonempty)
         }
         int min = low[idx];
         bool pushed = false;
-        for (auto to_idx : game.out[idx]) {
-            if (game.disabled[to_idx]) continue;
+        for (auto to_idx : game->out[idx]) {
+            if (disabled[to_idx]) continue;
             if (low[to_idx] == 0) {
                 // not visited
                 st.push(to_idx);
@@ -73,7 +74,7 @@ tarjan(Game &game, int n, std::vector<int> &res, bool nonempty)
          */
 
         if (nonempty) {
-            auto &out_idx = game.out[idx];
+            auto &out_idx = game->out[idx];
             if (res.back() == idx and std::find(out_idx.begin(), out_idx.end(), idx) == out_idx.end()) {
                 // it has no edges!
                 res.pop_back();
@@ -95,13 +96,13 @@ tarjan(Game &game, int n, std::vector<int> &res, bool nonempty)
  * Find a bottom SCC starting from the first unsolved node.
  */
 void
-getBottomSCC(Game &game, std::vector<int> &scc, bool nonempty)
+Oink::getBottomSCC(std::vector<int> &scc, bool nonempty)
 {
-    for (int i=0; i<game.n_nodes; i++) {
-        if (!game.disabled[i]) {
-            getBottomSCC(game, i, scc, nonempty);
-            return;
-        }
+    for (int i=0; i<game->n_nodes; i++) {
+        if (disabled[i]) continue;
+        scc.clear();
+        tarjan(i, scc, nonempty);
+        return;
     }
 }
 
@@ -109,10 +110,10 @@ getBottomSCC(Game &game, std::vector<int> &scc, bool nonempty)
  * Find a bottom SCC starting from the given node.
  */
 void
-getBottomSCC(Game &game, int start, std::vector<int> &scc, bool nonempty)
+Oink::getBottomSCC(int start, std::vector<int> &scc, bool nonempty)
 {
     scc.clear();
-    tarjan(game, start, scc, nonempty);
+    tarjan(start, scc, nonempty);
 }
 
 }

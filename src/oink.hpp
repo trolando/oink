@@ -28,7 +28,7 @@ class Solver;
 class Oink
 {
 public:
-    Oink(Game &game, std::ostream &out=std::cout) : game(&game),  logger(out) { }
+    Oink(Game &game, std::ostream &out=std::cout) : game(&game), logger(out), disabled(game.n_nodes) { }
     ~Oink() {}
 
     /**
@@ -115,6 +115,25 @@ protected:
      */
     void attractDominion(int i);
 
+    /**
+     * Find a bottom SCC starting from the first non-disabled node.
+     * Avoids "disabled" nodes.
+     * (if nonempty is set, only obtain a non-empty bottom SCC.)
+     */
+    void getBottomSCC(std::vector<int> &scc, bool nonempty=false);
+
+    /**
+     * Find a bottom SCC starting from the given node.
+     * Avoids "disabled" nodes.
+     * (if nonempty is set, only obtain a non-empty bottom SCC.)
+     */
+    void getBottomSCC(int start, std::vector<int> &scc, bool nonempty=false);
+
+    /**
+     * Tarjan's SCC algorithm, modified to only compute the bottom SCC and avoid disabled nodes.
+     */
+    void tarjan(int start_node, std::vector<int> &res, bool nonempty);
+
     Game *game;              // game being solved
     std::ostream &logger;    // logger for trace/debug messages
     int solver = -1;         // which solver to use
@@ -134,6 +153,7 @@ protected:
     int *ina;                // index array for incoming edges
     int *outs;               // all outgoing edges
     int *ins;                // all incoming edges
+    bitset disabled;         // which vertices are disabled
 
     friend class pg::Solver; // to allow access to edges
 };

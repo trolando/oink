@@ -21,7 +21,6 @@
 
 #include "cxxopts.hpp"
 #include "game.hpp"
-#include "scc.hpp"
 
 using namespace std;
 using namespace pg;
@@ -33,6 +32,75 @@ rng(int low, int high)
     static mt19937 generator(rand_dev());
     return uniform_int_distribution<int>(low, high)(generator);
 }
+
+/**
+ * Tarjan's SCC algorithm, modified to only compute the bottom SCC
+ */
+void
+tarjan(Game *game, int n, std::vector<int> &res, bool nonempty)
+{
+    // initialize
+    unsigned n_nodes = game->n_nodes;
+    int *low = new int[n_nodes];
+    memset(low, 0, sizeof(int[n_nodes]));
+    int pre = 0;
+
+    // search stack "st"
+    std::stack<int> st;
+    st.push(n);
+
+    while (!st.empty()) { // st is never empty
+        int idx = st.top();
+        if (low[idx] == 0) {
+            // first time we see it
+            low[idx] = ++pre;
+            res.push_back(idx);
+        }
+        int min = low[idx];
+        bool pushed = false;
+        for (auto to_idx : game->out[idx]) {
+            if (low[to_idx] == 0) {
+                // not visited
+                st.push(to_idx);
+                pushed = true;
+                break;
+            } else {
+                // visited it, update min
+                if (low[to_idx] < min) min = low[to_idx];
+            }
+        }
+        if (pushed) continue; // we pushed...
+
+        if (min < low[idx]) {
+            low[idx] = min;
+            st.pop();
+            continue;
+        }
+
+        /**
+         * At this point, we found a bottom SCC. Now check if it is empty.
+         * A SCC is "empty" if it contains no edges, i.e., consists of 1 node without self-loops.
+         */
+
+        if (nonempty) {
+            auto &out_idx = game->out[idx];
+            if (res.back() == idx and std::find(out_idx.begin(), out_idx.end(), idx) == out_idx.end()) {
+                // it has no edges!
+                res.pop_back();
+                st.pop();
+                if (st.empty()) break;
+                continue;
+            }
+        }
+
+        // found bottom SCC; remove nodes not in the bottom SCC...
+        if (res.front() != idx) res.erase(res.begin(), std::find(res.begin(), res.end(), idx));
+        break;
+    }
+
+    delete[] low;
+}
+
 
 bool
 nudge(Game *game, int profile)
@@ -193,7 +261,7 @@ main(int argc, char **argv)
      */
     if (opts.count("b")) {
         std::vector<int> scc;
-        getBottomSCC(*game, rng(0, game->n_nodes-1), scc, true);
+        tarjan(game, rng(0, game->n_nodes-1), scc, true);
         Game *sub = game->extract_subgame(scc, NULL);
         delete game;
         game = sub;

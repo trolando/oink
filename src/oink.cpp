@@ -21,7 +21,6 @@
 #include <iostream>
 
 #include "oink.hpp"
-#include "scc.hpp"
 #include "solvers.hpp"
 #include "solver.hpp"
 #include "lace.h"
@@ -54,14 +53,14 @@ Oink::attractDominion(int i)
                 game->strategy[in] = n;
                 game->solved[in] = true;
                 game->winner[in] = winner;
-                game->disabled[in] = true;
+                disabled[in] = true;
                 nodes.push(in);
             } else {
                 // node of loser
                 if (--outcount[in] == 0) {
                     game->solved[in] = true;
                     game->winner[in] = winner;
-                    game->disabled[in] = 1;
+                    disabled[in] = true;
                     nodes.push(in);
                 }
             }
@@ -84,7 +83,7 @@ Oink::solveTrivialCycles()
     const int n_nodes = game->n_nodes;
     int *done = new int[n_nodes];
     int64_t *low = new int64_t[n_nodes];
-    for (int i=0; i<n_nodes; i++) done[i] = game->disabled[i] ? -2 : -1;
+    for (int i=0; i<n_nodes; i++) done[i] = disabled[i] ? -2 : -1;
     for (int i=0; i<n_nodes; i++) low[i] = 0;
 
     std::vector<int> res;
@@ -96,7 +95,6 @@ Oink::solveTrivialCycles()
     const auto &out = game->out;
     const auto &owner = game->owner;
     const auto &priority = game->priority;
-    const auto &disabled = game->disabled;
 
     int64_t pre = 0;
 
@@ -264,7 +262,7 @@ Oink::solveSelfloops()
 {
     int res = 0;
     for (int n=0; n<game->n_nodes; n++) {
-        if (game->disabled[n]) continue;
+        if (disabled[n]) continue;
 
         auto &out = game->out[n];
         for (auto it = out.begin(); it != out.end(); it++) {
@@ -302,12 +300,12 @@ Oink::solveSelfloops()
 void
 Oink::solve(int node, int win, int strategy)
 {
-    if (game->solved[node] or game->disabled[node]) LOGIC_ERROR;
+    if (game->solved[node] or disabled[node]) LOGIC_ERROR;
 
     game->solved[node] = true;
     game->winner[node] = win;
     game->strategy[node] = (win == game->owner[node]) ? strategy : -1;
-    game->disabled[node] = true; // disable
+    disabled[node] = true; // disable
     todo.push_back(node);
 
     /*
@@ -358,7 +356,7 @@ Oink::run()
     outcount = new int[game->n_nodes];
     for (int i=0; i<game->n_nodes; i++) {
         outcount[i] = std::count_if(game->out[i].begin(), game->out[i].end(),
-                [&] (const int n) { return game->disabled[n] == 0; });
+                [&] (const int n) { return disabled[n] == 0; });
     }
 
     if (inflate) {
@@ -374,8 +372,8 @@ Oink::run()
 
     // in case some nodes already have a dominion but are not yet disabled
     for (int i=0; i<game->n_nodes; i++) {
-        if (game->solved[i] and !game->disabled[i]) {
-            game->disabled[i] = 1;
+        if (game->solved[i] and !disabled[i]) {
+            disabled[i] = true;
             todo.push_back(i);
         }
     }
@@ -384,7 +382,7 @@ Oink::run()
     if (solveSingle) {
         int parity = -1;
         for (int i=0; i<game->n_nodes; i++) {
-            if (game->disabled[i]) continue;
+            if (disabled[i]) continue;
             if (parity == -1) parity = game->priority[i]&1;
             else if (parity == (game->priority[i]&1)) continue;
             else {
@@ -396,10 +394,10 @@ Oink::run()
             // solved with random strategy
             logger << "parity game only has parity " << (parity ? "odd" : "even") << std::endl;
             for (int i=0; i<game->n_nodes; i++) {
-                if (game->disabled[i]) continue;
+                if (disabled[i]) continue;
                 if (game->owner[i] == parity) {
                     for (int to : game->out[i]) {
-                        if (game->disabled[to]) continue;
+                        if (disabled[to]) continue;
                         solve(i, parity, to);
                         break;
                     }
@@ -482,14 +480,15 @@ Oink::run()
 
     while (!game->gameSolved()) {
         // disabled all solved vertices
-        game->disabled = game->solved;
+        disabled = game->solved;
 
         if (bottomSCC) {
             // solve bottom SCC
             std::vector<int> sel;
-            getBottomSCC(*game, sel);
+            getBottomSCC(sel);
             assert(sel.size() != 0);
-            game->restrict(sel);
+            disabled.set();
+            for (int i : sel) disabled[i] = false;
             logger << "solving bottom SCC of " << sel.size() << " nodes (";
             logger << game->countUnsolved() << " nodes left)" << std::endl;
         }

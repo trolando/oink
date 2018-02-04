@@ -29,7 +29,7 @@ Game::Game() :
     n_nodes(0), n_edges(0),
     priority(new int[n_nodes]), owner(n_nodes), label(new std::string[n_nodes]),
     out(new std::vector<int>[n_nodes]), in(new std::vector<int>[n_nodes]),
-    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes]), disabled(n_nodes)
+    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes])
 {
 }
 
@@ -37,7 +37,7 @@ Game::Game(int count) :
     n_nodes(count), n_edges(0),
     priority(new int[n_nodes]), owner(n_nodes), label(new std::string[n_nodes]),
     out(new std::vector<int>[n_nodes]), in(new std::vector<int>[n_nodes]),
-    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes]), disabled(n_nodes)
+    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes])
 {
     assert(count > 0);
     memset(strategy, -1, sizeof(int[n_nodes]));
@@ -55,7 +55,6 @@ Game::Game(const Game& other) : Game(other.n_nodes)
     solved = other.solved;
     winner = other.winner;
     memcpy(strategy, other.strategy, sizeof(int[n_nodes]));
-    disabled = other.disabled;
 }
 
 Game::Game(istream &inp)
@@ -85,10 +84,9 @@ Game::Game(istream &inp)
     solved.resize(n_nodes);
     winner.resize(n_nodes);
     strategy = new int[n_nodes];
-    disabled.resize(n_nodes);
 
     memset(strategy, -1, sizeof(int[n_nodes]));
-    disabled.set();
+    solved.set(); // we use solved for temporary storage
 
     size_t node_count = 0;
 
@@ -112,11 +110,11 @@ Game::Game(istream &inp)
             throw "invalid id or old file format";
         }
 
-        if (!disabled[id]) {
+        if (!solved[id]) {
             throw "duplicate id";
         }
 
-        disabled[id] = false;
+        solved[id] = false;
         node_count++;
 
         if (!(ss >> priority[id])) {
@@ -156,7 +154,7 @@ Game::Game(istream &inp)
         }
     }
 
-    if (disabled.any()) throw "missing nodes";
+    if (solved.any()) throw "missing nodes";
 }
 
 Game::~Game()
@@ -362,7 +360,6 @@ Game::permute(int *mapping)
             { bool b = solved[k]; solved[k] = solved[i]; solved[i] = b; }
             { bool b = winner[k]; winner[k] = winner[i]; winner[i] = b; }
             std::swap(strategy[i], strategy[k]);
-            { bool b = disabled[k]; disabled[k] = disabled[i]; disabled[i] = b; }
             mapping[i] = mapping[k];
             mapping[k] = k;
         }
@@ -523,7 +520,6 @@ Game::extract_subgame(std::vector<int> &selection, int *mapping)
         res->solved[i] = solved[k];
         res->winner[i] = winner[k];
         res->strategy[i] = strategy[k];
-        res->disabled[i] = disabled[k];
         for (auto j : in[k]) {
             if (inv[j] != -1) res->in[i].push_back(inv[j]);
         }
@@ -535,13 +531,6 @@ Game::extract_subgame(std::vector<int> &selection, int *mapping)
     if (mapping == NULL) delete[] map;
     delete[] inv;
     return res;
-}
-
-void
-Game::restrict(std::vector<int> &selection)
-{
-    disabled.set();
-    for (int i : selection) disabled[i] = false;
 }
 
 Game&
@@ -565,7 +554,6 @@ Game::swap(Game &other)
     std::swap(solved, other.solved);
     std::swap(winner, other.winner);
     std::swap(strategy, other.strategy);
-    std::swap(disabled, other.disabled);
 }
 
 void
@@ -573,7 +561,6 @@ Game::reset()
 {
     solved.reset();
     winner.reset();
-    disabled.reset();
     memset(strategy, -1, sizeof(int[n_nodes]));
 }
 
