@@ -132,6 +132,7 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
     for (; i>=0; i--) {
         int _r = s->region[i];
         if (_r == DIS or _r >= 0) continue; // not in subgame or attracted
+        if (!s->to_inversion and s->priority[i] != pr) break;
         if ((s->priority[i]&1) != pl) { // search until parity inversion
             // first SYNC on all children, who knows this node may be attracted
             while (spawn_count) { SYNC(attractParT); spawn_count--; }
@@ -201,7 +202,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
         if (region[i] == DIS or region[i] >= 0) continue; // cannot be attracted
 
         // uncomment the next line to attract until lower priority instead of until inversion
-        // if (priority[i] != pr) break; // until other priority
+        if (!to_inversion and priority[i] != pr) break; // until other priority
         if ((priority[i]&1) != pl) break; // until parity inversion (Maks Verver optimization)
 
         region[i] = r;
@@ -511,19 +512,21 @@ ZLKSolver::run()
             int count = 0;
             if (pl == 0) {
                 if (!W1.empty()) count = attractLosing(i, r, A, &W1);
+                else count = -1;
             } else {
                 if (!W0.empty()) count = attractLosing(i, r, A, &W0);
+                else count = -1;
             }
 
 #ifndef DEBUG
             if (trace) {
-                if (count != 0) fmt::printf(logger, "%d nodes are attracted to losing region\n", count);
-                else if (pl == 0 ? !W1.empty() : !W0.empty()) fmt::printf(logger, "no nodes are attracted to losing region\n");
+                if (count > 0) fmt::printf(logger, "%d nodes are attracted to losing region\n", count);
+                else if (count == 0) fmt::printf(logger, "no nodes are attracted to losing region\n");
                 else fmt::printf(logger, "no losing region\n");
             }
 #endif
 
-            if (count == 0) {
+            if (count < 0 or (only_recompute_when_attracted and count == 0)) {
                 /**
                  * Nothing attracted to opponent, add A to W0/W1, fix strategies, go up.
                  */

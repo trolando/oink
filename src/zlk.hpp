@@ -43,6 +43,9 @@ protected:
     int *winning;
     int *strategy;
 
+    bool to_inversion = true;
+    bool only_recompute_when_attracted = true;
+
     uintqueue Q;
 
     int attractExt(int i, int r, std::vector<int> *R);
@@ -51,6 +54,13 @@ protected:
     friend void attractParT_WORK(WorkerP*, Task*, int, int, int, ZLKSolver*);
     friend int attractPar_WORK(WorkerP*, Task*, int, int, std::vector<int>*, ZLKSolver*);
     friend void updateOutcount_WORK(WorkerP*, Task*, int, int, ZLKSolver*);
+};
+
+class UnoptimizedZLKSolver : public ZLKSolver
+{
+public:
+    UnoptimizedZLKSolver(Oink *oink, Game *game) : ZLKSolver(oink, game) { to_inversion = false; only_recompute_when_attracted = false; }
+    virtual ~UnoptimizedZLKSolver() { }
 };
 
 }

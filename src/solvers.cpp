@@ -35,6 +35,7 @@ namespace pg {
 Solvers::Solvers()
 {
     add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKSolver(oink, game); });
+    add("uzlk", "unoptimized Zielonka", 1, [] (Oink* oink, Game* game) { return new UnoptimizedZLKSolver(oink, game); });
     add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game) { return new NPPSolver(oink, game); });
     add("pp", "priority promotion PP", 0, [] (Oink* oink, Game* game) { return new PPSolver(oink, game); });
     add("ppp", "priority promotion PP+", 0, [] (Oink* oink, Game* game) { return new PPPSolver(oink, game); });
