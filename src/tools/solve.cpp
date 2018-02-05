@@ -310,6 +310,7 @@ int main(int argc, char **argv)
     if (opts.count("solver")) {
         en.setSolver(solvers.id(opts["solver"].as<std::string>()));
     } else {
+        en.setSolver("npp"); // default solver :)
         for (unsigned id=0; id<solvers.count(); id++) {
             if (opts.count(solvers.label(id))) en.setSolver(id);
         }
