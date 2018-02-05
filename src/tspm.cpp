@@ -15,14 +15,12 @@
  */
 
 #include <algorithm>
-#include <iostream>
 #include <iomanip>
-#include <stack>
 #include "tspm.hpp"
 
 namespace pg {
 
-TSPMSolver::TSPMSolver(Oink *oink, Game *game, std::ostream &lgr) : Solver(oink, game, lgr)
+TSPMSolver::TSPMSolver(Oink *oink, Game *game) : Solver(oink, game)
 {
 }
 

@@ -27,7 +27,7 @@ namespace pg {
 class PPSolver : public Solver
 {
 public:
-    PPSolver(Oink *oink, Game *game, std::ostream &lgr = std::cout);
+    PPSolver(Oink *oink, Game *game);
     virtual ~PPSolver();
     virtual void run();
 

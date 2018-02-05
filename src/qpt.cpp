@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-#include <iostream>
 #include <iomanip>
-#include <stack>
+
 #include "qpt.hpp"
 
 namespace pg {
 
-QPTSolver::QPTSolver(Oink *oink, Game *game, std::ostream &lgr) : Solver(oink, game, lgr)
+QPTSolver::QPTSolver(Oink *oink, Game *game) : Solver(oink, game)
 {
 }
 

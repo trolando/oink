@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <iostream>
 #include <cassert>
 #include <cstring>
 
@@ -22,7 +21,7 @@
 
 namespace pg {
 
-APTSolver::APTSolver(Oink *oink, Game *game, std::ostream &lgr) : Solver(oink, game, lgr)
+APTSolver::APTSolver(Oink *oink, Game *game) : Solver(oink, game)
 {
     // sanity check if the game is properly sorted
     for (int i=1; i<n_nodes; i++) assert(priority[i-1] <= priority[i]);

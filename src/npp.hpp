@@ -149,7 +149,7 @@ public:
     /* Constructor and destructor                                                 */
     /******************************************************************************/
 
-    NPPSolver(Oink * oink, Game * game, std::ostream & lgr = std::cout);
+    NPPSolver(Oink * oink, Game * game);
 
     virtual ~NPPSolver();
 

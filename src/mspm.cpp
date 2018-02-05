@@ -14,16 +14,14 @@
  * limitations under the License.
  */
 
-#include <iostream>
 #include <iomanip>
-#include <stack>
 #include "mspm.hpp"
 
 static const bool use_queue = true;
 
 namespace pg {
 
-MSPMSolver::MSPMSolver(Oink *oink, Game *game, std::ostream &lgr) : Solver(oink, game, lgr)
+MSPMSolver::MSPMSolver(Oink *oink, Game *game) : Solver(oink, game)
 {
 }
 

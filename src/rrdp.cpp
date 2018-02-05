@@ -15,17 +15,13 @@
  */
 
 #include <algorithm>
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <queue>
 #include <cassert>
 
 #include "rrdp.hpp"
 
 namespace pg {
 
-RRDPSolver::RRDPSolver(Oink *oink, Game *game, std::ostream &lgr) : RRSolver(oink, game, lgr)
+RRDPSolver::RRDPSolver(Oink *oink, Game *game) : RRSolver(oink, game)
 {
 }
 
@@ -90,6 +86,9 @@ RRDPSolver::run()
 
     // start loop at last node (highest priority)
     int i = n_nodes - 1;
+
+    // reset statistics
+    promotions = 0;
 
     // set to track delayed promotions
     std::vector<int> P;

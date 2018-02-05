@@ -34,7 +34,7 @@ static int *won;
 static int *first_in;
 static int *next_in;
 
-PSISolver::PSISolver(Oink *oink, Game *game, std::ostream &lgr) : Solver(oink, game, lgr)
+PSISolver::PSISolver(Oink *oink, Game *game) : Solver(oink, game)
 {
 }
 

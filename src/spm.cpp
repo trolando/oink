@@ -15,9 +15,7 @@
  */
 
 #include <algorithm>
-#include <iostream>
 #include <iomanip>
-#include <stack>
 #include "spm.hpp"
 
 /**
@@ -34,7 +32,7 @@
 
 namespace pg {
 
-SPMSolver::SPMSolver(Oink *oink, Game *game, std::ostream &lgr) : Solver(oink, game, lgr)
+SPMSolver::SPMSolver(Oink *oink, Game *game) : Solver(oink, game)
 {
 }
 

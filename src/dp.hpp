@@ -27,7 +27,7 @@ namespace pg {
 class DPSolver : public PPPSolver
 {
 public:
-    DPSolver(Oink *oink, Game *game, std::ostream &logger);
+    DPSolver(Oink *oink, Game *game);
 
     virtual void run();
 

@@ -15,7 +15,6 @@
  */
 
 #include <algorithm>
-#include <iostream>
 #include <sstream>
 #include <vector>
 #include <queue>
@@ -28,11 +27,8 @@
 
 namespace pg {
 
-ZLKSolver::ZLKSolver(Oink *oink, Game *game, std::ostream &lgr) : Solver(oink, game, lgr)
+ZLKSolver::ZLKSolver(Oink *oink, Game *game) : Solver(oink, game)
 {
-    // sanity check if the game is properly sorted
-    for (int i=1; i<n_nodes; i++) assert(priority[i-1] <= priority[i]);
-
     // get number of nodes and create and initialize inverse array
     max_prio = game->priority[n_nodes-1];
     inverse = new int[max_prio+1];

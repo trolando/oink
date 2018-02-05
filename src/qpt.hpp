@@ -26,7 +26,7 @@ namespace pg {
 class QPTSolver : public Solver
 {
 public:
-    QPTSolver(Oink *oink, Game *game, std::ostream &lgr);
+    QPTSolver(Oink *oink, Game *game);
     virtual ~QPTSolver();
 
     virtual void run();

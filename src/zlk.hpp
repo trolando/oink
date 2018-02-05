@@ -27,7 +27,7 @@ namespace pg {
 class ZLKSolver : public Solver
 {
 public:
-    ZLKSolver(Oink *oink, Game *game, std::ostream &lgr);
+    ZLKSolver(Oink *oink, Game *game);
     virtual ~ZLKSolver();
 
     virtual void run();

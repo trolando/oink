@@ -15,17 +15,13 @@
  */
 
 #include <algorithm>
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <queue>
 #include <cassert>
 
 #include "rr.hpp"
 
 namespace pg {
 
-RRSolver::RRSolver(Oink *oink, Game *game, std::ostream &lgr) : PPSolver(oink, game, lgr)
+RRSolver::RRSolver(Oink *oink, Game *game) : PPSolver(oink, game)
 {
 }
 
@@ -93,6 +89,9 @@ RRSolver::run()
 
     // start loop at last node (highest priority)
     int i = n_nodes - 1;
+
+    // reset statistics
+    promotions = 0;
 
     /**
      * Two loops: the outer (normal) loop, and the inner (promotion-chain) loop.

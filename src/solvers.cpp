@@ -34,23 +34,23 @@ namespace pg {
 
 Solvers::Solvers()
 {
-    add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game, std::ostream& lgr) { return new ZLKSolver(oink, game, lgr); });
-    add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new NPPSolver(oink, game, lgr); });
-    add("pp", "priority promotion PP", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new PPSolver(oink, game, lgr); });
-    add("ppp", "priority promotion PP+", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new PPPSolver(oink, game, lgr); });
-    add("rr", "priority promotion RR", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new RRSolver(oink, game, lgr); });
-    add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new DPSolver(oink, game, lgr); });
-    add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new RRDPSolver(oink, game, lgr); });
-    add("apt", "APT (no strategy)", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new APTSolver(oink, game, lgr); });
-    add("psi", "parallel strategy improvement", 1, [] (Oink* oink, Game* game, std::ostream& lgr) { return new PSISolver(oink, game, lgr); });
-    add("spm", "accelerated small progress measures", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new SPMSolver(oink, game, lgr); });
-    add("tspm", "traditional small progress measures", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new TSPMSolver(oink, game, lgr); });
-    add("mspm", "Maciej' modified small progress measures", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new MSPMSolver(oink, game, lgr); });
-    add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game, std::ostream& lgr) { return new QPTSolver(oink, game, lgr); });
+    add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKSolver(oink, game); });
+    add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game) { return new NPPSolver(oink, game); });
+    add("pp", "priority promotion PP", 0, [] (Oink* oink, Game* game) { return new PPSolver(oink, game); });
+    add("ppp", "priority promotion PP+", 0, [] (Oink* oink, Game* game) { return new PPPSolver(oink, game); });
+    add("rr", "priority promotion RR", 0, [] (Oink* oink, Game* game) { return new RRSolver(oink, game); });
+    add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink* oink, Game* game) { return new DPSolver(oink, game); });
+    add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink* oink, Game* game) { return new RRDPSolver(oink, game); });
+    add("apt", "APT (no strategy)", 0, [] (Oink* oink, Game* game) { return new APTSolver(oink, game); });
+    add("psi", "parallel strategy improvement", 1, [] (Oink* oink, Game* game) { return new PSISolver(oink, game); });
+    add("spm", "accelerated small progress measures", 0, [] (Oink* oink, Game* game) { return new SPMSolver(oink, game); });
+    add("tspm", "traditional small progress measures", 0, [] (Oink* oink, Game* game) { return new TSPMSolver(oink, game); });
+    add("mspm", "Maciej' modified small progress measures", 0, [] (Oink* oink, Game* game) { return new MSPMSolver(oink, game); });
+    add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game) { return new QPTSolver(oink, game); });
 }       
 
 void
-Solvers::add(std::string the_label, std::string the_desc, int the_ispar, std::function<Solver*(Oink*, Game*, std::ostream&)> the_cons)
+Solvers::add(std::string the_label, std::string the_desc, int the_ispar, std::function<Solver*(Oink*, Game*)> the_cons)
 {
     labels.push_back(the_label);
     descriptions.push_back(the_desc);

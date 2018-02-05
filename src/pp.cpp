@@ -25,12 +25,8 @@
 
 namespace pg {
 
-PPSolver::PPSolver(Oink *oink, Game *game, std::ostream &lgr) : Solver(oink, game, lgr)
+PPSolver::PPSolver(Oink *oink, Game *game) : Solver(oink, game)
 {
-    // sanity check if the game is properly sorted
-    for (int i=1; i<n_nodes; i++) assert(priority[i-1] <= priority[i]);
-
-    promotions = 0;
 }
 
 PPSolver::~PPSolver()
@@ -287,6 +283,9 @@ PPSolver::run()
 
     // start loop at last node (highest priority)
     int i = n_nodes - 1;
+
+    // reset statistics
+    promotions = 0;
 
     /**
      * Two loops: the outer (normal) loop, and the inner (promotion-chain) loop.

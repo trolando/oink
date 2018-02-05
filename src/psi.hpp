@@ -27,7 +27,7 @@ namespace pg {
 class PSISolver : public Solver
 {
 public:
-    PSISolver(Oink *oink, Game *game, std::ostream &lgr);
+    PSISolver(Oink *oink, Game *game);
     virtual ~PSISolver();
 
     virtual void run();

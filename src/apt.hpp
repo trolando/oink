@@ -26,7 +26,7 @@ namespace pg {
 class APTSolver : public Solver
 {
 public:
-    APTSolver(Oink *oink, Game *game, std::ostream &lgr);
+    APTSolver(Oink *oink, Game *game);
     virtual ~APTSolver();
 
     virtual void run();

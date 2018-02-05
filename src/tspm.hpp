@@ -27,7 +27,7 @@ namespace pg {
 class TSPMSolver : public Solver
 {
 public:
-    TSPMSolver(Oink *oink, Game *game, std::ostream &lgr = std::cout);
+    TSPMSolver(Oink *oink, Game *game);
     virtual ~TSPMSolver();
 
     virtual void run();

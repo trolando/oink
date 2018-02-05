@@ -494,8 +494,7 @@ Oink::run()
         }
 
         // solve current subgame
-        Solver *s = solvers.construct(solver, this, game, logger);
-        s->setTrace(trace);
+        Solver *s = solvers.construct(solver, this, game);
         s->run();
         delete s;
 

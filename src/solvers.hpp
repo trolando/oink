@@ -55,7 +55,7 @@ public:
     /**
      * Construct solver <id> with the given parameters
      */
-    Solver* construct(int id, Oink* oink, Game* game, std::ostream& lgr) { return constructors[id](oink, game, lgr); }
+    Solver* construct(int id, Oink* oink, Game* game) { return constructors[id](oink, game); }
 
     /**
      * Obtain the id matching the given solver label
@@ -71,8 +71,8 @@ protected:
     std::vector<std::string> labels;
     std::vector<std::string> descriptions;
     std::vector<bool> ispar;
-    std::vector<std::function<Solver*(Oink*, Game*, std::ostream&)>> constructors;
-    void add(std::string, std::string, int, std::function<Solver*(Oink*, Game*, std::ostream&)>);
+    std::vector<std::function<Solver*(Oink*, Game*)>> constructors;
+    void add(std::string, std::string, int, std::function<Solver*(Oink*, Game*)>);
 };
 
 }

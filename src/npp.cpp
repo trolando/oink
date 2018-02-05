@@ -19,8 +19,8 @@
 
 namespace pg {
 
-NPPSolver::NPPSolver(Oink * oink, Game * game, std::ostream &lgr) :
-    Solver(oink, game, lgr),
+NPPSolver::NPPSolver(Oink * oink, Game * game) :
+    Solver(oink, game),
     totqueries(0), totpromos(0), maxqueries(0), maxpromos(0), queries(0), promos(0), doms(0),
     maxprio(priority[n_nodes - 1]), strategy(game->strategy), inverse(new int[maxprio + 1]),
     Top(0), End(0), Pivot(0)

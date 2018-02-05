@@ -15,17 +15,13 @@
  */
 
 #include <algorithm>
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <deque>
 #include <cassert>
 
 #include "dp.hpp"
 
 namespace pg {
 
-DPSolver::DPSolver(Oink *oink, Game *game, std::ostream &lgr) : PPPSolver(oink, game, lgr)
+DPSolver::DPSolver(Oink *oink, Game *game) : PPPSolver(oink, game)
 {
 }
 
@@ -94,6 +90,9 @@ DPSolver::run()
 
     // start loop at last node (highest priority)
     int i = n_nodes - 1;
+
+    // reset statistics
+    promotions = 0;
 
     // set to track delayed promotions
     std::vector<int> P;

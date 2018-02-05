@@ -28,15 +28,20 @@ namespace pg {
 class Solver
 {
 public:
-    Solver(Oink *oink, Game *game, std::ostream &lgr = std::cout) :
-        oink(oink), game(game), logger(lgr),
-        n_nodes(game->n_nodes), priority(game->priority), owner(game->owner),
-        out(game->out), in(game->in), disabled(oink->disabled),
-        outa(oink->outa), ina(oink->ina), outs(oink->outs), ins(oink->ins) { }
+    Solver(Oink *oink, Game *game) :
+            oink(oink), game(game), logger(oink->logger), trace(oink->trace),
+            n_nodes(game->n_nodes), priority(game->priority), owner(game->owner),
+            out(game->out), in(game->in), disabled(oink->disabled),
+            outa(oink->outa), ina(oink->ina), outs(oink->outs), ins(oink->ins)
+    {
+#ifndef NDEBUG
+        // sanity check if the game is properly sorted
+        for (int i=1; i<n_nodes; i++) assert(priority[i-1] <= priority[i]);
+#endif
+    }
+
     virtual ~Solver() { }
     virtual void run() = 0;
-
-    void setTrace(int value) { trace = value; }
 
 protected:
     Oink *oink;
