@@ -23,6 +23,8 @@
 
 namespace pg {
 
+#define _INLINE_ __attribute__((always_inline))
+
 class Solver;
 
 class Oink
