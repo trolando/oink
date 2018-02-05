@@ -18,7 +18,6 @@
 #include <sstream>
 #include <vector>
 #include <queue>
-#include <stack>
 #include <cassert>
 
 #include "zlk.hpp"
@@ -27,12 +26,11 @@
 
 namespace pg {
 
-ZLKSolver::ZLKSolver(Oink *oink, Game *game) : Solver(oink, game)
+static const int DIS = 0x80000000; // permanently disabled vertex
+static const int BOT = 0x80000001; // bottom state for vertex
+
+ZLKSolver::ZLKSolver(Oink *oink, Game *game) : Solver(oink, game), Q(game->n_nodes)
 {
-    // get number of nodes and create and initialize inverse array
-    max_prio = game->priority[n_nodes-1];
-    inverse = new int[max_prio+1];
-    for (int i=0; i<n_nodes; i++) if (!disabled[i]) inverse[priority[i]] = i;
 }
 
 ZLKSolver::~ZLKSolver()
@@ -56,42 +54,62 @@ VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
     // attract to <cur>
     const int *_in = s->ins + s->ina[cur];
     for (int from = *_in; from != -1; from = *++_in) {
-        if (s->region[from] != -1) continue; // not in subgame, or attracted
+        int _r = s->region[from];
+        if (_r == DIS or _r >= 0) continue; // not in subgame, or attracted
 
         if (s->owner[from] == pl) {
             // owned by same parity, use CAS to claim it
-            if (__sync_bool_compare_and_swap(&s->region[from], -1, r)) {
-                s->winning[from] = pl;
-                s->strategy[from] = cur;
-                ours->items[ours->count++] = from;
-                SPAWN(attractParT, pl, from, r, s);
-                c++;
-            }
-        } else {
-            // owned by other parity
-            int* ptr = &s->outcount[from];
-
-            int count = __sync_add_and_fetch(ptr, -1);
-            if (count == -2) {
-                // we are the first, do add_and_fetch with the count
-                count = 1; // compensate for -1
-                const int *_out = s->outs + s->outa[from];
-                for (int to = *_out; to != -1; to = *++_out) {
-                    int _r = s->region[to];
-                    if (_r == -1 or _r == r) count++;
-                }
-                count = __sync_add_and_fetch(ptr, count);
-            }
-            if (count == 0) {
-                // ok count is now 0, attract...
-                // another CAS because we may be competing with attractPar
-                if (__sync_bool_compare_and_swap(&s->region[from], -1, r)) {
+            while (true) {
+                if (__sync_bool_compare_and_swap(&s->region[from], _r, r)) {
                     s->winning[from] = pl;
-                    s->strategy[from] = -1;
+                    s->strategy[from] = cur;
                     ours->items[ours->count++] = from;
                     SPAWN(attractParT, pl, from, r, s);
                     c++;
+                    break;
                 }
+                _r = *(volatile int*)&s->region[from];
+                if (_r >= 0) break;
+            }
+        } else {
+            // owned by other parity
+            volatile int* ptr = &s->region[from];
+            bool attracted = false;
+
+            _r = __sync_add_and_fetch(ptr, 1); // update _r
+            if (_r == (BOT+1)) {
+                // we are the first, do add_and_fetch with the count
+                int count = 0;
+                const int *_out = s->outs + s->outa[from];
+                for (int to = *_out; to != -1; to = *++_out) {
+                    if (s->region[to] == DIS) continue; // do not count disabled
+                    if (s->region[to] >= 0 and s->region[to] < r) continue; // do not count supgame
+                    count--; // count to negative
+                }
+                // now set count (in a CAS loop)
+                int new_r = count; // +1 -1 (count negative to -1)
+                while (true) {
+                    if (new_r == -1) {
+                        // we're the last, so set to r
+                        if (__sync_bool_compare_and_swap(ptr, _r, r)) attracted = true;
+                        break;
+                    }
+                    if (__sync_bool_compare_and_swap(ptr, _r, new_r)) break;
+                    _r = *ptr;
+                    if (_r >= 0) break; // someone else moved to r!
+                    // someone else did add and fetch, recompute and try again
+                    new_r = count - (BOT - _r) - 1;
+                }
+            } else if (_r == -1) {
+                // another CAS because we may be competing with attractPar
+                if (__sync_bool_compare_and_swap(ptr, -1, r)) attracted = true;
+            }
+            if (attracted) {
+                s->winning[from] = pl;
+                s->strategy[from] = -1;
+                ours->items[ours->count++] = from;
+                SPAWN(attractParT, pl, from, r, s);
+                c++;
             }
         }
     }
@@ -112,21 +130,36 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
     int spawn_count = 0;
 
     for (; i>=0; i--) {
-        if (s->region[i] != -1) continue; // not in subgame, or attracted
+        int _r = s->region[i];
+        if (_r == DIS or _r >= 0) continue; // not in subgame or attracted
         if ((s->priority[i]&1) != pl) { // search until parity inversion
             // first SYNC on all children, who knows this node may be attracted
             while (spawn_count) { SYNC(attractParT); spawn_count--; }
             // after SYNC, check if node <i> is now attracted.
-            if (s->region[i] == -1) break; // not attracted, so we're done!
+            if (_r < 0) break; // not attracted, so we're done!
             else continue; // already done
         }
 
         // if c != 0, then we compete with attractParT and must use compare and swap
-        if (spawn_count == 0) s->region[i] = r;
-        else if (!__sync_bool_compare_and_swap(&s->region[i], -1, r)) continue;
+        if (spawn_count == 0) {
+            s->region[i] = r; // just set, no competing threads
+        } else {
+            // competing threads! use compare and swap [in a loop]
+            while (true) {
+                if (__sync_bool_compare_and_swap(&s->region[i], _r, r)) {
+                    _r = r;
+                    break;
+                }
+                _r = *(volatile int*)&s->region[i];
+                if (_r < 0) continue;
+                _r = BOT;
+                break;
+            }
+            if (_r == BOT) continue; // someone else claimed!
+        }
 
         s->winning[i] = pl;
-        s->strategy[i] = -1;
+        s->strategy[i] = -1; // head nodes have no strategy (for now)
         ours->items[ours->count++] = i;
         SPAWN(attractParT, pl, i, r, s);
         spawn_count++;
@@ -143,7 +176,9 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
     for (int j=0; j<W; j++) {
         par_helper* x = pvec[j];
         for (int k=0; k<x->count; k++) {
+#ifndef NDEBUG
             if (s->trace >= 2) s->logger << "attracted " << x->items[k] << " (" << s->priority[x->items[k]] << ")" << std::endl;
+#endif
             R->push_back(x->items[k]);
         }
         x->count = 0;
@@ -158,64 +193,69 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
     const int pr = priority[i];
     const int pl = pr & 1;
 
-    std::stack<int> q;
-
     /**
      * Starting at <i>, attract head nodes until "inversion"
      */
 
     for (; i>=0; i--) {
-        if (region[i] != -1) continue; // not in subgame, or attracted
-        if ((priority[i]&1) != pl) break; // until parity inversion (Maks Verver optimization)
+        if (region[i] == DIS or region[i] >= 0) continue; // cannot be attracted
 
-        // uncomment next line to attract until lower priority instead of until inversion
+        // uncomment the next line to attract until lower priority instead of until inversion
         // if (priority[i] != pr) break; // until other priority
+        if ((priority[i]&1) != pl) break; // until parity inversion (Maks Verver optimization)
 
         region[i] = r;
         winning[i] = pl;
         strategy[i] = -1; // head nodes do not have a strategy yet!
-        q.push(i);
+        Q.push(i);
 
+#ifndef NDEBUG
         if (trace >= 2) fmt::printf(logger, "head node %d (%d)\n", i, priority[i]);
+#endif
 
-        while (!q.empty()) {
-            int cur = q.top();
-            q.pop();
-
+        while (!Q.empty()) {
+            int cur = Q.pop();
             R->push_back(cur);
 
             // attract to <cur>
             const int *_in = ins + ina[cur];
             for (int from = *_in; from != -1; from = *++_in) {
-                if (from >= i or region[from] != -1) continue; // not in subgame, or attracted
+                if (from >= i or region[from] == DIS or region[from] >= 0) continue; // cannot be attracted
 
                 if (owner[from] == pl) {
                     // owned by same parity
                     region[from] = r;
                     winning[from] = pl;
                     strategy[from] = cur;
-                    q.push(from);
+                    Q.push(from);
+#ifndef NDEBUG
                     if (trace >= 2) fmt::printf(logger, "attracted %d (%d)\n", from, priority[from]);
+#endif
                 } else {
                     // owned by other parity
-                    int count = outcount[from];
-                    if (count == -1) {
+                    int count = region[from];
+                    if (count == BOT) {
+                        // compute count (to negative)
+                        count = 1;
                         const int *_out = outs + outa[from];
                         for (int to = *_out; to != -1; to = *++_out) {
-                            // also count if region[to] == r!
-                            if (region[to] == -1 or region[to] == r) count++;
+                            if (region[to] == DIS) continue;
+                            if (region[to] >= 0 and region[to] < r) continue;
+                            count--;
                         }
-                        // no need to --count, already started at -1
                     } else {
-                        count--;
+                        count++;
                     }
-                    outcount[from] = count;
                     if (count == 0) {
                         region[from] = r;
                         winning[from] = pl;
                         strategy[from] = -1;
-                        q.push(from);
+                        Q.push(from);
+#ifndef NDEBUG
                         if (trace >= 2) fmt::printf(logger, "forced %d (%d)\n", from, priority[from]);
+#endif
+                    } else {
+                        region[from] = count;
                     }
                 }
             }
@@ -238,8 +278,6 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
 
     // NOTE: this algorithm could be improved using an "out counter"
 
-    std::queue<int> q;
-
 #ifndef NDEBUG
     for (int i : *S) if (winning[i] != pl) LOGIC_ERROR;
 #endif
@@ -249,6 +287,7 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
      * In reality, we just want to check the "head nodes", because all other nodes are attracted
      * to the head nodes and cannot be attracted to the opponent directly.
      * But we do not record which nodes are head nodes.
+     * TODO!
      */
     for (int i : *S) {
         // check if the node is attracted
@@ -267,7 +306,7 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
                 region[i] = r;
                 winning[i] = 1-pl;
                 strategy[i] = -1;
-                q.push(i);
+                Q.push(i);
             }
         } else {
             // "winner" attraction
@@ -279,7 +318,7 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
                 region[i] = r;
                 winning[i] = 1-pl;
                 strategy[i] = to;
-                q.push(i);
+                Q.push(i);
                 break;
             }
         }
@@ -289,9 +328,8 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
      * Now attract anything in this region/subregions of <pl> to 1-<pl>
      */
 
-    while (!q.empty()) {
-        int cur = q.front();
-        q.pop();
+    while (!Q.empty()) {
+        int cur = Q.pop();
         ++count;
 
         R->push_back(cur);
@@ -309,7 +347,7 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
                 region[from] = r;
                 winning[from] = 1-pl;
                 strategy[from] = cur;
-                q.push(from);
+                Q.push(from);
             } else {
                 // owned by us
                 bool can_escape = false;
@@ -326,7 +364,7 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
                 region[from] = r;
                 winning[from] = 1-pl;
                 strategy[from] = -1;
-                q.push(from);
+                Q.push(from);
             }
         }
     }
@@ -343,54 +381,75 @@ ZLKSolver::run()
     region = new int[n_nodes];
     winning = new int[n_nodes];
     strategy = new int[n_nodes];
-    outcount = new int[n_nodes];
 
     std::vector<int> history;
     std::vector<int> W0, W1;
     std::vector<std::vector<int>> levels;
 
     // initialize arrays
-    for (int i=0; i<n_nodes; i++) region[i] = disabled[i] ? -2 : -1;
-    for (int i=0; i<n_nodes; i++) winning[i] = -1;
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
-    for (int i=0; i<n_nodes; i++) outcount[i] = -1;
+    memset(winning, -1, sizeof(int[n_nodes]));
+    memset(strategy, -1, sizeof(int[n_nodes]));
+
+    // get number of nodes and create and initialize inverse array
+    max_prio = -1;
+    for (int n=n_nodes-1; n>=0; n--) {
+        region[n] = disabled[n] ? DIS : BOT;
+        if (disabled[n]) continue;
+        const int pr = game->priority[n];
+        if (max_prio == -1) {
+            max_prio = pr;
+            inverse = new int[max_prio+1];
+            memset(inverse, -1, sizeof(int[max_prio+1]));
+        }
+        if (inverse[pr] == -1) inverse[pr] = n;
+    }
+    if (max_prio == -1) LOGIC_ERROR; // unexpected empty game
+
+    // pre-allocate some space (similar to NPP)
+    {
+        int space = max_prio / 20;
+        if (space >= 500) space = 500;
+        history.reserve(3*space);
+        levels.reserve(space);
+    }
 
     // start the loop at the last node (highest priority) and at depth 0
-    int i = n_nodes - 1;
+    int i = inverse[max_prio];
     int next_r = 0;
-
-    // skip all disabled nodes
-    while (i >= 0 && region[i] == -2) i--;
-    if (i == -1) LOGIC_ERROR; // wut? empty game. pls dont call.
 
     bool usePar = lace_workers() != 0;
     WorkerP* __lace_worker = NULL;
     Task* __lace_dq_head = NULL;
 
     if (usePar) {
+        // initialize Lace and also allocate space for pvec for each worker
         const int W = lace_workers();
         __lace_worker = lace_get_worker();
         __lace_dq_head = lace_get_head(__lace_worker);
         pvec = (par_helper**)malloc(sizeof(par_helper*[W]));
-        for (int i=0; i<W; i++) pvec[i] = (par_helper*)malloc(sizeof(par_helper)+sizeof(int[n_nodes]));
+        for (int i=0; i<W; i++) pvec[i] = (par_helper*)malloc(sizeof(par_helper) + sizeof(int[n_nodes]));
     }
 
+    // initialize first level (i, r=0, phase=0)
     levels.push_back(std::vector<int>());
-    history.push_back(i); history.push_back(next_r++); history.push_back(0); // i, r=0, phase=0
+    history.push_back(i);
+    history.push_back(next_r++);
+    history.push_back(0);
 
     while (true) {
+        // obtain current frame
         const int hsize = history.size();
-        if (hsize == 0) break;
+        if (hsize == 0) break; // no frame on the stack
 
         std::vector<int> *A = &(*levels.rbegin());
         const int i = history[hsize-3];
         const int r = history[hsize-2];
         const int phase = history[hsize-1];
-        const int h = hsize / 3; // history.size() / 2;
 
 #ifndef NDEBUG
+        const int h = hsize / 3;
         if (i < 0) LOGIC_ERROR; // just a sanity check
-        if (region[i] == -2) LOGIC_ERROR; // just a sanity check
+        if (region[i] == DIS) LOGIC_ERROR; // just a sanity check
         if (h*3 != hsize or (int)levels.size() != h) LOGIC_ERROR; // just a sanity check
 #endif
 
@@ -400,7 +459,9 @@ ZLKSolver::run()
         const int pr = priority[i];
         const int pl = pr&1;
 
+#ifndef NDEBUG
         if (trace) fmt::printf(logger, "\n\033[1mDepth %d phase %d\033[m: node %d priority %d\n", h-0, phase, i, pr);
+#endif
 
         if (phase == 0) {
             /**
@@ -408,12 +469,18 @@ ZLKSolver::run()
              * Compute extended attractor (until inversion). Then recursive step.
              */
 
+#ifndef NDEBUG
             // sanity checks
             if (!W0.empty() or !W1.empty()) LOGIC_ERROR;
+#endif
 
             // attract until inversion and add to A
             int j = usePar ? CALL(attractPar, i, r, A, this) : attractExt(i, r, A);
+            // j is now the next i (subgame), or -1 if the subgame is empty
+
+#ifndef NDEBUG
             if (trace) fmt::printf(logger, "attracted %zu nodes\n", A->size());
+#endif
 
             // count number of iterations
             ++iterations;
@@ -422,16 +489,20 @@ ZLKSolver::run()
             history.back() = 1;
 
             if (j != -1) {
-                // go recursive (not empty)
+                // go recursive (subgame not empty)
                 levels.push_back(std::vector<int>());
-                history.push_back(j); history.push_back(next_r++); history.push_back(0);
+                history.push_back(j);
+                history.push_back(next_r++);
+                history.push_back(0);
             }
         } else if (phase == 1) {
             /**
              * After first recursion step
              */
 
+#ifndef NDEBUG
             if (trace) fmt::printf(logger, "current level contains %zu nodes\n", A->size());
+#endif
 
             /**
              * Compute part of region that attracts to the other player...
@@ -444,11 +515,13 @@ ZLKSolver::run()
                 if (!W0.empty()) count = attractLosing(i, r, A, &W0);
             }
 
+#ifndef DEBUG
             if (trace) {
                 if (count != 0) fmt::printf(logger, "%d nodes are attracted to losing region\n", count);
                 else if (pl == 0 ? !W1.empty() : !W0.empty()) fmt::printf(logger, "no nodes are attracted to losing region\n");
                 else fmt::printf(logger, "no losing region\n");
             }
+#endif
 
             if (count == 0) {
                 /**
@@ -456,9 +529,7 @@ ZLKSolver::run()
                  */
 
 #ifndef NDEBUG
-                /**
-                 * Sanity check
-                 */
+                // Sanity check
                 for (int v : *A) { if (winning[v] != pl) LOGIC_ERROR; }
 #endif
 
@@ -472,15 +543,14 @@ ZLKSolver::run()
                     Wm.push_back(v);
 
                     /**
-                     * For nodes that are won and controlled by <pl>,
-                     * check if their strategy needs to be fixed.
+                     * For nodes that are won and controlled by <pl>, check if their strategy needs to be fixed.
                      */
                     if (owner[v] != pl) continue; // not controlled by <pl>
                     if (strategy[v] != -1 && winning[strategy[v]] == pl) continue; // good strategy
 
                     /**
-                     * Strategy needs to be updated!
-                     * We do this by searching for an edge to a node in the subgame won by <pl>
+                     * Strategy of vertex <v> needs to be updated!
+                     * We search for a successor of <v> in the subgame won by <pl>
                      */
                     strategy[v] = -1;
                     const int *_out = outs + outa[v];
@@ -490,7 +560,9 @@ ZLKSolver::run()
                         strategy[v] = to;
                         break;
                     }
+#ifndef DEBUG
                     if (strategy[v] == -1) LOGIC_ERROR;
+#endif
                 }
 
                 /**
@@ -498,11 +570,13 @@ ZLKSolver::run()
                  * Finally, pop the stack and go up...
                  */
                 levels.pop_back();
-                history.pop_back(); history.pop_back(); history.pop_back();
+                history.pop_back();
+                history.pop_back();
+                history.pop_back();
             } else {
                 /**
-                 * Some nodes attracted to opponent.
-                 * Reset everything in winning set of <pl> / region of <pr>
+                 * Some nodes are attracted to the opponent.
+                 * Reset everything in the winning set of <pl> / region of <pr>
                  */
                 int new_i = -1; // will hold lowest node index in *A and W_me
                 auto &Wm = pl == 0 ? W0 : W1; // me
@@ -510,19 +584,17 @@ ZLKSolver::run()
                 for (int v : *A) {
                     if (winning[v] != pl) continue; // only reset for <pl>
                     if (v > new_i) new_i = v;
-                    region[v] = -1;
-                    outcount[v] = -1;
+                    region[v] = BOT;
                 }
                 for (int v : Wm) {
                     if (winning[v] != pl) continue;
                     if (v > new_i) new_i = v;
-                    region[v] = -1;
-                    outcount[v] = -1;
+                    region[v] = BOT;
                 }
                 if (new_i == -1) {
                     /**
                      * The remainder is empty.
-                     * Going up... keep opponent W, clear our W
+                     * Go up... keep opponent W, clear our W
                      */
                     Wm.clear();
 
@@ -530,11 +602,13 @@ ZLKSolver::run()
                      * And pop the stack to go up
                      */
                     levels.pop_back();
-                    history.pop_back(); history.pop_back(); history.pop_back();
+                    history.pop_back();
+                    history.pop_back();
+                    history.pop_back();
                 } else {
                     /**
                      * The remainder is not empty.
-                     * Going down... move opponent W to region, clear W0 and W1
+                     * Go down... move opponent W to region, clear W0 and W1
                      */
                     A->swap(Wo);
                     W0.clear();
@@ -543,9 +617,11 @@ ZLKSolver::run()
                     /**
                      * And push the stack to go down
                      */
-                    history.back() = 2;
+                    history.back() = 2; // set current phase to 2
                     levels.push_back(std::vector<int>());
-                    history.push_back(new_i); history.push_back(next_r++); history.push_back(0);
+                    history.push_back(new_i);
+                    history.push_back(next_r++);
+                    history.push_back(0);
                 }
             }
         } else if (phase == 2) {
@@ -573,10 +649,12 @@ ZLKSolver::run()
 
             /**
              * The strategy has been updated. Nodes are now in W0/W1.
-             * Finally, pop the stack and go up...
+             * Finally, pop the stack to go up...
              */
             levels.pop_back();
-            history.pop_back(); history.pop_back(); history.pop_back();
+            history.pop_back();
+            history.pop_back();
+            history.pop_back();
         }
     }
 
@@ -588,16 +666,16 @@ ZLKSolver::run()
 
     // done
     for (int i=0; i<n_nodes; i++) {
-        if (region[i] == -2) continue;
+        if (region[i] == DIS) continue;
+#ifndef NDEBUG
         if (winning[i] == -1) LOGIC_ERROR;
-        bool winner = winning[i];
-        oink->solve(i, winner, winner==game->owner[i] ? strategy[i] : -1);
+#endif
+        oink->solve(i, winning[i], strategy[i]);
     }
 
     delete[] region;
     delete[] winning;
     delete[] strategy;
-    delete[] outcount;
 
     logger << "solved with " << iterations << " iterations." << std::endl;
 }

@@ -21,6 +21,7 @@
 
 #include "solver.hpp"
 #include "lace.h"
+#include "uintqueue.hpp"
 
 namespace pg {
 
@@ -41,7 +42,8 @@ protected:
     int *region;
     int *winning;
     int *strategy;
-    int *outcount;
+
+    uintqueue Q;
 
     int attractExt(int i, int r, std::vector<int> *R);
     int attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R);
