@@ -57,22 +57,62 @@ Game::Game(const Game& other) : Game(other.n_nodes)
     memcpy(strategy, other.strategy, sizeof(int[n_nodes]));
 }
 
+static void
+skip_whitespace(std::streambuf *rd)
+{
+    // read whitespace
+    while (true) {
+        int ch;
+        if ((ch=rd->sbumpc()) == EOF) return;
+        if (ch != ' ' and ch != '\n' and ch != '\t' and ch != '\r') break;
+    }
+    rd->sungetc();
+}
+
+static bool
+read_uint64(std::streambuf *rd, uint64_t *res)
+{
+    uint64_t r = 0;
+    int ch;
+    if ((ch=rd->sbumpc()) == EOF) return false;
+    if (ch < '0' or ch > '9') { rd->sungetc(); return false; }
+    while (true) {
+        r = (10*r)+(ch-'0');
+        if ((ch=rd->sbumpc()) == EOF) break;
+        if (ch < '0' or ch > '9') { rd->sungetc(); break; }
+    }
+    *res = r;
+    return true;
+}
+
 Game::Game(istream &inp)
 {
-    string line;
-    while (getline(inp, line)) {
-        stringstream ss(line);
-        string token;
+    std::streambuf *rd = inp.rdbuf();
 
-        // ignore empty line
-        if (!(ss >> token)) continue;
+    char buf[64];
+    uint64_t n;
+    char ch;
 
-        // process line with "parity"
-        if (token != "parity") throw "expecting parity game specification";
-        if (!(ss >> n_nodes)) throw "missing number of nodes";
-        break;
-    }
+    /**
+     * Read header line...
+     */
 
+    inp.read(buf, 6);
+    if (!inp) throw "expecting parity game specification";
+    if (strcmp(buf, "parity") != 0) throw "expecting parity game specification";
+
+    skip_whitespace(rd);
+    if (!read_uint64(rd, &n)) throw "missing number of nodes";
+
+    skip_whitespace(rd);
+    while ((inp >> ch) and ch != ';') continue;
+    if (ch != ';') throw "missing ';'";
+
+    /**
+     * Construct game...
+     */
+
+    n_nodes = n+1; // plus 1, in case this parity game encodes "max id" instead of "n_nodes"
     n_edges = 0;
 
     priority = new int[n_nodes];
@@ -88,67 +128,70 @@ Game::Game(istream &inp)
     memset(strategy, -1, sizeof(int[n_nodes]));
     solved.set(); // we use solved for temporary storage
 
-    size_t node_count = 0;
+    /**
+     * Read nodes...
+     */
 
-    while (getline(inp, line)) {
-        stringstream ss(line);
-        string token;
+    int node_count = 0; // number of read nodes
 
-        // ignore empty line
-        if (!(ss >> token)) continue;
-
-        // parse id, priority, owner
-        int id;
-        try {
-            id = stoi(token);
-        } catch (const std::invalid_argument) {
-            // ignore lines starting with a non number
-            continue;
+    while (node_count < n_nodes) {
+        uint64_t id;
+        skip_whitespace(rd);
+        if (!read_uint64(rd, &id)) {
+            if (node_count == n_nodes-1) {
+                n_nodes--;
+                owner.resize(n_nodes);
+                solved.resize(n_nodes);
+                winner.resize(n_nodes);
+                // ignore rest, they can be bigger
+                break;
+            }
+            throw "unable to read id";
         }
-        if (id >= n_nodes || id < 0) {
-            // a parity game where <count> is the HIGHEST index is not supported
-            throw "invalid id or old file format";
-        }
+        if (id >= (unsigned)n_nodes) throw "invalid id";
 
-        if (!solved[id]) {
-            throw "duplicate id";
-        }
-
+        if (!solved[id]) throw "duplicate id";
         solved[id] = false;
         node_count++;
 
-        if (!(ss >> priority[id])) {
-            throw "missing priority";
-        }
+        skip_whitespace(rd);
+        if (!read_uint64(rd, &n)) throw "missing priority";
+        priority[id] = n;
 
-        int o;
-        if (!(ss >> o)) {
-            throw "missing owner";
-        }
+        skip_whitespace(rd);
+        if (!read_uint64(rd, &n)) throw "missing owner";
 
-        if (o == 0) {
-            // nothing
-        } else if (o == 1) {
-            owner[id] = true;
-        } else {
-            throw "invalid owner";
-        }
+        if (n == 0) { /* nothing */ }
+        else if (n == 1) { owner[id] = true; }
+        else { throw "invalid owner"; }
 
         // parse successors and optional label
         for (;;) {
-            int to;
-            if (!(ss >> to)) throw "missing successor";
-            if (to < 0 or to >= n_nodes) throw "invalid successor";
+            skip_whitespace(rd);
+            if (!read_uint64(rd, &n)) throw "missing successor";
+            if (n >= (uint64_t)n_nodes) {
+                std::cout << "id " << id << " with successor " << n << std::endl;
+                throw "invalid successor";}
 
-            out[id].push_back(to);
-            in[to].push_back(id);
+            out[id].push_back(n);
+            in[n].push_back(id);
             n_edges++;
 
             char ch;
-            if (!(ss >> ch)) throw "missing ; to end line";
-
-            if (ch == ',') continue;
-            if (ch == '\"') getline(ss, label[id], '\"');
+            skip_whitespace(rd);
+            if (!(inp >> ch)) throw "missing ; to end line";
+            if (ch == ',') continue; // next successor
+            if (ch == ';') break; // end of line
+            if (ch == '\"') {
+                while (true) {
+                    inp >> ch;
+                    if (ch == '\"') break;
+                    label[id] += ch;
+                }
+                // now read ;
+                skip_whitespace(rd);
+                if (!(inp >> ch) or ch != ';') throw "missing ; to end line";
+            }
             else label[id] = "";
             break;
         }

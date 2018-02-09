@@ -235,10 +235,10 @@ int main(int argc, char **argv)
     try {
         if (opts.count("input")) {
             std::string filename = opts["input"].as<std::string>();
-            std::ifstream file(filename, std::ios_base::binary);
             io::filtering_istream in;
             if (boost::algorithm::ends_with(filename, ".bz2")) in.push(io::bzip2_decompressor());
             if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
+            std::ifstream file(filename, std::ios_base::binary);
             in.push(file);
             pg.parse_pgsolver(in);
             file.close();
