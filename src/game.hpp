@@ -155,7 +155,7 @@ public:
     /**
      * Count and return the number of edges.
      */
-    inline size_t edgecount() { return n_edges; }
+    inline size_t edgecount() { edge_recount(); return n_edges; }
 
     /**
      * Returns whether every node has dominion 0 or 1.
@@ -166,6 +166,12 @@ public:
      * Count and return how many nodes have dominion -1.
      */
     inline int countUnsolved() { return n_nodes - solved.count(); }
+
+    inline void edge_recount()
+    {
+        n_edges = 0;
+        for (int n=0; n<n_nodes; n++) n_edges += out[n].size();
+    }
 
     /**
      * Create a new Game of the subgame of the nodes given in <selection>.
