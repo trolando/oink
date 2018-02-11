@@ -99,7 +99,7 @@ Game::Game(istream &inp)
 
     inp.read(buf, 6);
     if (!inp) throw "expecting parity game specification";
-    if (strcmp(buf, "parity") != 0) throw "expecting parity game specification";
+    if (strncmp(buf, "parity", 6) != 0) throw "expecting parity game specification";
 
     skip_whitespace(rd);
     if (!read_uint64(rd, &n)) throw "missing number of nodes";
