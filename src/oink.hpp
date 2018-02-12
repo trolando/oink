@@ -104,13 +104,21 @@ public:
 protected:
     /**
      * Solve winner-controlled winning cycles.
+     * Returns number of cycles solved.
      */
     int solveTrivialCycles(void);
 
     /**
      * Resolve self-loops.
+     * Returns number of resolved self-loops.
      */
     int solveSelfloops(void);
+
+    /**
+     * Solve single parity games.
+     * Returns true if the game was solved as a single parity game.
+     */
+    bool solveSingleParity(void);
 
     /**
      * During flush(), attract to solved node <i>.

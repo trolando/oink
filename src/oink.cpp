@@ -312,6 +312,44 @@ Oink::solveSelfloops()
     return res;
 }
 
+bool
+Oink::solveSingleParity()
+{
+    int parity = -1;
+    for (int i=0; i<game->n_nodes; i++) {
+        if (disabled[i]) continue;
+        if (parity == -1) {
+            parity = game->priority[i]&1;
+        } else if (parity == (game->priority[i]&1)) {
+            continue;
+        } else {
+            return false;
+        }
+    }
+    if (parity == 0 or parity == 1) {
+        // solved with random strategy
+        logger << "parity game only has parity " << (parity ? "odd" : "even") << std::endl;
+        for (int i=0; i<game->n_nodes; i++) {
+            if (disabled[i]) continue;
+            if (game->owner[i] == parity) {
+                // set random strategy for winner
+                for (int to : game->out[i]) {
+                    if (disabled[to]) continue;
+                    solve(i, parity, to);
+                    break;
+                }
+            } else {
+                solve(i, parity, -1);
+            }
+        }
+        flush();
+        return true;
+    } else {
+        // all disabled
+        return false;
+    }
+}
+
 void
 Oink::solve(int node, int win, int strategy)
 {
@@ -387,35 +425,7 @@ Oink::run()
     }
     flush();
 
-    if (solveSingle) {
-        int parity = -1;
-        for (int i=0; i<game->n_nodes; i++) {
-            if (disabled[i]) continue;
-            if (parity == -1) parity = game->priority[i]&1;
-            else if (parity == (game->priority[i]&1)) continue;
-            else {
-                parity = -2;
-                break;
-            }
-        }
-        if (parity == 0 or parity == 1) {
-            // solved with random strategy
-            logger << "parity game only has parity " << (parity ? "odd" : "even") << std::endl;
-            for (int i=0; i<game->n_nodes; i++) {
-                if (disabled[i]) continue;
-                if (game->owner[i] == parity) {
-                    for (int to : game->out[i]) {
-                        if (disabled[to]) continue;
-                        solve(i, parity, to);
-                        break;
-                    }
-                } else {
-                    solve(i, parity, -1);
-                }
-            }
-            flush();
-        }
-    }
+    if (solveSingle and solveSingleParity()) return;
 
     if (removeLoops) {
         int count = solveSelfloops();
