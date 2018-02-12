@@ -99,7 +99,9 @@ public:
     /**
      * After marking nodes as solved using solve(), use flush to attract to the solved dominion.
      */
-    void flush();
+    void flush(void);
+
+    void solveLoop(void);
 
 protected:
     /**

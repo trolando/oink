@@ -398,13 +398,58 @@ Oink::setSolver(std::string label)
     solver = Solvers().id(label);
 }
 
+VOID_TASK_1(solve_loop, Oink*, s)
+{
+    s->solveLoop();
+}
+
+void
+Oink::solveLoop()
+{
+    /**
+     * Report chosen solver.
+     */
+    Solvers solvers;
+    logger << "solving using " << solvers.desc(solver) << std::endl;
+
+    while (!game->gameSolved()) {
+        // disabled all solved vertices
+        disabled = game->solved;
+
+        if (bottomSCC) {
+            // solve bottom SCC
+            std::vector<int> sel;
+            getBottomSCC(sel);
+            assert(sel.size() != 0);
+            disabled.set();
+            for (int i : sel) disabled[i] = false;
+            logger << "solving bottom SCC of " << sel.size() << " nodes (";
+            logger << game->countUnsolved() << " nodes left)" << std::endl;
+        }
+
+        // solve current subgame
+        Solver *s = solvers.construct(solver, this, game);
+        s->run();
+        delete s;
+
+        // flush the todo buffer
+        flush();
+
+        // report number of nodes left
+        if (!bottomSCC) {
+            logger << game->countUnsolved() << " nodes left." << std::endl;
+        }
+    }
+}
+
 void
 Oink::run()
 {
-    Solvers solvers;
-
     // NOTE: we assume that the game is already reindexed...
 
+    /**
+     * Now inflate / compress / renumber...
+     */
     if (inflate) {
         int d = game->inflate();
         logger << "parity game inflated (" << d << " priorities)" << std::endl;
@@ -416,6 +461,8 @@ Oink::run()
         logger << "parity game renumbered (" << d << " priorities)" << std::endl;
     }
 
+    /*
+    // TODO this is for when we are provided a partial solution...
     // in case some nodes already have a dominion but are not yet disabled
     for (int i=0; i<game->n_nodes; i++) {
         if (game->solved[i] and !disabled[i]) {
@@ -424,6 +471,7 @@ Oink::run()
         }
     }
     flush();
+    */
 
     if (solveSingle and solveSingleParity()) return;
 
@@ -477,53 +525,23 @@ Oink::run()
      * Start Lace if we are parallel
      */
 
-    bool with_lace = false;
-    if (solvers.isParallel(solver)) {
-        if (workers >= 0 and lace_workers() == 0) {
-            lace_init(workers, 100*1000*1000);
-            lace_startup(0, 0, 0);
-            logger << "initialized Lace with " << lace_workers() << " workers" << std::endl;
-            with_lace = true;
+    if (Solvers().isParallel(solver)) {
+        if (workers >= 0) {
+            if (lace_workers() == 0) {
+                lace_init(workers, 100*1000*1000);
+                logger << "initialized Lace with " << lace_workers() << " workers" << std::endl;
+                lace_startup(0, (lace_startup_cb)TASK(solve_loop), this);
+            } else {
+                logger << "running parallel (Lace already initialized)" << std::endl;
+                solveLoop();
+            }
         } else {
-            if (lace_workers() == 0) logger << "running sequentially" << std::endl;
-            else logger << "running parallel (Lace already initialized)" << std::endl;
+            logger << "running sequentially" << std::endl;
+            solveLoop();
         }
+    } else {
+        solveLoop();
     }
-
-    /***
-     * Start solving
-     */
-
-    logger << "solving using " << solvers.desc(solver) << std::endl;
-
-    while (!game->gameSolved()) {
-        // disabled all solved vertices
-        disabled = game->solved;
-
-        if (bottomSCC) {
-            // solve bottom SCC
-            std::vector<int> sel;
-            getBottomSCC(sel);
-            assert(sel.size() != 0);
-            disabled.set();
-            for (int i : sel) disabled[i] = false;
-            logger << "solving bottom SCC of " << sel.size() << " nodes (";
-            logger << game->countUnsolved() << " nodes left)" << std::endl;
-        }
-
-        // solve current subgame
-        Solver *s = solvers.construct(solver, this, game);
-        s->run();
-        delete s;
-
-        // flush the todo buffer
-        flush();
-
-        // report number of nodes left
-        logger << game->countUnsolved() << " nodes left." << std::endl;
-    }
-
-    if (with_lace) lace_exit();
 
     delete[] outa;
     delete[] ina;
