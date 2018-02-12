@@ -27,6 +27,21 @@
 
 namespace pg {
 
+Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), disabled(game.n_nodes)
+{
+    // initialize outcount (for flush/attract)
+    outcount = new int[game.n_nodes];
+    for (int i=0; i<game.n_nodes; i++) {
+        outcount[i] = std::count_if(game.out[i].begin(), game.out[i].end(),
+                [&] (const int n) { return disabled[n] == 0; });
+    }
+}
+
+Oink::~Oink()
+{
+    delete[] outcount;
+}
+
 void
 Oink::attractDominion(int i)
 {
@@ -352,13 +367,6 @@ Oink::run()
 
     // NOTE: we assume that the game is already reindexed...
 
-    // first initialize outcount (for flush/attract)
-    outcount = new int[game->n_nodes];
-    for (int i=0; i<game->n_nodes; i++) {
-        outcount[i] = std::count_if(game->out[i].begin(), game->out[i].end(),
-                [&] (const int n) { return disabled[n] == 0; });
-    }
-
     if (inflate) {
         int d = game->inflate();
         logger << "parity game inflated (" << d << " priorities)" << std::endl;
@@ -426,7 +434,7 @@ Oink::run()
     }
 
     if (solver == -1) {
-        delete[] outcount;
+        logger << "no solver selected" << std::endl;
         return;
     }
 
@@ -507,7 +515,6 @@ Oink::run()
 
     if (with_lace) lace_exit();
 
-    delete[] outcount;
     delete[] outa;
     delete[] ina;
     delete[] outs;

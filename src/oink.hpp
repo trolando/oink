@@ -30,8 +30,8 @@ class Solver;
 class Oink
 {
 public:
-    Oink(Game &game, std::ostream &out=std::cout) : game(&game), logger(out), disabled(game.n_nodes) { }
-    ~Oink() {}
+    Oink(Game &game, std::ostream &out=std::cout);
+    ~Oink();
 
     /**
      * After configuring Oink, use run() to run the solver.
