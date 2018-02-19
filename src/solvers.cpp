@@ -29,6 +29,7 @@
 #include "mspm.hpp"
 #include "qpt.hpp"
 #include "npp.hpp"
+#include "sspm.hpp"
 
 namespace pg {
 
@@ -47,6 +48,7 @@ Solvers::Solvers()
     add("spm", "accelerated small progress measures", 0, [] (Oink* oink, Game* game) { return new SPMSolver(oink, game); });
     add("tspm", "traditional small progress measures", 0, [] (Oink* oink, Game* game) { return new TSPMSolver(oink, game); });
     add("mspm", "Maciej' modified small progress measures", 0, [] (Oink* oink, Game* game) { return new MSPMSolver(oink, game); });
+    add("sspm", "succinct small progress measures", 0, [] (Oink* oink, Game* game) { return new SSPMSolver(oink, game); });
     add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game) { return new QPTSolver(oink, game); });
 }       
 

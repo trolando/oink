@@ -36,6 +36,7 @@ PSI  | (parallel) strategy improvement
 TSPM | Traditional small progress measures
 SPM  | Accelerated version of small progress measures
 MSPM | Maciej Gazda's modified small progress measures
+SSPM | Succinct small progress measures
 QPT  | Quasi-polynomial time progress measures
 
 * The priority promotion family of algorithms has been proposed in 2016.
@@ -43,7 +44,8 @@ QPT  | Quasi-polynomial time progress measures
 * The APT algorithm was published in 1998 and again in 2016.
 * The parallel strategy improvement implementation is inspired by work in 2017 but uses a different approach with work-stealing.
 * The accelerated SPM approach is a novel approach.
-* The QPT progress measures algorithm was published in 2016. (Fearnley et al, at SPIN.)
+* The succinct small progress measures algorithm was published in 2017. (Jurdzinski and Lazic, at LICS 2017)
+* The QPT progress measures algorithm was published in 2017. (Fearnley et al, at SPIN 2017.)
 
 The parallel algorithms use the work-stealing framework Lace.
 

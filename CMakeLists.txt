@@ -50,6 +50,7 @@ add_library(oink
     src/spm.cpp
     src/mspm.cpp
     src/tspm.cpp
+    src/sspm.cpp
     src/qpt.cpp
 )
 target_link_libraries(oink pthread)
