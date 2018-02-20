@@ -93,6 +93,6 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/oink.pc.cmake.in" "${CMAKE_CURRENT_B
 
 install(TARGETS oink DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(TARGETS solve DESTINATION "${CMAKE_INSTALL_BINDIR}")
-install(FILES src/oink.hpp src/game.hpp DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(FILES src/oink.hpp src/game.hpp src/uintqueue.hpp DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/oink.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 

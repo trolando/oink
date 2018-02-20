@@ -19,11 +19,13 @@
 
 #include <iostream>
 #include <vector>
-#include "game.hpp"
-
-namespace pg {
 
 #define _INLINE_ __attribute__((always_inline))
+
+#include "game.hpp"
+#include "uintqueue.hpp"
+
+namespace pg {
 
 class Solver;
 
@@ -123,11 +125,6 @@ protected:
     bool solveSingleParity(void);
 
     /**
-     * During flush(), attract to solved node <i>.
-     */
-    void attractDominion(int i);
-
-    /**
      * Find a bottom SCC starting from the first non-disabled node.
      * Avoids "disabled" nodes.
      * (if nonempty is set, only obtain a non-empty bottom SCC.)
@@ -159,7 +156,7 @@ protected:
     bool solveSingle = true; // solve games with only 1 parity
     bool bottomSCC = false;  // solve per bottom SCC
 
-    std::vector<int> todo;   // internal queue for solved nodes for flushing
+    uintqueue todo;          // internal queue for solved nodes for flushing
     int *outcount;           // number of unsolved outgoing edges per node (for fast attraction)
     int *outa;               // index array for outgoing edges
     int *ina;                // index array for incoming edges

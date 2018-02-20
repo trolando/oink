@@ -27,7 +27,7 @@
 
 namespace pg {
 
-Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), disabled(game.n_nodes)
+Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.n_nodes), disabled(game.n_nodes)
 {
     // initialize outcount (for flush/attract)
     outcount = new int[game.n_nodes];
@@ -40,47 +40,6 @@ Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), disabled(g
 Oink::~Oink()
 {
     delete[] outcount;
-}
-
-void
-Oink::attractDominion(int i)
-{
-    // check if we already did this node
-    if (outcount[i] == -1) return;
-
-    assert(game->solved[i]);
-    bool winner = game->winner[i];
-
-    std::queue<int> nodes;
-    nodes.push(i);
-
-    while (!nodes.empty()) {
-        int n = nodes.front();
-        nodes.pop();
-
-        outcount[n] = -1; // mark it done
-
-        for (int in : game->in[n]) {
-            if (outcount[in] == -1) continue;
-            if (game->solved[in]) continue;
-            if (game->owner[in] == winner) {
-                // node of winner
-                game->strategy[in] = n;
-                game->solved[in] = true;
-                game->winner[in] = winner;
-                disabled[in] = true;
-                nodes.push(in);
-            } else {
-                // node of loser
-                if (--outcount[in] == 0) {
-                    game->solved[in] = true;
-                    game->winner[in] = winner;
-                    disabled[in] = true;
-                    nodes.push(in);
-                }
-            }
-        }
-    }
 }
 
 /**
@@ -359,7 +318,7 @@ Oink::solve(int node, int win, int strategy)
     game->winner[node] = win;
     game->strategy[node] = (win == game->owner[node]) ? strategy : -1;
     disabled[node] = true; // disable
-    todo.push_back(node);
+    todo.push(node);
 
     /*
     if (trace) {
@@ -375,15 +334,39 @@ void
 Oink::flush()
 {
     // flush the todo buffer
-    for (int i : todo) attractDominion(i);
-    todo.clear();
-    /*
-    for (int i=0; i<game->n_nodes; i++) {
-        auto &in = game->in[i];
-        in.erase(std::remove_if(in.begin(), in.end(),
-                    [&](const int x) { return game->dominion[x] != -1; }), in.end());
+    while (todo.nonempty()) {
+        int v = todo.pop();
+
+        // check if we already did this node
+        if (outcount[v] == -1) return;
+        outcount[v] = -1; // mark it done
+
+#ifndef NDEBUG
+        assert(game->solved[v]);
+#endif
+        bool winner = game->winner[v];
+
+        // base on ORIGINAL game in!
+        for (int in : game->in[v]) {
+            if (game->solved[in]) continue; // already done
+            if (game->owner[in] == winner) {
+                // node of winner
+                game->strategy[in] = v;
+                game->solved[in] = true;
+                game->winner[in] = winner;
+                disabled[in] = true;
+                todo.push(in);
+            } else {
+                // node of loser
+                if (--outcount[in] == 0) {
+                    game->solved[in] = true;
+                    game->winner[in] = winner;
+                    disabled[in] = true;
+                    todo.push(in);
+                }
+            }
+        }
     }
-    */
 }
 
 void
