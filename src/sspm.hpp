@@ -43,11 +43,9 @@ protected:
      * Two formats are possible to encode the array, apart from the bitstring
      * - for each bit the depth: log n * log h 
      */
-    int l, h0, h1;
-    boost::dynamic_bitset<unsigned long long> pm_0_b;
-    int *pm_0_d;
-    boost::dynamic_bitset<unsigned long long> pm_1_b;
-    int *pm_1_d;
+    int l, h;
+    boost::dynamic_bitset<unsigned long long> pm_b;
+    int *pm_d;
 
     boost::dynamic_bitset<unsigned long long> tmp_b;
     int *tmp_d;
@@ -63,25 +61,20 @@ protected:
     boost::dynamic_bitset<unsigned long long> unstable;
 
     // Copy pm[idx] into tmp
-    void to_tmp_0(int idx);
-    void to_tmp_1(int idx);
+    void to_tmp(int idx);
     // Copy tmp into pm[idx]
-    void from_tmp_0(int idx);
-    void from_tmp_1(int idx);
+    void from_tmp(int idx);
     // Copy pm[idx] into best
-    void to_best_0(int idx);
-    void to_best_1(int idx);
+    void to_best(int idx);
     // Copy best into pm[idx]
-    void from_best_0(int idx);
-    void from_best_1(int idx);
+    void from_best(int idx);
     // Copy tmp into best
     void tmp_to_best();
     // Copy tmp into test
     void tmp_to_test();
 
     // Render pm[idx] to given ostream
-    void stream_pm_0(std::ostream &out, int idx);
-    void stream_pm_1(std::ostream &out, int idx);
+    void stream_pm(std::ostream &out, int idx);
     // Render tmp to given ostream
     void stream_tmp(std::ostream &out, int h);
     // Render best to given ostream
@@ -94,11 +87,10 @@ protected:
 
     // Bump tmp given priority p
     void trunc_tmp(int pindex);
-    void prog_tmp(int pindex);
+    void prog_tmp(int pindex, int h);
 
     // Lift node, triggered by change to target
-    bool lift_0(int node, int target, int &str);
-    bool lift_1(int node, int target, int &str);
+    bool lift(int node, int target, int &str, int pl);
 
     inline void todo_push(int node) {
         if (dirty[node]) return;
@@ -117,6 +109,11 @@ protected:
 #endif
         return node;
     }
+
+    int lift_count = 0;
+    int lift_attempt = 0;
+
+    void run(int nbits, int depth, int player);
 };
 
 }

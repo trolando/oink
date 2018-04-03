@@ -29,67 +29,35 @@ SSPMSolver::~SSPMSolver()
 }
 
 void
-SSPMSolver::to_tmp_0(int idx)
+SSPMSolver::to_tmp(int idx)
 {
     int base = idx*l;
-    for (int i=0; i<l; i++) tmp_b[i] = pm_0_b[base+i];
-    for (int i=0; i<l; i++) tmp_d[i] = pm_0_d[base+i];
+    for (int i=0; i<l; i++) tmp_b[i] = pm_b[base+i];
+    for (int i=0; i<l; i++) tmp_d[i] = pm_d[base+i];
 }
 
 void
-SSPMSolver::from_tmp_0(int idx)
+SSPMSolver::from_tmp(int idx)
 {
     int base = idx*l;
-    for (int i=0; i<l; i++) pm_0_b[base+i] = tmp_b[i];
-    for (int i=0; i<l; i++) pm_0_d[base+i] = tmp_d[i];
+    for (int i=0; i<l; i++) pm_b[base+i] = tmp_b[i];
+    for (int i=0; i<l; i++) pm_d[base+i] = tmp_d[i];
 }
 
 void
-SSPMSolver::to_best_0(int idx)
+SSPMSolver::to_best(int idx)
 {
     int base = idx*l;
-    for (int i=0; i<l; i++) best_b[i] = pm_0_b[base+i];
-    for (int i=0; i<l; i++) best_d[i] = pm_0_d[base+i];
+    for (int i=0; i<l; i++) best_b[i] = pm_b[base+i];
+    for (int i=0; i<l; i++) best_d[i] = pm_d[base+i];
 }
 
 void
-SSPMSolver::from_best_0(int idx)
+SSPMSolver::from_best(int idx)
 {
     int base = idx*l;
-    for (int i=0; i<l; i++) pm_0_b[base+i] = best_b[i];
-    for (int i=0; i<l; i++) pm_0_d[base+i] = best_d[i];
-}
-
-void
-SSPMSolver::to_tmp_1(int idx)
-{
-    int base = idx*l;
-    for (int i=0; i<l; i++) tmp_b[i] = pm_1_b[base+i];
-    for (int i=0; i<l; i++) tmp_d[i] = pm_1_d[base+i];
-}
-
-void
-SSPMSolver::from_tmp_1(int idx)
-{
-    int base = idx*l;
-    for (int i=0; i<l; i++) pm_1_b[base+i] = tmp_b[i];
-    for (int i=0; i<l; i++) pm_1_d[base+i] = tmp_d[i];
-}
-
-void
-SSPMSolver::to_best_1(int idx)
-{
-    int base = idx*l;
-    for (int i=0; i<l; i++) best_b[i] = pm_1_b[base+i];
-    for (int i=0; i<l; i++) best_d[i] = pm_1_d[base+i];
-}
-
-void
-SSPMSolver::from_best_1(int idx)
-{
-    int base = idx*l;
-    for (int i=0; i<l; i++) pm_1_b[base+i] = best_b[i];
-    for (int i=0; i<l; i++) pm_1_d[base+i] = best_d[i];
+    for (int i=0; i<l; i++) pm_b[base+i] = best_b[i];
+    for (int i=0; i<l; i++) pm_d[base+i] = best_d[i];
 }
 
 void
@@ -114,7 +82,7 @@ SSPMSolver::trunc_tmp(int pindex)
 {
     if (tmp_d[0] == -1) return; // already Top
     // compute the lowest pindex >= p
-    // [pindex],.,...,.. => [pindex],000 
+    // [pindex],.,...,.. => [pindex],000
     // if pindex is the bottom, then this simply "buries" the remainder
     for (int i=l-1; i>=0 and tmp_d[i] > pindex; i--) {
         tmp_b[i] = 0;
@@ -126,7 +94,7 @@ SSPMSolver::trunc_tmp(int pindex)
  * Set tmp := min { m | m >_p tmp }
  */
 void
-SSPMSolver::prog_tmp(int pindex)
+SSPMSolver::prog_tmp(int pindex, int h)
 {
     // Simple case 1: Top >_p Top
     if (tmp_d[0] == -1) return; // already Top
@@ -143,34 +111,42 @@ SSPMSolver::prog_tmp(int pindex)
     }
 
     // Case 3: no bits below [pindex], so analyze lowest nonempty level
-    // * If lowest contains 0: 3a
-    // * Else if lowest level is root: 3b
-    // * Else append 100000000... to next higher level (3c, 3d, 3e)
-    // 
-    // 3a: ,..011*, => ,..,000*
-    // 3b: 1111111  => Top      (if root contains only 1s)
-    // 3c: ,1111111 => 100*     (if non-root contains only 1s)
-    // 3d: ..,111*  => ..100*
-    // 3e: ,e,111*  => ,100*
+    // * If lowest contains 0: 3a or 3b
+    // * Else if lowest level is root: 3c
+    // * Else append 100000000... to next higher level (3d, 3e, 3f)
+    //
+    // 3a: ,..011*  => ,..100*  (if lowest nonempty is the bottom)
+    // 3b: ,..011*, => ,..,000* (if lowest nonempty is not the bottom)
+    // 3c: 1111111  => Top      (if root contains only 1s)
+    // 3d: ,1111111 => 100*     (if non-root contains only 1s)
+    // 3e: ..,111*  => ..100*
+    // 3f: ,e,111*  => ,100*
 
     // no bits below pindex, so just find smallest increase
     for (int i=l-1; i>=0; i--) {
         if (tmp_b[i] == 0) {
-            // 3a: we found a 0, increase to [eps] and 0s on leaf
-            // ..011 => ..,000
-            tmp_b[i] = 0;
-            int new_d = tmp_d[i]+1;
-            for (int k=i; k<l; k++) tmp_d[k] = new_d;
-            break;
+            if (tmp_d[i] == h) {
+                // 3a: we found a 0 on the bottom, increase to 100...
+                // ..011 => 00100
+                tmp_b[i] = 1;
+                break;
+            } else {
+                // 3b: we found a 0 (not bottom), increase to [eps] and 0s on leaf
+                // ..011 => ..,000
+                tmp_b[i] = 0;
+                int new_d = tmp_d[i]+1;
+                for (int k=i; k<l; k++) tmp_d[k] = new_d;
+                break;
+            }
         } else if (i == 0) {
             // we have only seen 1s and only 1 element
             if (tmp_d[0] == 0) {
-                // 3b: we are already the highest, so go to top
+                // 3c: we are already the highest, so go to top
                 tmp_b[0] = 0;
                 tmp_d[0] = -1;
                 break;
             } else {
-                // 3c: increase 1 higher...
+                // 3d: increase 1 higher...
                 // ,e,111   => ,100
                 int new_d = tmp_d[0]-1;
                 tmp_b[0] = 1;
@@ -178,7 +154,7 @@ SSPMSolver::prog_tmp(int pindex)
                 break;
             }
         } else if (tmp_d[i-1] != tmp_d[i]) {
-            // 3d, 3e: next is different
+            // 3e, 3f: next is different
             // two cases
             //  .,111   => .100
             // ,e,111   => ,100
@@ -197,46 +173,20 @@ SSPMSolver::prog_tmp(int pindex)
  * Write pm to ostream.
  */
 void
-SSPMSolver::stream_pm_0(std::ostream &out, int idx)
+SSPMSolver::stream_pm(std::ostream &out, int idx)
 {
     int base = idx*l;
-    if (pm_0_d[base] == -1) {
+    if (pm_d[base] == -1) {
         out << " \033[1;33mTop\033[m";
     } else {
         out << " { ";
         int j=0;
-        for (int i=0; i<h0; i++) {
+        for (int i=0; i<h; i++) {
             if (i>0) out << ",";
             int c=0;
-            while (j<l and pm_0_d[base+j] == i) {
+            while (j<l and pm_d[base+j] == i) {
                 c++;
-                out << pm_0_b[base+j];
-                j++;
-            }
-            if (c == 0) out << "ε";
-        }
-        out << " }";
-    }
-}
-
-/**
- * Write pm1 to ostream.
- */
-void
-SSPMSolver::stream_pm_1(std::ostream &out, int idx)
-{
-    int base = idx*l;
-    if (pm_1_d[base] == -1) {
-        out << " \033[1;33mTop\033[m";
-    } else {
-        out << " { ";
-        int j=0;
-        for (int i=0; i<h1; i++) {
-            if (i>0) out << ",";
-            int c=0;
-            while (j<l and pm_1_d[base+j] == i) {
-                c++;
-                out << pm_1_b[base+j];
+                out << pm_b[base+j];
                 j++;
             }
             if (c == 0) out << "ε";
@@ -266,6 +216,28 @@ SSPMSolver::stream_tmp(std::ostream &out, int h)
             }
             if (c == 0) out << "ε";
         }
+        out << " }";
+
+        out << " { ";
+
+        // compute value
+        int i=0;
+        for (int d=0; d<h; d++) {
+            int val = 0;
+
+            for (; i<l; i++) {
+                if (tmp_d[i] != d) {
+                    // e found
+                    val |= ((1 << (l-i)) - 1);
+                    break;
+                }
+
+                if (tmp_b[i]) val |= (1 << (l-i));
+            }
+
+            logger << " " << val;
+        }
+
         out << " }";
     }
 }
@@ -368,34 +340,34 @@ SSPMSolver::compare_test(int pindex)
 }
 
 bool
-SSPMSolver::lift_0(int v, int target, int &str)
+SSPMSolver::lift(int v, int target, int &str, int pl)
 {
     // check if already Top
-    if (pm_0_d[l*v] == -1) return false; // already Top
+    if (pm_d[l*v] == -1) return false; // already Top
 
     const int pr = priority[v];
-    const int pindex = h0-(pr+1)/2-1;
+    const int pindex = pl == 0 ? h-(pr+1)/2-1 : h-pr/2-1;
 
 #ifndef NDEBUG
     if (trace >= 2) {
-        logger << "\033[1mupdating vertex " << v << "/" << priority[v] << (owner[v]?" (odd)":" (even)") << "\033[m with current measure";
-        stream_pm_0(logger, v);
+        logger << "\033[1mupdating vertex " << label_vertex(v) << (owner[v]?" (odd)":" (even)") << "\033[m with current measure";
+        stream_pm(logger, v);
         logger << std::endl;
     }
 #endif
 
     // if even owns and target is set, just check if specific target is better
-    if (owner[v] == 0 and target != -1) {
-        to_tmp_0(target);
-        if (pr&1) trunc_tmp(pindex);
-        else prog_tmp(pindex);
-        to_best_0(v);
+    if (owner[v] == pl and target != -1) {
+        to_tmp(target);
+        if (pl == (pr&1)) prog_tmp(pindex, h);
+        else trunc_tmp(pindex);
+        to_best(v);
         if (compare(pindex) > 0) {
-            from_tmp_0(v);
+            from_tmp(v);
 #ifndef NDEBUG
             if (trace >= 2) {
-                logger << "new measure";
-                stream_tmp(logger, h0);
+                logger << "\033[1;33mnew measure\033[m of " << label_vertex(v) << ":";
+                stream_tmp(logger, h);
                 logger << std::endl;
             }
 #endif
@@ -409,26 +381,26 @@ SSPMSolver::lift_0(int v, int target, int &str)
     bool first = true;
     for (int to : out[v]) {
         if (disabled[to]) continue;
-        to_tmp_0(to);
+        to_tmp(to);
 #ifndef NDEBUG
         if (trace >= 2) {
-            logger << "successor " << to << " from";
-            stream_tmp(logger, h0);
+            logger << "successor " << label_vertex(to) << " from";
+            stream_tmp(logger, h);
         }
         // DEBUG
         tmp_to_test();
 #endif
-        if (pr&1) trunc_tmp(pindex);
-        else prog_tmp(pindex);
+        if (pl == (pr&1)) prog_tmp(pindex, h);
+        else trunc_tmp(pindex);
 #ifndef NDEBUG
         if (trace >= 2) {
             logger << " to";
-            stream_tmp(logger, h0);
+            stream_tmp(logger, h);
             logger << std::endl;
         }
         // DEBUG test is progressive!
         if (test_d[0] != -1) {
-            if (pr&1) {
+            if ((pr&1) != pl) {
                 if (compare_test(pindex) != 0) LOGIC_ERROR;
             } else {
                 if (compare_test(pindex) != 1) LOGIC_ERROR;
@@ -440,7 +412,7 @@ SSPMSolver::lift_0(int v, int target, int &str)
         if (first) {
             tmp_to_best();
             str = to;
-        } else if (owner[v] == 0) {
+        } else if (owner[v] == pl) {
             // we want the max!
             if (compare(pindex) > 0) {
                 tmp_to_best();
@@ -457,122 +429,16 @@ SSPMSolver::lift_0(int v, int target, int &str)
     }
 
     // set best to pm if higher
-    to_tmp_0(v);
+    to_tmp(v);
     if (compare(pindex) < 0) {
 #ifndef NDEBUG
         if (trace >= 2) {
-            logger << "new measure";
-            stream_best(logger, h0);
+            logger << "\033[1;33mnew measure\033[m of " << label_vertex(v) << ":";
+            stream_best(logger, h);
             logger << std::endl;
         }
 #endif
-        from_best_0(v);
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool
-SSPMSolver::lift_1(int v, int target, int &str)
-{
-    // check if already Top
-    if (pm_1_d[l*v] == -1) return false; // already Top
-
-    const int pr = priority[v];
-    const int pindex = h1-pr/2-1;
-
-#ifndef NDEBUG
-    if (trace >= 2) {
-        logger << "\033[1mupdating vertex " << v << "/" << priority[v] << (owner[v]?" (odd)":" (even)") << "\033[m with current measure";
-        stream_pm_1(logger, v);
-        logger << std::endl;
-    }
-#endif
-
-    // if odd owns and target is set, just check if specific target is better
-    if (owner[v] == 1 and target != -1) {
-        to_tmp_1(target);
-        if (pr&1) prog_tmp(pindex);
-        else trunc_tmp(pindex);
-        to_best_1(v);
-        if (compare(pindex) > 0) {
-            from_tmp_1(v);
-#ifndef NDEBUG
-            if (trace >= 2) {
-                logger << "new measure";
-                stream_tmp(logger, h1);
-                logger << std::endl;
-            }
-#endif
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    // compute best measure
-    bool first = true;
-    for (int to : out[v]) {
-        if (disabled[to]) continue;
-        to_tmp_1(to);
-#ifndef NDEBUG
-        if (trace >= 2) {
-            logger << "successor " << to << " from";
-            stream_tmp(logger, h1);
-        }
-        // DEBUG
-        tmp_to_test();
-#endif
-        if (pr&1) prog_tmp(pindex);
-        else trunc_tmp(pindex);
-#ifndef NDEBUG
-        if (trace >= 2) {
-            logger << " to";
-            stream_tmp(logger, h1);
-            logger << std::endl;
-        }
-        // DEBUG test is progressive!
-        if (test_d[0] != -1) {
-            if (pr&1) {
-                if (compare_test(pindex) != 1) LOGIC_ERROR;
-            } else {
-                if (compare_test(pindex) != 0) LOGIC_ERROR;
-            }
-        } else {
-            if (tmp_d[0] != -1) LOGIC_ERROR;
-        }
-#endif
-        if (first) {
-            tmp_to_best();
-            str = to;
-        } else if (owner[v] == 1) {
-            // we want the max!
-            if (compare(pindex) > 0) {
-                tmp_to_best();
-                str = to;
-            }
-        } else {
-            // we want the min!
-            if (compare(pindex) < 0) {
-                tmp_to_best();
-                str = to;
-            }
-        }
-        first = false;
-    }
-
-    // set best to pm if higher
-    to_tmp_1(v);
-    if (compare(pindex) < 0) {
-#ifndef NDEBUG
-        if (trace >= 2) {
-            logger << "new measure";
-            stream_best(logger, h1);
-            logger << std::endl;
-        }
-#endif
-        from_best_1(v);
+        from_best(v);
         return true;
     } else {
         return false;
@@ -606,28 +472,13 @@ ceil_log2(unsigned long long x)
 }
 
 void
-SSPMSolver::run()
+SSPMSolver::run(int n_bits, int depth, int player)
 {
-    // determine l and h
-    l = ceil_log2(n_nodes);
+    l = n_bits;
+    h = depth;
 
-    int max_prio = priority[n_nodes-1];
-    h0 = (max_prio/2)+1; // h for even measures
-    h1 = (max_prio+1)/2; // h for odd measures
-
-    logger << "even: " << l << "-bounded adaptive " << h0 << "-counters." << std::endl;
-    logger << "odd: "  << l << "-bounded adaptive " << h1 << "-counters." << std::endl;
-
-    // create datastructures
-    Q.resize(n_nodes);
-    dirty.resize(n_nodes);
-    unstable.resize(n_nodes);
-
-    pm_0_b.resize(l*n_nodes);
-    pm_0_d = new int[l*n_nodes];
-
-    pm_1_b.resize(l*n_nodes);
-    pm_1_d = new int[l*n_nodes];
+    pm_b.resize(l*n_nodes);
+    pm_d = new int[l*n_nodes];
 
     tmp_b.resize(l);
     tmp_d = new int[l];
@@ -639,135 +490,110 @@ SSPMSolver::run()
     test_d = new int[l];
 
     // initialize progress measures
-    // pm_0_b.reset(); // standard set to 0 already
-    // pm_1_b.reset(); // standard set to 0 already
-    memset(pm_0_d, 0, sizeof(int[l*n_nodes])); // every bit in the top ( = min )
-    memset(pm_1_d, 0, sizeof(int[l*n_nodes])); // every bit in the top ( = min )
-
-    // set number of lifts and lift attempts to 0
-    int lift_count = 0;
-    int lift_attempt = 0;
-
-    /**
-     * Compute even measures.
-     */
-
-    int s;
+    // pm_b.reset(); // standard set to 0 already
+    memset(pm_d, 0, sizeof(int[l*n_nodes])); // every bit in the top ( = min )
 
     for (int n=n_nodes-1; n>=0; n--) {
         if (disabled[n]) continue;
         lift_attempt++;
-        if (lift_0(n, -1, s)) {
+        int s;
+        if (lift(n, -1, s, player)) {
             lift_count++;
             for (int from : in[n]) {
                 if (disabled[from]) continue;
                 lift_attempt++;
-                if (lift_0(from, n, s)) {
+                int s;
+                if (lift(from, n, s, player)) {
                     lift_count++;
                     todo_push(from);
                 }
             }
         }
     }
-    
+
     while (!Q.empty()) {
         int n = todo_pop();
         for (int from : in[n]) {
             if (disabled[from]) continue;
             lift_attempt++;
-            if (lift_0(from, n, s)) {
+            int s;
+            if (lift(from, n, s, player)) {
                 lift_count++;
+                // lift_counters[from]++;
                 todo_push(from);
             }
         }
     }
 
     /**
-     * Initialize odd measures if they are won by Odd
-     */
-
-    for (int n=n_nodes-1; n>=0; n--) {
-        if (disabled[n]) continue;
-        if (pm_0_d[l*n] != -1) pm_1_d[l*n] = -1;
-    }
-
-    /**
-     * Compute odd measures.
-     */
-
-    for (int n=n_nodes-1; n>=0; n--) {
-        if (disabled[n]) continue;
-        lift_attempt++;
-        if (lift_1(n, -1, s)) {
-            lift_count++;
-            for (int from : in[n]) {
-                if (disabled[from]) continue;
-                lift_attempt++;
-                if (lift_1(from, n, s)) {
-                    lift_count++;
-                    todo_push(from);
-                }
-            }
-        }
-    }
-    
-    while (!Q.empty()) {
-        int n = todo_pop();
-        for (int from : in[n]) {
-            if (disabled[from]) continue;
-            lift_attempt++;
-            if (lift_1(from, n, s)) {
-                lift_count++;
-                todo_push(from);
-            }
-        }
-    }
-
-    /**
-     * Derive strategies (and run tests if debugging).
+     * Derive strategies.
      */
 
     for (int v=0; v<n_nodes; v++) {
         if (disabled[v]) continue;
-        // compute strategy if won and owned by Even
-        if (pm_0_d[l*v] == -1 and owner[v] == 0) {
-            if (lift_1(v, -1, game->strategy[v])) logger << "error: " << v << " is not progressive!" << std::endl;
-        }
-        // compute strategy if won and owned by Odd
-        if (pm_0_d[l*v] != -1 and owner[v] == 1) {
-            if (lift_0(v, -1, game->strategy[v])) logger << "error: " << v << " is not progressive!" << std::endl;
-        }
-#ifndef NDEBUG
-        // test if exactly one of the measures is Top
-        if ((pm_0_d[l*v] == -1) == (pm_1_d[l*v] == -1)) LOGIC_ERROR;
-#endif
-    }
 
-    // write final measures to logger
-    if (trace) {
-        for (int v=0; v<n_nodes; v++) {
-            logger << "\033[1m" << v << "/" << priority[v] << (owner[v]?" (odd)":" (even)") << "\033[m:";
-            stream_pm_0(logger, v);
-            stream_pm_1(logger, v);
-            if ((pm_0_d[l*v] == -1) == (owner[v] == 0)) logger << " " << v << "=>" << game->strategy[v];
-            logger << std::endl;
+        if (trace) {
+            logger << "\033[1m" << label_vertex(v) << (owner[v]?" (odd)":" (even)") << "\033[m:";
+            stream_pm(logger, v);
         }
+
+        if (pm_d[l*v] != -1) {
+            if (owner[v] != player) {
+                if (lift(v, -1, game->strategy[v], player)) logger << "error: " << v << " is not progressive!" << std::endl;
+                if (trace) logger << " => " << label_vertex(game->strategy[v]);
+            }
+        }
+
+        if (trace) logger << std::endl;
     }
 
     /**
-     * Finally, solve the game.
+     * Mark solved.
      */
 
     for (int v=0; v<n_nodes; v++) {
         if (disabled[v]) continue;
-        oink->solve(v, pm_0_d[l*v] == -1 ? 0 : 1, game->strategy[v]);
+        if (pm_d[l*v] != -1) oink->solve(v, 1-player, game->strategy[v]);
     }
 
-    delete[] pm_0_d;
-    delete[] pm_1_d;
+    oink->flush();
+
+    delete[] pm_d;
     delete[] tmp_d;
     delete[] best_d;
     delete[] test_d;
+}
+
+void
+SSPMSolver::run()
+{
+    int max_prio = priority[n_nodes-1];
+
+    // compute ml (max l) and the h for even/odd
+    int ml = ceil_log2(n_nodes);
+    int h0 = (max_prio/2)+1;
+    int h1 = (max_prio+1)/2;
+
+    // create datastructures
+    Q.resize(n_nodes);
+    dirty.resize(n_nodes);
+    unstable.resize(n_nodes);
+
+    // run even counters
+    logger << "\033[1;33meven\033[m: " << ml << "-bounded adaptive " << h0 << "-counters." << std::endl;
+    run(ml, h0, 0);
+
+    // if now solved, no need to run odd counters
+    uint64_t c = game->countUnsolved();
+    if (c != 0) {
+        // run odd counters
+        logger << "we did " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
+        logger << c << " unsolved nodes left." << std::endl;
+        logger << "\033[1;33modd\033[m: " << ml << "-bounded adaptive " << h0 << "-counters." << std::endl;
+        int _l = lift_count, _a = lift_attempt;
+        run(ml, h1, 1);
+        logger << "we did " << lift_count-_l << " lifts, " << lift_attempt-_a << " lift attempts." << std::endl;
+    }
 
     logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
 }
