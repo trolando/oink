@@ -307,6 +307,7 @@ PSISolver::switch_strategy_seq(int pl)
         if (done[n] == 0) LOGIC_ERROR; // expecting done==1 or done==2
         if (owner[n] != pl) continue; // only change strategy if owner
 
+        bool changed = false;
         int cur_strat = str[n];
         const int *_out = outs + outa[n];
         for (int to = *_out; to != -1; to = *++_out) {
@@ -316,16 +317,17 @@ PSISolver::switch_strategy_seq(int pl)
                 // improving for player Even
                 if (si_val_less(cur_strat, to)) {
                     str[n] = cur_strat = to;
-                    res++;
+                    changed = true;
                 }
             } else {
                 // improving for player Odd
                 if (si_val_less(to, cur_strat)) {
                     str[n] = cur_strat = to;
-                    res++;
+                    changed = true;
                 }
             }
         }
+        if (changed) res++;
     }
     return res;
 }
