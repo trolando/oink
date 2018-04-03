@@ -60,6 +60,23 @@ protected:
     const int* const ina;
     const int* const outs;
     const int* const ins;
+
+    class _label_vertex
+    {
+    public:
+        _label_vertex(Game &g, int v) : g(g), v(v) { }
+        friend std::ostream& operator<<(std::ostream& out, const _label_vertex &lv) {
+            std::string& l = lv.g.label[lv.v];
+            if (l.empty()) out << lv.v << "/" << lv.g.priority[lv.v];
+            else out << l;
+            return out;
+        }
+    protected:
+        Game &g;
+        int v;
+    };
+
+    _label_vertex label_vertex(int v) { return _label_vertex(*game, v); }
 };
 
 }
