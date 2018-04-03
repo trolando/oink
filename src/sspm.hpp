@@ -60,6 +60,8 @@ protected:
     boost::dynamic_bitset<unsigned long long> dirty;
     boost::dynamic_bitset<unsigned long long> unstable;
 
+    bool bounded = false;
+
     // Copy pm[idx] into tmp
     void to_tmp(int idx);
     // Copy tmp into pm[idx]
@@ -114,6 +116,13 @@ protected:
     int lift_attempt = 0;
 
     void run(int nbits, int depth, int player);
+};
+
+class BoundedSSPMSolver : public SSPMSolver
+{
+public:
+    BoundedSSPMSolver(Oink *oink, Game *game) : SSPMSolver(oink, game) { bounded = true; }
+    virtual ~BoundedSSPMSolver() { }
 };
 
 }

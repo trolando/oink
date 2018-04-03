@@ -15,6 +15,7 @@
  */
 
 #include <cstring> // for memset
+#include <iomanip>
 
 #include "sspm.hpp"
 
@@ -445,7 +446,7 @@ SSPMSolver::lift(int v, int target, int &str, int pl)
     }
 }
 
-int
+static int
 ceil_log2(unsigned long long x)
 {
     static const unsigned long long t[6] = {
@@ -579,20 +580,35 @@ SSPMSolver::run()
     dirty.resize(n_nodes);
     unstable.resize(n_nodes);
 
-    // run even counters
-    logger << "\033[1;33meven\033[m: " << ml << "-bounded adaptive " << h0 << "-counters." << std::endl;
-    run(ml, h0, 0);
+    logger << "even wants " << ml << "-bounded adaptive " << h0 << "-counters." << std::endl;
+    logger << "odd wants " << ml << "-bounded adaptive " << h1 << "-counters." << std::endl;
 
-    // if now solved, no need to run odd counters
-    uint64_t c = game->countUnsolved();
-    if (c != 0) {
-        // run odd counters
-        logger << "we did " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
-        logger << c << " unsolved nodes left." << std::endl;
-        logger << "\033[1;33modd\033[m: " << ml << "-bounded adaptive " << h0 << "-counters." << std::endl;
+    // if running bounded sspm, start with 1-bounded adaptive counters
+    int i = bounded ? 1 : ml;
+
+    for (; i<=ml; i++) {
         int _l = lift_count, _a = lift_attempt;
-        run(ml, h1, 1);
-        logger << "we did " << lift_count-_l << " lifts, " << lift_attempt-_a << " lift attempts." << std::endl;
+        uint64_t _c = game->countUnsolved();
+
+        // run even counters
+        run(i, h0, 0);
+        uint64_t c = game->countUnsolved();
+        logger << "after even with k=" << i << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
+
+        // if now solved, no need to run odd counters
+        if (c == 0) break;
+
+        // run odd counters
+        run(i, h1, 1);
+        c = game->countUnsolved();
+        logger << "after odd  with k=" << i << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
+
+        if (i != ml) {
+            // if i == ml then we are guaranteed to be done
+            // otherwise check if done
+            if (c == 0) break;
+            if (_c != c) i--; // do not increase i if we solved vertices with current i
+        }
     }
 
     logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
