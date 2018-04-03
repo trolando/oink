@@ -373,7 +373,7 @@ int main(int argc, char **argv)
             if (pg.solved[i] and pg.winner[i] == 0) {
                 if (!banner) out << "won by even:";
                 banner = true;
-                out << " " << i; // << "(" << pg.priority[i] << ")";
+                out << " " << pg.label[i];
             }
         }
         if (banner) out << std::endl;
@@ -382,7 +382,7 @@ int main(int argc, char **argv)
             if (pg.solved[i] and pg.winner[i] == 1) {
                 if (!banner) out << "won by odd:";
                 banner = true;
-                out << " " << i; // << "(" << pg.priority[i] << ")";
+                out << " " << pg.label[i];
             }
         }
         if (banner) out << std::endl;
