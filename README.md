@@ -24,20 +24,24 @@ Oink implements various modern algorithms.
 
 Algorithm       | Description
 :-------------- | :----------
-NPP  | Priority promotion (bitvector implementation by Benerecetti et al)
-PP   | Priority promotion (basic algorithm)
-PPP  | Priority promotion PP+ (better reset heuristic)
-RR   | Priority promotion RR (even better improved reset heuristic)
-DP   | Priority promotion PP+ with the delayed promotion strategy
-RRDP | Priority promotion RR with the delayed promotion strategy
-ZLK  | (parallel) Zielonka's recursive algorithm
-APT  | APT algorithm by Kupferman and Vardi
-PSI  | (parallel) strategy improvement
-TSPM | Traditional small progress measures
-SPM  | Accelerated version of small progress measures
-MSPM | Maciej Gazda's modified small progress measures
-SSPM | Succinct small progress measures
-QPT  | Quasi-polynomial time progress measures
+NPP    | Priority promotion (bitvector implementation by Benerecetti et al)
+PP     | Priority promotion (basic algorithm)
+PPP    | Priority promotion PP+ (better reset heuristic)
+RR     | Priority promotion RR (even better improved reset heuristic)
+DP     | Priority promotion PP+ with the delayed promotion strategy
+RRDP   | Priority promotion RR with the delayed promotion strategy
+ZLK    | (parallel) Zielonka's recursive algorithm
+APT    | APT algorithm by Kupferman and Vardi
+PSI    | (parallel) strategy improvement
+TSPM   | Traditional small progress measures
+SPM    | Accelerated version of small progress measures
+MSPM   | Maciej Gazda's modified small progress measures
+SSPM   | Succinct small progress measures
+QPT    | Quasi-polynomial time progress measures
+TL     | Tangle learning (base algorithm)
+ATL    | Alternating tangle learning
+OTFTL  | On-the-fly tangle learning
+OTFATL | On-the-fly alternating tangle learning
 
 * The priority promotion family of algorithms has been proposed in 2016.
 * The Zielonka implementation is inspired by work in 2017.
@@ -46,6 +50,7 @@ QPT  | Quasi-polynomial time progress measures
 * The accelerated SPM approach is a novel approach.
 * The succinct small progress measures algorithm was published in 2017. (Jurdzinski and Lazic, at LICS 2017)
 * The QPT progress measures algorithm was published in 2017. (Fearnley et al, at SPIN 2017.)
+* The tangle learning algorithms are accepted at CAV 2018.
 
 The parallel algorithms use the work-stealing framework Lace.
 
