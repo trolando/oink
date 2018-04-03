@@ -1,5 +1,5 @@
 #!/bin/bash
-solvers=( "" "--pp" "--ppp" "--rr" "--dp" "--rrdp" "--psi -w -1" "--psi -w 0" "--zlk -w -1" "--zlk -w 0" "--qpt" "--spm" "--mspm" )
+solvers=( "" "--pp" "--ppp" "--rr" "--dp" "--rrdp" "--psi -w -1" "--psi -w 0" "--zlk -w -1" "--zlk -w 0" "--qpt" "--spm" "--mspm" "--tl" "--atl" "--otftl" "--otfatl" )
 for SOLVER in "${solvers[@]}"
 do
     echo "Testing solver $SOLVER"

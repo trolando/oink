@@ -28,6 +28,7 @@
 #include "tspm.hpp"
 #include "mspm.hpp"
 #include "qpt.hpp"
+#include "tl.hpp"
 #include "npp.hpp"
 #include "sspm.hpp"
 
@@ -50,6 +51,10 @@ Solvers::Solvers()
     add("mspm", "Maciej' modified small progress measures", 0, [] (Oink* oink, Game* game) { return new MSPMSolver(oink, game); });
     add("sspm", "succinct small progress measures", 0, [] (Oink* oink, Game* game) { return new SSPMSolver(oink, game); });
     add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game) { return new QPTSolver(oink, game); });
+    add("tl", "tangle learning", 0, [] (Oink* oink, Game* game) { return new TLSolver(oink, game); });
+    add("atl", "alternating tangle learning", 0, [] (Oink* oink, Game* game) { return new ATLSolver(oink, game); });
+    add("otftl", "on-the-fly tangle learning", 0, [] (Oink* oink, Game* game) { return new OTFTLSolver(oink, game); });
+    add("otfatl", "on-the-fly alternating tangle learning", 0, [] (Oink* oink, Game* game) { return new OTFATLSolver(oink, game); });
 }       
 
 void
