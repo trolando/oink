@@ -220,6 +220,7 @@ main(int argc, char **argv)
         ("c,compress", "Compress before writing")
         ("r,renumber", "Renumber before writing")
         ("o,order", "Order nodes by priority before writing")
+        ("u,unlabel", "Remove labels")
         ("evenodd", "Swap players")
         ("minmax", "Turn a mingame into a maxgame and vice versa")
         ;
@@ -291,6 +292,13 @@ main(int argc, char **argv)
      */
     if (opts.count("o")) game->reindex();
     else game->permute(mapping);
+
+    /**
+     * Remove labels
+     */
+    if (opts.count("u")) {
+        for (int i=0; i<game->n_nodes; i++) game->label[i] = "";
+    }
 
     /**
      * Write to output file or to stdout
