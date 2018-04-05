@@ -163,7 +163,7 @@ RRDPSolver::run()
                     // check if we are locked or not
                     bool locked = false;
                     for (auto l : P) {
-                        if ((l&1) == (res&1) && l < res) {
+                        if ((l&1) != (res&1) && l < res) {
                             locked = true;
                             break;
                         }
@@ -171,7 +171,7 @@ RRDPSolver::run()
                     if (!locked) {
                         for (int i=0; i<n_nodes; i++) {
                             if (disabled[i]) continue;
-                            if (region[i] < res && res < region_[i]) {
+                            if (region[i] < res && res <= region_[i]) {
                                 // locked for reason b
                                 locked = true;
                                 break;

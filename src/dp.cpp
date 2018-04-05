@@ -185,7 +185,7 @@ DPSolver::run()
                     // check if we are locked or not
                     bool locked = false;
                     for (auto l : P) {
-                        if ((l&1) == (res&1) && l < res) {
+                        if ((l&1) != (res&1) && l < res) {
                             // locked for reason a
                             locked = true;
                             break;
@@ -195,7 +195,7 @@ DPSolver::run()
                         for (int i=0; i<n_nodes; i++) {
                             // this loop is expensive, by the way
                             if (disabled[i]) continue;
-                            if (region[i] < res && res < region_[i]) {
+                            if (region[i] < res && res <= region_[i]) {
                                 // locked for reason b
                                 locked = true;
                                 break;
