@@ -581,7 +581,7 @@ void
 TLSolver::run()
 {
     // get number of nodes and create and initialize inverse array
-    max_prio = game->priority[n_nodes-1];
+    int max_prio = game->priority[n_nodes-1];
     inverse = new int[max_prio+1];
     for (int i=0; i<=max_prio; i++) inverse[i] = DIS; // for skipped priorities
     for (int i=0; i<n_nodes; i++) if (!disabled[i]) inverse[priority[i]] = i;

@@ -29,17 +29,23 @@
 
 namespace pg {
 
+/**
+ * Implementation of the tangle learning solver.
+ * [2018] Tom van Dijk, Attracting Tangles to Solve Parity Games, CAV.
+ */
+
 class TLSolver : public Solver
 {
 public:
     TLSolver(Oink *oink, Game *game);
     virtual ~TLSolver();
 
+    /**
+     * Run the solver.
+     */
     virtual void run();
 
 protected:
-    int max_prio;
-
     /**
      * Statistics
      */
@@ -49,33 +55,55 @@ protected:
     int dominions;   // number of dominions
 
     /**
-     * Control whether we use a greedy approach (false) or alternating (true)
+     * Controls which variation of tangle learning we do...
      */
-    bool alternating;
-    bool onthefly;
+    bool alternating; // alternating tangle learning
+    bool onthefly; // on-the-fly tangle learning
 
     int *inverse; // reverse lookup priority->vertex
     int *region; // current region of each vertex
     int *strategy; // current strategy of each vertex
 
-    std::vector<int*> vout; // for each tangle
-    std::vector<int> *vin; // for each normal vertex
-    std::vector<int*> vv; // the tangle (vertex-strategy pairs)
+    std::vector<int*> vout; // exits for each tangle
+    std::vector<int> *vin; // for each normal vertex (inverse of <vout>)
+    std::vector<int*> vv; // the tangle (vertex-strategy pairs, v0-s0-v1-s1-...-<-1>
     std::vector<int> vp; // priority of a tangle
-    std::vector<int> vr; // region of a tangle
+    std::vector<int> vr; // current region of each tangle
 
     std::vector<int> *regions; // current regions
     std::vector<int> *vregions; // current regions (for tangles)
 
-    uintqueue Q;
-    uintqueue tarres;
-    uintqueue tangleto;
-    boost::dynamic_bitset<unsigned long long> bs_exits;
+    uintqueue Q; // queue (used by attractor)
+    uintqueue tarres; // helper structure for tarjan bottom SCC algorithm
+    uintqueue tangleto; // helper structure to record tangle exits
+    boost::dynamic_bitset<unsigned long long> bs_exits; // helper structure
 
+    /**
+     * Attract to vertex <v> as player <pl> for a region of priority <pr>.
+     */
     inline void attractTo(const int pr, const int pl, int cur);
+
+    /**
+     * Run the attractor computation for current priority <prio>.
+     */
     void attract(int prio); // perform the attractor computation
-    bool computeRegion(int i); // compute next region, returns true if nonempty
-    int extractTangles(int i, bool isHighest); // extract tangles
+
+    /**
+     * Compute the next region (starting at vertex <i>)
+     * Returns <true> if the region is nonempty.
+     */
+    bool computeRegion(int i);
+
+    /**
+     * Extract tangles for the region whose highest vertex is vertex <i>.
+     * (isHighest is set when we are the highest region in the game.)
+     *
+     * Returns:
+     * -2 if there were no tangles
+     * -1 if there was a dominion
+     * <pr> the highest attracting region if there were tangles
+     */
+    int extractTangles(int i, bool isHighest);
 };
 
 class ATLSolver : public TLSolver
