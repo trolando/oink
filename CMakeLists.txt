@@ -70,6 +70,9 @@ if(BUILD_EXTRA_TOOLS)
     add_executable(verify src/tools/verify.cpp)
     target_link_libraries(verify oink)
 
+    add_executable(simple src/tools/simple.cpp)
+    target_link_libraries(simple oink)
+
     add_executable(rngame src/tools/rngame.cpp)
 
     add_executable(stgame src/tools/stgame.cpp)
