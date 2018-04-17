@@ -37,13 +37,8 @@ Verifier::verify(bool fullgame, bool even, bool odd)
 {
     const int n_nodes = game->n_nodes;
 
-    // sanity check if the game is properly indexed
-    // use reindex() prior to verification
-    for (int i=1; i<n_nodes; i++) {
-        if (game->priority[i-1] > game->priority[i]) {
-            throw "game not reindexed/sorted for verification";
-        }
-    }
+    // reindex if not yet done
+    game->reindex_once();
 
     std::vector<int> *out = new std::vector<int>[n_nodes];
 

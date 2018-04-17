@@ -109,6 +109,11 @@ public:
     void reindex(int *mapping = NULL);
 
     /**
+     * Reindex the game if it was not yet reindexed.
+     */
+    void reindex_once(void);
+
+    /**
      * Apply a permutation, moving node <i> to position <mapping[i]>.
      * This reverses a reindex operation.
      */
@@ -211,6 +216,9 @@ public:
     bitset solved;         // set true if node solved
     bitset winner;         // for solved vertices, set 1 if won by 1, else 0
     int *strategy;         // strategy for winning vertices
+
+    bool reindexed;        // records if the game was reindexed (before solving)
+
 };
 
 }

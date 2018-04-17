@@ -428,7 +428,10 @@ Oink::solveLoop()
 void
 Oink::run()
 {
-    // NOTE: we assume that the game is already reindexed...
+    /**
+     * If the game was not yet reindexed, do it now.
+     */
+    game->reindex_once();
 
     /**
      * Now inflate / compress / renumber...

@@ -34,11 +34,6 @@ main(int argc, char** argv)
     }
 
     /**
-     * Reindex (sort vertices by priority)
-     */
-    pg.reindex();
- 
-    /**
      * Solve with ATL solver and no WCWC / SP solving
      */
     std::stringstream log;

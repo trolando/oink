@@ -29,7 +29,7 @@ Game::Game() :
     n_nodes(0), n_edges(0),
     priority(new int[n_nodes]), owner(n_nodes), label(new std::string[n_nodes]),
     out(new std::vector<int>[n_nodes]), in(new std::vector<int>[n_nodes]),
-    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes])
+    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes]), reindexed(false)
 {
 }
 
@@ -37,7 +37,7 @@ Game::Game(int count) :
     n_nodes(count), n_edges(0),
     priority(new int[n_nodes]), owner(n_nodes), label(new std::string[n_nodes]),
     out(new std::vector<int>[n_nodes]), in(new std::vector<int>[n_nodes]),
-    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes])
+    solved(n_nodes), winner(n_nodes), strategy(new int[n_nodes]), reindexed(false)
 {
     assert(count > 0);
     memset(strategy, -1, sizeof(int[n_nodes]));
@@ -51,6 +51,8 @@ Game::Game(const Game& other) : Game(other.n_nodes)
     for (int i=0; i<n_nodes; i++) label[i] = other.label[i];
     for (int i=0; i<n_nodes; i++) out[i] = other.out[i];
     for (int i=0; i<n_nodes; i++) in[i] = other.in[i];
+
+    reindexed = other.reindexed;
 
     solved = other.solved;
     winner = other.winner;
@@ -120,6 +122,8 @@ Game::Game(istream &inp)
     label = new std::string[n_nodes];
     out = new std::vector<int>[n_nodes];
     in = new std::vector<int>[n_nodes];
+
+    reindexed = false;
 
     solved.resize(n_nodes);
     winner.resize(n_nodes);
@@ -378,6 +382,13 @@ Game::reindex(int *mapping)
     // apply the permutation
     permute(inv);
     delete[] inv;
+    reindexed = true;
+}
+
+void
+Game::reindex_once(void)
+{
+    if (!reindexed) reindex(NULL);
 }
 
 void
