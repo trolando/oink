@@ -59,47 +59,47 @@ public:
     /* Main methods                                                               */
     /******************************************************************************/
 
-    _INLINE_ bool nonempty()
+    __attribute__((always_inline)) bool nonempty()
     {
         return ((bool) pointer);
     }
 
-    _INLINE_ bool empty()
+    __attribute__((always_inline)) bool empty()
     {
         return pointer == 0;
     }
 
-    _INLINE_ uint pop()
+    __attribute__((always_inline)) uint pop()
     {
         return (queue[--pointer]);
     }
 
-    _INLINE_ void push(uint element)
+    __attribute__((always_inline)) void push(uint element)
     {
         queue[pointer++] = element;
     }
 
-    _INLINE_ uint& back()
+    __attribute__((always_inline)) uint& back()
     {
         return (queue[pointer-1]);
     }
 
-    _INLINE_ void clear()
+    __attribute__((always_inline)) void clear()
     {
         pointer = 0;
     }
 
-    _INLINE_ uint& operator[] (uint idx)
+    __attribute__((always_inline)) uint& operator[] (uint idx)
     {
         return (queue[idx]);
     }
 
-    _INLINE_ uint size()
+    __attribute__((always_inline)) uint size()
     {
         return (pointer);
     }
 
-    _INLINE_ void resize(uint capacity)
+    __attribute__((always_inline)) void resize(uint capacity)
     {
         pointer = 0;
         if (queue != NULL)
@@ -109,7 +109,7 @@ public:
         queue = new uint[capacity];
     }
 
-    _INLINE_ void swap(uintqueue & other)
+    __attribute__((always_inline)) void swap(uintqueue & other)
     {
         uint * tmp = other.queue;
         other.queue = queue;

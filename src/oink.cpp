@@ -381,9 +381,14 @@ Oink::setSolver(std::string label)
     solver = Solvers().id(label);
 }
 
-VOID_TASK_1(solve_loop, Oink*, s)
+void _solve_loop(Oink* s)
 {
     s->solveLoop();
+}
+
+VOID_TASK_1(solve_loop, Oink*, s)
+{
+    _solve_loop(s);
 }
 
 void

@@ -20,8 +20,6 @@
 #include <iostream>
 #include <vector>
 
-#define _INLINE_ __attribute__((always_inline))
-
 #include "game.hpp"
 #include "uintqueue.hpp"
 
@@ -32,8 +30,12 @@ class Solver;
 class Oink
 {
 public:
+    /**
+     * Construct a solver for the given game, sending log output to <out>.
+     */
     Oink(Game &game, std::ostream &out=std::cout);
-    ~Oink();
+
+    virtual ~Oink();
 
     /**
      * After configuring Oink, use run() to run the solver.
@@ -93,17 +95,16 @@ public:
     void setTrace(int level) { trace = level; }
 
     /**
-     * Solve node <node> as won by <winner> with strategy <strategy>.
-     * (Set <strategy> to -1 for no strategy.
+     * Mark node <node> as won by <winner> with strategy <strategy>.
+     * (Set <strategy> to -1 for no strategy.)
+     * After marking nodes, call flush().
      */
     void solve(int node, int winner, int strategy);
 
     /**
-     * After marking nodes as solved using solve(), use flush to attract to the solved dominion.
+     * After marking nodes as solved using solve(), flush attracts to the solved dominion.
      */
     void flush(void);
-
-    void solveLoop(void);
 
 protected:
     /**
@@ -142,6 +143,12 @@ protected:
      * Tarjan's SCC algorithm, modified to only compute the bottom SCC and avoid disabled nodes.
      */
     void tarjan(int start_node, std::vector<int> &res, bool nonempty);
+
+    /**
+     * Run the solver in a loop until the game is solved.
+     */
+    void solveLoop(void);
+    friend void _solve_loop(Oink*); // access point from a Lace worker
 
     Game *game;              // game being solved
     std::ostream &logger;    // logger for trace/debug messages
