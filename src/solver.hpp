@@ -41,7 +41,17 @@ public:
     }
 
     virtual ~Solver() { }
+
+    /**
+     * Run the solver.
+     */
     virtual void run() = 0;
+
+    /**
+     * Returns true if the solver always solves all enabled vertices
+     * before leaving run().
+     */
+    virtual bool full_solver() { return true; }
 
 protected:
     Oink *oink;
@@ -61,6 +71,10 @@ protected:
     const int* const outs;
     const int* const ins;
 
+    /**
+     * Use label_vertex(v) with operator<< of an output stream, for example,
+     * std::cout << "vertex: " << label_vertex(v) << std::endl;
+     */
     class _label_vertex
     {
     public:

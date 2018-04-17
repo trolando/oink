@@ -394,39 +394,59 @@ VOID_TASK_1(solve_loop, Oink*, s)
 void
 Oink::solveLoop()
 {
+    if (game->gameSolved()) return;
+
     /**
      * Report chosen solver.
      */
     Solvers solvers;
     logger << "solving using " << solvers.desc(solver) << std::endl;
 
-    while (!game->gameSolved()) {
-        // disabled all solved vertices
-        disabled = game->solved;
+    if (bottomSCC) {
+        do {
+            // disable all solved vertices
+            disabled = game->solved;
 
-        if (bottomSCC) {
             // solve bottom SCC
             std::vector<int> sel;
             getBottomSCC(sel);
             assert(sel.size() != 0);
             disabled.set();
             for (int i : sel) disabled[i] = false;
+
             logger << "solving bottom SCC of " << sel.size() << " nodes (";
             logger << game->countUnsolved() << " nodes left)" << std::endl;
-        }
 
-        // solve current subgame
-        Solver *s = solvers.construct(solver, this, game);
-        s->run();
-        delete s;
+            // solve current subgame
+            Solver *s = solvers.construct(solver, this, game);
+            s->run();
+            delete s;
 
-        // flush the todo buffer
-        flush();
+            // flush the todo buffer
+            flush();
+        } while (!game->gameSolved());
+    } else {
+        do {
+            // disable all solved vertices
+            disabled = game->solved;
 
-        // report number of nodes left
-        if (!bottomSCC) {
-            logger << game->countUnsolved() << " nodes left." << std::endl;
-        }
+            // solve current subgame
+            Solver *s = solvers.construct(solver, this, game);
+            bool full_solver = s->full_solver();
+            s->run();
+            delete s;
+
+            // flush the todo buffer
+            flush();
+
+            if (full_solver) {
+                break;
+            } else {
+                auto c = game->countUnsolved();
+                logger << c << " nodes left." << std::endl;
+                if (c == 0) break;
+            }
+        } while (true);
     }
 }
 
