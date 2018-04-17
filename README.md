@@ -76,6 +76,7 @@ oink    | The main tool for solving parity games
 verify  | Small tool that just verifies a solution (can be done by Oink too)
 nudge   | Swiss army knife for transforming parity games
 dotty   | Small tool that just generates a .dot graph of a parity game
+simple  | Very simple example of a tool that solves parity games
 
 Tools to generate games:
 
@@ -122,3 +123,7 @@ Typical options are:
 - `--dot <dotfile>` writes a .dot file of the game as loaded.
 - `-p` writes the vertices won by even/odd to stdout.
 - `-t` (once or multiple times) increases verbosity level.
+
+For a very simple example of a tool that uses Oink, see `src/tools/simple.cpp`.
+
+For a very simple example of extending Oink, see e.g. commits `6899f7e` and `e68b2ee`.
