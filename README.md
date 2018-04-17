@@ -111,7 +111,7 @@ What you want?                          | But how then?
 To quickly solve a gzipped parity game: | `oink -v game.pg.gz game.sol`
 To verify some solution:                | `oink -v game.pg.gz --sol game.sol`
 
-A typical call to Oink is: `oink [options] [solver] <filename> [solutionfile]`. This reads a parity game from `filename`, solves it with the chosen solver (default: `--npp`), then writes the solution to `<solutionfile>` (default: don't write).
+A typical call to Oink is: `oink [options] [solver] <filename> [solutionfile]`. This reads a parity game from `filename`, solves it with the chosen solver (default: `--atl`), then writes the solution to `<solutionfile>` (default: don't write).
 Typical options are:
 - `-v` verifies the solution after solving the game.
 - `-w <workers>` sets the number of worker threads for parallel solvers. By default, these solvers run their sequential version. Use `-w 0` to automatically determine the maximum number of worker threads.
