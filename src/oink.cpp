@@ -29,6 +29,11 @@ namespace pg {
 
 Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.n_nodes), disabled(game.n_nodes)
 {
+    /**
+     * If the game was not yet reindexed, do it now.
+     */
+    game.reindex_once();
+
     // initialize outcount (for flush/attract)
     outcount = new int[game.n_nodes];
     for (int i=0; i<game.n_nodes; i++) {
@@ -453,11 +458,6 @@ Oink::solveLoop()
 void
 Oink::run()
 {
-    /**
-     * If the game was not yet reindexed, do it now.
-     */
-    game->reindex_once();
-
     /**
      * Now inflate / compress / renumber...
      */
