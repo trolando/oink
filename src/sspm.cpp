@@ -277,7 +277,7 @@ int
 SSPMSolver::compare(int pindex)
 {
     // cases involving Top
-    if (tmp_d[0] == -1 and best_d[1] == -1) return 0;
+    if (tmp_d[0] == -1 and best_d[0] == -1) return 0;
     if (tmp_d[0] == -1) return 1;
     if (best_d[0] == -1) return -1;
     for (int i=0; i<l; i++) {
@@ -313,7 +313,7 @@ int
 SSPMSolver::compare_test(int pindex)
 {
     // cases involving Top
-    if (tmp_d[0] == -1 and test_d[1] == -1) return 0;
+    if (tmp_d[0] == -1 and test_d[0] == -1) return 0;
     if (tmp_d[0] == -1) return 1;
     if (test_d[0] == -1) return -1;
     for (int i=0; i<l; i++) {
