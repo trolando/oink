@@ -17,9 +17,10 @@
 #ifndef QPT_HPP
 #define QPT_HPP
 
-#include <queue>
+#include <boost/dynamic_bitset.hpp>
 
 #include "solver.hpp"
+#include "uintqueue.hpp"
 
 namespace pg {
 
@@ -38,12 +39,33 @@ public:
 protected:
     int *pm_nodes;
     int *strategy;
-    int k;
+    int k, k0, k1;
+    int max, max_even, max_odd;
+    unsigned long goal, goal0, goal1;
 
-    void print_state(std::vector<int> *choices);
-    bool try_lift(int node, std::vector<int> &vec);
-    bool lift(int node);
-    bool liftR(int node, int target);
+    uintqueue todo;
+    boost::dynamic_bitset<unsigned long long> dirty;
+
+    bool lift(int v, int target, int pl);
+    void liftloop(int pl);
+
+    void todo_push(int node) {
+        if (dirty[node]) return;
+        todo.push(node);
+        dirty[node] = 1;
+#ifndef NDEBUG
+        if (trace >= 2) logger << "push(" << node << ")" << std::endl;
+#endif
+    }
+
+    int todo_pop() {
+        int node = todo.pop();
+        dirty[node] = 0;
+#ifndef NDEBUG
+        if (trace >= 2) logger << "pop() => " << node << std::endl;
+#endif
+        return node;
+    }
 };
 
 }

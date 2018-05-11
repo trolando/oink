@@ -29,161 +29,54 @@ QPTSolver::~QPTSolver()
 }
 
 /**
- * Returns true if a progress measure "a" is less than "b"
+ * Returns true if a progress measure "a" is less than "b",
+ * given progress measures of <k> components for player <pl>
  */
 static bool
-pm_less(int* a, int* b, int k)
+pm_less(int* a, int* b, int k, int pl)
 {
-    // remember: _ < 5 < 3 < 1 < 0 < 2 < 4 < 6
-    for (int i=0; i<k; i++) {
-        // if equal, then continue with next
-        if (a[i] == b[i]) continue;
-        // case where a[i] is _ and b[i] is not
-        if (a[i] == -1) return true;
-        // case where b[i] is _ and a[i] is not
-        if (b[i] == -1) return false;
-        // cases where a[i] is odd
-        if (a[i] & 1) {
-            // .. and b[i] is also odd
-            if (b[i] & 1) return a[i] > b[i];
-            // .. and b[i] is even
-            else return true;
-        }
-        // case where b[i] is odd and a[i] is even
-        if (b[i] & 1) return false;
-        // case where a[i] and b[i] are even
-        return a[i] < b[i];
-    }
-    // case where a == b
-    return false;
-}
+    // remember: _ < 5 < 3 < 1 < 0 < 2 < 4 < 6 (even measures, solving for odd)
+    // remember: _ < 6 < 4 < 2 < 0 < 1 < 3 < 5 (odd measures, solving for even)
 
-/**
- * Returns true if a progress measure "a" is less than "b" (odd)
- */
-/*static bool
-pm_less_o(int* a, int* b, int k)
-{
-    // remember: _ < 6 < 4 < 2 < 0 < 1 < 3 < 5
     for (int i=0; i<k; i++) {
         // if equal, then continue with next
         if (a[i] == b[i]) continue;
-        // case where a[i] is _ and b[i] is not
+        // cases where a[i] is _ or b[i] is _
         if (a[i] == -1) return true;
-        // case where b[i] is _ and a[i] is not
         if (b[i] == -1) return false;
-        // cases where a[i] is odd
-        if (a[i] & 1) {
-            // .. and b[i] is also odd
-            if (b[i] & 1) return a[i] < b[i];
-            // .. and b[i] is even
+        // case distinction based on parity
+        const bool a_is_pl = (a[i]&1) == pl;
+        const bool b_is_pl = (b[i]&1) == pl;
+        if (a_is_pl) {
+            if (b_is_pl) return a[i] < b[i];
             else return false;
-        }
-        // case where b[i] is odd and a[i] is even
-        if (b[i] & 1) return true;
-        // case where a[i] and b[i] are even
-        return a[i] > b[i];
-    }
-    // case where a == b
-    return false;
-}*/
-
-/**
- * Compute updated witness with new vertex with priority "d"
- */
-static int
-up(int *dst, int *src, int d, int k)
-{
-    // check if this is a "won" witness
-    if ((src[0]&1) == 0) {
-        for (int i=0; i<k; i++) dst[i] = src[i];
-        return -1;
-    }
-
-    // first compute j for Lemma 3.3
-    int j33 = -1;
-    for (int i=k-1; i>=0; i--) {
-        // start from the end to find longest even sequence
-        if (src[i] == -1 || src[i]&1) {
-            // src[i] is _ or odd, try here!
-            j33 = i;
-            // and verify other half of the property (all higher are _ or bigger than d)
-            for (int j=i-1; j>=0; j--) {
-                if (src[j] != -1 && src[j] < d) {
-                    // not good!
-                    j33 = -1;
-                    break;
-                }
-            }
-            break;
-        }
-    }
-
-    // then compute j for Lemma 3.4
-    int j34 = -1;
-    for (int i=0; i<k; i++) {
-        // start from the begin, find first index where the Lemma applies
-        if (src[i] != -1 && src[i] < d) {
-            j34 = i;
-            break;
-        }
-    }
-
-    // determine best index min(j33, j34) or -1
-    int j = j33 == -1 ? j34 : (j34 == -1 ? j33 : (j33 < j34 ? j33 : j34));
-
-    // compute resulting progress measure
-    for (int i=0; i<k; i++) {
-        if (i == j) {
-            dst[i] = d;
-            while (++i != k) dst[i] = -1;
-            break;
         } else {
-            dst[i] = src[i];
+            if (b_is_pl) return true;
+            else return a[i] > b[i];
         }
     }
-
-    return j;
-}
-
-/**
- * Compute smallest larger progress measure with dst[0] set to _
- */
-static bool
-bump(int *dst, int *src, int k)
-{
-    // reminder: _ 5 3 1 0 2 4 6...
-    dst[k-1] = -1;
-    for (int i=k-2; i>=0; i--) {
-        // if odd != 1 then we can just subtract 2 and done
-        if ((src[i] & 1) && src[i] > 1) {
-            dst[i] = src[i]-2;
-            while (--i >= 0) dst[i] = src[i];
-            return true;
-        }
-        // if it's 1, and the next one is higher, then set 2 and done
-        if (src[i] == 1 && (i == 0 || src[i-1] > 1)) {
-            dst[i] = 0;
-            while (--i >= 0) dst[i] = src[i];
-            return true;
-        }
-        // if it's even, and the next one is higher, then increase and done
-        // probably the only one that is relevant, since this algorithm is used
-        // when an "even" sequence must be bumped
-        if ((src[i]&1) == 0 && (i == 0 || src[i-1] >= (src[i]+2))) {
-            dst[i] = src[i]+2;
-            while (--i >= 0) dst[i] = src[i];
-            return true;
-        }
-        // no rule applies, set _
-        dst[i] = -1;
-    }
-    // no rule applied, dst is trash, return false
+    // they are equal, so not less...
     return false;
 }
 
+
 /**
- * Print out a progress measure <pm> to the given stream
+ * Compute the value of a progress measure.
+ */
+static unsigned long
+pm_val(int* pm, int k, int pl)
+{
+    unsigned long res=0;
+    for (int i=0; i<k; i++) {
+        res <<= 1;
+        if (pm[i] != -1 and (pm[i]&1)==pl) res++;
+    }
+    return res;
+}
+
+
+/**
+ * Print out a progress measure <pm> (length <k>) to the given stream
  */
 static void
 pm_stream(std::ostream &out, int *pm, int k)
@@ -194,449 +87,381 @@ pm_stream(std::ostream &out, int *pm, int k)
     }
 }
 
+
 /**
- * Perform antagonistic update.
- * Return "true" if dst <> src, "false" otherwise.
+ * Compute updated progress measure <dst> after seeing priority "d",
+ * given progress measure <src> with length <k> recording <pl> measures.
+ * Returns -1 if dst == src, or the updated component index.
+ */
+static int
+up(int *dst, int *src, int d, int k, int pl)
+{
+    // check if this is a "won" witness
+    // a pm is won if the highest component records a value of parity <pl>
+    if (src[0] != -1 and (src[0]&1) == pl) {
+        for (int i=0; i<k; i++) dst[i] = src[i];
+        return -1;
+    }
+
+    // first compute j for Lemma 3.3
+    int j33 = -1;
+    for (int i=k-1; i>=0; i--) {
+        // start from the end to find longest sequence of <pl> parity
+        if (src[i] != -1 and (src[i]&1) == pl) continue;
+        // ok, src[i] is not of <pl> parity, test the assumption on the other half
+        // (all higher are _ or higher than d)
+        j33 = i;
+        for (int j=i-1; j>=0; j--) {
+            if (src[j] != -1 and src[j] < d) {
+                // not good!
+                j33 = -1;
+                break;
+            }
+        }
+        break;
+    }
+
+    // then compute j for Lemma 3.4
+    int j34 = -1;
+    for (int i=0; i<k; i++) {
+        // start from the begin, find first index where the Lemma applies
+        if (src[i] != -1 and src[i] < d) {
+            j34 = i;
+            break;
+        }
+    }
+
+    // determine best index min(j33, j34) or -1
+    int j = j33 == -1 ? j34 : (j34 == -1 ? j33 : (j33 < j34 ? j33 : j34));
+
+    // compute resulting progress measure
+    for (int i=0; i<j; i++) dst[i] = src[i]; // same before j
+    dst[j] = d;
+    for (int i=j+1; i<k; i++) dst[i] = -1; // _ after j
+
+    return j;
+}
+
+
+/**
+ * Compute smallest larger progress measure with dst[0] set to _
  */
 static bool
-au(int *dst, int *src, int d, int k)
+bump(int *dst, int *src, int k, int max, int max_opp, int pl)
 {
-    int j = up(dst, src, d, k);
+    // reminder: _ 5 3 1 0 2 4 6...
+    // reminder: _ 6 4 2 0 1 3 5...
+
+    for (int i=k-2; i>=0; i--) {
+        if (src[i] == -1) {
+            // if the current is _, then the smallest increase is max_opp
+            dst[i] = max_opp;
+            for (int z=0; z<i; z++) dst[z] = src[z];
+            for (int z=i+1; z<k; z++) dst[z] = -1;
+            return true;
+        } else if ((src[i]&1) != pl) {
+            // if the current is of opponent parity, then subtract 2 OR change parity
+            if (src[i] > (1-pl)) {
+                // if odd != 1 / even != 0 then we can just subtract 2 and we are done
+                dst[i] = src[i]-2;
+                for (int z=0; z<i; z++) dst[z] = src[z];
+                for (int z=i+1; z<k; z++) dst[z] = -1;
+                return true;
+            } else if (i > 0 and src[i-1] >= pl) {
+                // if is 1/0, then can set to 0/1 if the previous is set and we're not highest...
+                dst[i] = pl;
+                for (int z=0; z<i; z++) dst[z] = src[z];
+                for (int z=i+1; z<k; z++) dst[z] = -1;
+                return true;
+            }
+        } else {
+            // if it's of parity <pl>, and the next one is higher, then increase and done
+            // probably the only one that is relevant, since this algorithm is used
+            // when an "even" sequence must be bumped
+            if ((src[i]+2) <= max and i > 0 and src[i-1] >= (src[i]+2)) {
+                dst[i] = src[i]+2;
+                for (int z=0; z<i; z++) dst[z] = src[z];
+                for (int z=i+1; z<k; z++) dst[z] = -1;
+                return true;
+            }
+        }
+    }
+    // did not find a higher progress measure
+    return false;
+}
+
+
+/**
+ * Perform antagonistic update.
+ * Return "true" if dst != src, "false" otherwise.
+ */
+static bool
+au(int *dst, int *src, int d, int k, int max, int maxopp, int pl)
+{
+    // first compute normal update
+    int j = up(dst, src, d, k, pl);
     if (j == -1) return false; // no difference, already smallest...
 
-    // try antagonistic update
+    // then compute antagonistic update and update the antagonistic measure
     int tmp[k];
-    // compute a tmp ] src and tmp_0 equals _
-    if (!bump(tmp, src, k)) return true; // no bump possible; but dst != src so return true
-    // now update it
-    up(tmp, tmp, d, k);
+    if (!bump(tmp, src, k, max, maxopp, pl)) return true; // no bump possible; but dst != src so return true
+    up(tmp, tmp, d, k, pl);
 
-    // if smaller, use small version
-    if (pm_less(tmp, dst, k)) {
-        // printf("\033[1;32mAntagonistic update used bumped PM\033[m\n");
+    // use smallest updated measure
+    if (pm_less(tmp, dst, k, pl)) {
         for (int i=0; i<k; i++) dst[i] = tmp[i];
     }
-    // and finally, check if different
+
+    // finally, check if different
     for (int i=0; i<k; i++) if (dst[i] != src[i]) return true;
     return false;
 }
 
-bool
-QPTSolver::try_lift(int n, std::vector<int> &vec)
-{
-    int tmp[k], res[k];
-
-    vec.clear();
-
-    if (owner[n] == 0) {
-        // in Ve so max!
-        bool first = true;
-        for (int to : out[n]) {
-            if (disabled[to]) continue; // not looking at this
-            au(tmp, pm_nodes + k*to, priority[n], k);
-
-            if (first or pm_less(res, tmp, k)) {
-                first = false;
-                for (int i=0; i<k; i++) res[i] = tmp[i];
-                vec.clear();
-                vec.push_back(to);
-            } else if (!pm_less(tmp, res, k)) {
-                vec.push_back(to);
-            }
-        }
-        int *pm = pm_nodes + k*n;
-        return !vec.empty() && pm_less(pm, res, k);
-    } else {
-        // in Vo so min!
-        bool first = true;
-        for (int to : out[n]) {
-            if (disabled[to]) continue; // not looking at this
-            au(tmp, pm_nodes + k*to, priority[n], k);
-
-            if (first || pm_less(tmp, res, k)) {
-                first = false;
-                for (int i=0; i<k; i++) res[i] = tmp[i];
-                vec.clear();
-                vec.push_back(to);
-            } else if (!pm_less(res, tmp, k)) {
-                vec.push_back(to);
-            }
-        }
-        int *pm = pm_nodes + k*n;
-        return !vec.empty() && pm_less(pm, res, k);
-    }
-}
 
 bool
-QPTSolver::lift(int n)
+QPTSolver::lift(int v, int target, int pl)
 {
-    int *pm = pm_nodes + k*n; // obtain ptr to current progress measure
-    bool changed_this = false; // whether the progress measure was updated
+    // check if already Top
+    int * const pm = pm_nodes + k*v; // obtain ptr to current progress measure
+    if (pm[0] != -1 and (pm[0]&1) == pl) return false;
 
+    const int pr = priority[v];
     int tmp[k], res[k];
 
+#ifndef NDEBUG
     if (trace >= 2) {
-        logger << "\033[1mupdating node " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m with current progress measure";
+        logger << "\033[1mupdating vertex " << label_vertex(v) << (owner[v]?" (odd)":" (even)") << "\033[m with current measure";
         pm_stream(logger, pm, k);
         logger << std::endl;
     }
+#endif
 
-    if (owner[n] == 0) {
-        // in Ve so max!
-        // compute au for each successor and if it's larger, take it
-        for (int to : out[n]) {
-            if (disabled[to]) continue; // not looking at this
-            au(tmp, pm_nodes + k*to, priority[n], k);
+    // First special cases if we are lifting triggered by a given <target>.
 
-            if (trace >= 2) {
-                logger << "successor node " << to << "/" << priority[to] << " results in";
-                pm_stream(logger, tmp, k);
-                logger << std::endl;
-            }
-
-            if (pm_less(pm, tmp, k)) {
+    if (1 and target != -1) {
+        if (owner[v] == pl) {
+            // if owned by <pl>, just check if target is better.
+            au(tmp, pm_nodes + k*target, pr, k, max, pl ? max_even : max_odd, pl);
+            if (pm_val(tmp, k, pl) > goal) tmp[0] = max; // lol
+            if (pm_less(pm, tmp, k, pl)) {
+                // target is better, update, report, return
                 for (int i=0; i<k; i++) pm[i] = tmp[i];
-                changed_this = true;
+#ifndef NDEBUG
+                if (trace) {
+                    logger << "\033[1;32mnew measure\033[m of " << label_vertex(v) << ":";
+                    pm_stream(logger, pm, k);
+                    logger << std::endl;
+                }
+#endif
+                return true;
+            } else {
+                // target not better, not checking other directions
+                return false;
+            }
+        } else {
+            // if owned by ~<pl>, test if strategy is target
+            if (strategy[v] != -1 and target != strategy[v]) {
+                return false; // no need to do anything... strategy is still same
             }
         }
-    } else {
-        // in Vo so min!
-        // compute au for each successor and if it's smaller, take it
-        bool first = true;
-        int best_to = -1;
-        for (int to : out[n]) {
-            if (disabled[to]) continue; // not looking at this
-            au(tmp, pm_nodes + k*to, priority[n], k);
-
-            if (trace >= 2) {
-                logger << "successor node " << to << "/" << priority[to] << " results in";
-                pm_stream(logger, tmp, k);
-                logger << std::endl;
-            }
-
-            if (first || pm_less(tmp, res, k)) {
-                first = false;
-                for (int i=0; i<k; i++) res[i] = tmp[i];
-                best_to = to;
-            }
-        }
-        // now "res" contains the smallest au
-        if (pm_less(pm, res, k)) {
-            for (int i=0; i<k; i++) pm[i] = res[i];
-            changed_this = true;
-        }
-        strategy[n] = best_to; // because maybe just different strategy
     }
 
-    if (trace >= 2) {
-        if (strategy[n] != -1) logger << "updated pm for node " << n << " to node " << strategy[n] << " to";
-        else logger << "updated pm for node " << n << " to";
-        pm_stream(logger, pm_nodes+k*n, k);
-        logger << std::endl;
-    }
+    // Compute best measure by going over all successors
 
-    return changed_this;
-}
-
-bool
-QPTSolver::liftR(int node, int target)
-{
-    int *pm = pm_nodes + k*node; // obtain ptr to current progress measure
-
-    if (owner[node] == 0) {
-        // in Ve so max!
-        int tmp[k];
-        au(tmp, pm_nodes + k*target, priority[node], k);
-        if (!pm_less(pm, tmp, k)) return false;
-        for (int i=0; i<k; i++) pm[i] = tmp[i];
-        return true;
-    } else {
-        // in Vo so min!
-        if (strategy[node] != target) return false; // current strategy is unchanged...
-        bool first = true;
-        int best_to = -1;
-        int tmp[k], res[k];
-        for (int to : out[node]) {
-            if (disabled[to]) continue; // not looking at this
-            au(tmp, pm_nodes + k*to, priority[node], k);
-            if (first || pm_less(tmp, res, k)) {
-                first = false;
+    bool first = true;
+    for (int to : out[v]) {
+        if (disabled[to]) continue;
+        au(tmp, pm_nodes + k*to, pr, k, max, pl ? max_even : max_odd, pl);
+        if (pm_val(tmp, k, pl) > goal) tmp[0] = max; // goal reached, lift to Top
+#ifndef NDEBUG
+        if (trace >= 2) {
+            logger << "to successor " << label_vertex(to) << ":";
+            pm_stream(logger, tmp, k);
+            logger << std::endl;
+        }
+#endif
+        if (first) {
+            first = false;
+            for (int i=0; i<k; i++) res[i] = tmp[i];
+            strategy[v] = to;
+        } else if (owner[v] == pl) {
+            // we want the max
+            if (pm_less(res, tmp, k, pl)) {
                 for (int i=0; i<k; i++) res[i] = tmp[i];
-                best_to = to;
+                strategy[v] = to;
+            }
+        } else {
+            // we want the min
+            if (pm_less(tmp, res, k, pl)) {
+                for (int i=0; i<k; i++) res[i] = tmp[i];
+                strategy[v] = to;
             }
         }
-        strategy[node] = best_to; // because maybe just different strategy
-        // now "res" contains the smallest au
-        if (!pm_less(pm, res, k)) return false;
+    }
+
+    // now "res" contains the best au
+    if (pm_less(pm, res, k, pl)) {
+        // ok, it's an update
         for (int i=0; i<k; i++) pm[i] = res[i];
+#ifndef NDEBUG
+        if (trace) {
+            logger << "\033[1;32mnew measure\033[m of " << label_vertex(v) << ":";
+            pm_stream(logger, pm, k);
+            logger << std::endl;
+        }
+#endif
         return true;
+    } else{
+        return false;
     }
 }
+
 
 void
-QPTSolver::print_state(std::vector<int>* choices)
+QPTSolver::liftloop(int pl)
 {
-    std::vector<int> vec;
-    for (int i=0; i<n_nodes; i++) {
-        if (disabled[i]) continue;
-        int *pm = pm_nodes + k*i;
-        logger << std::setfill('0') << std::setw(2) << i << " : " << std::setfill('0') << std::setw(2) << priority[i] << " :";
-        pm_stream(logger, pm, k);
-        logger << " : ";
-        if (try_lift(i, vec)) logger << "\033[1;33m";
-        logger << "=>";
-        for (int to : vec) logger << " " << to;
-        logger << "\033[m";
-        logger << " " << "\033[1;35mcur:";
-        for (auto to : choices[i]) logger << " " << to;
-        logger << "\033[m\n";
+    /**
+     * Initialize/reset progress measures / strategy
+     */
+    k = pl ? k1 : k0;
+    max = pl ? max_odd : max_even;
+    goal = pl ? goal1 : goal0;
+    for (int i=0; i<k*n_nodes; i++) pm_nodes[i] = -1; // initialize all to _
+    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+
+    /**
+     * Run first lifting loop
+     */
+    for (int n=n_nodes-1; n>=0; n--) {
+        if (disabled[n]) continue;
+        lift_attempt++;
+        if (lift(n, -1, pl)) {
+            lift_count++;
+            for (int from : in[n]) {
+                if (disabled[from]) continue;
+                lift_attempt++;
+                if (lift(from, n, pl)) {
+                    lift_count++;
+                    todo_push(from);
+                }
+            }
+        }
     }
+
+    /**
+     * Lift until fixed point
+     */
+    while (!todo.empty()) {
+        int n = todo_pop();
+        for (int from : in[n]) {
+            if (disabled[from]) continue;
+            lift_attempt++;
+            if (lift(from, n, pl)) {
+                lift_count++;
+                todo_push(from);
+            }
+        }
+    }
+
+    /**
+     * Report final state.
+     */
+    if (trace) {
+        for (int v=0; v<n_nodes; v++) {
+            if (disabled[v]) continue;
+            int *pm = pm_nodes + v*k;
+
+            logger << "\033[1m" << label_vertex(v) << (owner[v]?" (odd)":" (even)") << "\033[m:";
+            pm_stream(logger, pm, k);
+
+            if (pm[0] == -1 or (pm[0]&1) != pl) {
+                if (owner[v] != pl) {
+                    if (strategy[v] == -1) logger << " no strategy!";
+                    else logger << " => " << label_vertex(strategy[v]);
+                }
+            }
+            
+            logger << std::endl;
+        }
+    }
+
+    /**
+     * Derive strategies, mark as solved (only for opponent).
+     */
+    for (int v=0; v<n_nodes; v++) {
+        if (disabled[v]) continue;
+        int *pm = pm_nodes + v*k;
+
+        if (pm[0] == -1 or (pm[0]&1) != pl) {
+            if (owner[v] != pl and strategy[v] == -1) LOGIC_ERROR;
+            oink->solve(v, 1-pl, owner[v] != pl ? strategy[v] : -1);
+        }
+    }
+
+    oink->flush();
 }
+
 
 void
 QPTSolver::run()
 {
-    // determine k
-    int even_vertices = 0;
-    for (int i=0; i<n_nodes; i++) if (!disabled[i] && (priority[i]&1) == 0) even_vertices++;
+    // determine number of even/odd vertices and highest even/odd priority
+    unsigned long even_vertices = 0, odd_vertices = 0;
+    max_even = 0; max_odd = 0;
+    for (int i=0; i<n_nodes; i++) {
+        if (disabled[i]) continue;
+
+        if ((priority[i]&1) == 0) {
+            if (priority[i] > max_even) max_even = priority[i];
+            even_vertices++;
+        } else {
+            if (priority[i] > max_odd) max_odd = priority[i];
+            odd_vertices++;
+        }
+    }
+
     // find k s.t. 2^{k-1} >= even_vertices+1
+    goal0 = even_vertices;
     even_vertices++;
-    k=1;
+    k0=1;
     while (even_vertices != 0) {
-        k++;
+        k0++;
         even_vertices >>= 1;
     }
 
-    // now create the data structure, for each node
-    pm_nodes = new int[k*n_nodes];
-    for (int i=0; i<k*n_nodes; i++) pm_nodes[i] = -1; // initialize all to _
-
-    strategy = new int[n_nodes];
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
-
-    /**
-     * Interactive lifting (fun!)
-     */
-    /*
-    std::vector<int> *choices = new std::vector<int>[n_nodes];
-    while (true) {
-        print_state(choices);
-        int n;
-        std::cin >> n;
-        if (n < 0 || n >= n_nodes) continue;
-        try_lift(n, choices[n]);
-        lift(n);
+    goal1 = odd_vertices;
+    odd_vertices++;
+    k1=1;
+    while (odd_vertices != 0) {
+        k1++;
+        odd_vertices >>= 1;
     }
-    delete[] choices;
-    */
+
+    logger << "for odd with even measures: k=" << k0 << std::endl;
+    logger << "for even with odd measures: k=" << k1 << std::endl;
+
+    // for allocation, just use biggest k
+    int big_k = k0 > k1 ? k0 : k1;
+
+    // now create the data structure, for each vertex a PM
+    pm_nodes = new int[big_k * n_nodes];
+    strategy = new int[n_nodes];
+
+    // initialize todo/dirty queues
+    todo.resize(n_nodes);
+    dirty.resize(n_nodes);
 
     lift_count = lift_attempt = 0;
 
-    const bool use_r = true; // use liftR instead of lift (look at predecessors)
-    const bool use_queue = false; // use a queue
-    const bool use_stack = true; // use a stack (if both are set, queue has priority)
+    liftloop(0);
 
-    if (use_r) {
-        if (use_queue or use_stack) {
-            /**
-             * Strategy that updates predecessors then marks updated predecessors for processing.
-             * Uses a queue/stack to store the dirty vertices.
-             */
+    logger << "after running for even, " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
+    logger << game->countUnsolved() << " unsolved vertices left." << std::endl;
 
-            int *dirty = new int[n_nodes];
-            for (int n=0; n<n_nodes; n++) dirty[n] = 0;
+    liftloop(1);
 
-            std::deque<int> todo;
-            for (int n=0; n<n_nodes; n++) {
-                if (disabled[n]) continue;
-                lift_attempt++;
-                if (lift(n)) {
-                    if (dirty[n]) dirty[n] = 0;
-                    lift_count++;
-                    for (int from : in[n]) {
-                        if (disabled[from]) continue;
-                        lift_attempt++;
-                        if (!liftR(from, n)) continue;
-                        lift_count++;
-                        if (dirty[from]) continue;
-                        dirty[from] = 1;
-                        todo.push_back(from);
-                    }
-                }
-            }
-
-            while (!todo.empty()) {
-                int n;
-                if (use_queue) {
-                    n = todo.front();
-                    todo.pop_front();
-                } else {
-                    n = todo.back();
-                    todo.pop_back();
-                }
-                dirty[n] = 0;
-                if ((lift_count % n_nodes) == 0) {
-                    if (trace) logger << "\033[1;38;5;208mIteration " << (lift_count / n_nodes) << "\033[m" << std::endl;
-                }
-                for (int from : in[n]) {
-                    if (disabled[from]) continue;
-                    lift_attempt++;
-                    if (!liftR(from, n)) continue;
-                    lift_count++;
-                    if (trace) {
-                        logger << "\033[1mUpdated node " << from << "/" << priority[from] << (owner[from]?" (odd)":" (even)") << "\033[m due to node " << n << "/" << priority[n] << " to";
-                        pm_stream(logger, pm_nodes + from*k, k);
-                        logger << std::endl;
-                    }
-                    if (dirty[from]) continue;
-                    dirty[from] = 1;
-                    todo.push_back(from);
-                }
-            }
-
-            delete[] dirty;
-        } else {
-            /**
-             * Strategy that updates predecessors then marks updated predecessors for processing.
-             * But does not use a queue or a stack.
-             */
-            bool changed;
-            int *dirty = new int[n_nodes]; // dirty is initialized in the first round
-
-            ++iterations;
-            if (trace) logger << "\033[1;38;5;208mIteration " << iterations << "\033[m" << std::endl;
-            for (int n=0; n<n_nodes; n++) {
-                if (disabled[n]) continue;
-                lift_attempt++;
-                if (lift(n)) {
-                    if (dirty[n]) dirty[n] = 0;
-                    lift_count++;
-                    for (int from : in[n]) {
-                        if (disabled[from]) continue;
-                        lift_attempt++;
-                        if (!liftR(from, n)) continue;
-                        lift_count++;
-                        if (dirty[from] == 0) dirty[from] = 1;
-                    }
-                }
-            }
-
-            do {
-                ++iterations;
-                if (trace) logger << "\033[1;38;5;208mIteration " << iterations << "\033[m" << std::endl;
-
-                changed = false;
-                for (int n=0; n<n_nodes; n++) {//n_nodes-1; n>=0; n--) {
-                    if (disabled[n]) continue; // not looking at this
-                    if (!dirty[n]) continue; // not dirty, continue
-                    dirty[n] = 0; // unmark
-
-                    for (int from : in[n]) {
-                        if (disabled[from]) continue;
-                        lift_attempt++;
-                        if (!liftR(from, n)) continue;
-                        lift_count++;
-                        changed = true;
-                        if (dirty[from] == 0) dirty[from] = 1;
-                    }
-                }
-            } while (changed);
-
-            delete[] dirty;
-        }
-    } else if (use_queue or use_stack) {
-        /**
-         * Strategy that updates nodes then marks predecessors for processing.
-         * Uses a queue/stack to store the dirty vertices.
-         */
-
-        int *dirty = new int[n_nodes];
-        for (int n=0; n<n_nodes; n++) dirty[n] = 0;
-
-        std::deque<int> todo;
-        for (int n=0; n<n_nodes; n++) {
-            if (disabled[n]) continue;
-            lift_attempt++;
-            if (lift(n)) {
-                lift_count++;
-                for (int from : in[n]) {
-                    if (disabled[from] || dirty[from]) continue;
-                    dirty[from] = 1;
-                    todo.push_back(from);
-                }
-            }
-        }
-
-        while (!todo.empty()) {
-            int n;
-            if (use_queue) {
-                n = todo.front();
-                todo.pop_front();
-            } else {
-                n = todo.back();
-                todo.pop_back();
-            }
-            dirty[n] = 0;
-            lift_attempt++;
-            if (lift(n)) {
-                if (trace) {
-                    logger << "\033[1mUpdated node " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m to";
-                    pm_stream(logger, pm_nodes + n*k, k);
-                    logger << std::endl;
-                }
-
-                lift_count++;
-                for (int from : in[n]) {
-                    if (disabled[from] || dirty[from]) continue;
-                    dirty[from] = 1;
-                    todo.push_back(from);
-                }
-            }
-        }
-
-        delete[] dirty;
-    } else {
-        /**
-         * Strategy that updates nodes then marks predecessors for processing.
-         * But does not use a queue or a stack.
-         */
-        bool first_round = true;
-        bool changed;
-        int *dirty = new int[n_nodes]; // dirty is initialized in the first round
-        do {
-            ++iterations;
-            if (trace) logger << "\033[1;38;5;208mIteration " << iterations << "\033[m" << std::endl;
-
-            changed = false;
-            for (int n=0; n<n_nodes; n++) {//n_nodes-1; n>=0; n--) {
-                if (disabled[n]) continue; // not looking at this
-                if (!first_round && !dirty[n]) continue; // not dirty or first round, continue
-                dirty[n] = 0; // unmark
-
-                lift_attempt++;
-                if (lift(n)) {
-                    if (trace) {
-                        logger << "\033[1mUpdated node " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m to";
-                        pm_stream(logger, pm_nodes + n*k, k);
-                        logger << std::endl;
-                    }
-                    lift_count++;
-                    changed = true;
-                    for (int from : in[n]) dirty[from] = 1;
-                }
-            }
-            first_round = false;
-        } while (changed);
-        delete[] dirty;
-    }
-
-    // Now set dominions and derive strategy for odd.
-    for (int i=0; i<n_nodes; i++) {
-        if (disabled[i]) continue;
-        int *pm = pm_nodes + i*k;
-        int winner = pm[0]&1;
-        oink->solve(i, winner, (game->owner[i] == 1 && winner == 1) ? strategy[i] : -1);
-    }
+    logger << "after running for odd, " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
+    logger << game->countUnsolved() << " unsolved vertices left." << std::endl;
 
     delete[] pm_nodes;
     delete[] strategy;

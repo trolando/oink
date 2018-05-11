@@ -341,7 +341,7 @@ int main(int argc, char **argv)
             out << "verifying solution..." << std::endl;
             Verifier v(&pg, out);
             double vbegin = wctime();
-            v.verify(true, opts.count("qpt")==0, true);
+            v.verify(true, true, true);
             double vend = wctime();
             out << "solution verified (" << v.n_strategies << " strategies)." << std::endl;
             out << "verification took " << std::fixed << (vend - vbegin) << " sec." << std::endl;
