@@ -219,7 +219,7 @@ au(int *dst, int *src, int d, int k, int max, int maxopp, int pl)
 
 
 bool
-QPTSolver::lift(int v, int target, int pl)
+QPTSolver::lift(int v, int target)
 {
     // check if already Top
     int * const pm = pm_nodes + k*v; // obtain ptr to current progress measure
@@ -241,7 +241,7 @@ QPTSolver::lift(int v, int target, int pl)
     if (1 and target != -1) {
         if (owner[v] == pl) {
             // if owned by <pl>, just check if target is better.
-            au(tmp, pm_nodes + k*target, pr, k, max, pl ? max_even : max_odd, pl);
+            au(tmp, pm_nodes + k*target, pr, k, max, maxo, pl);
             if (pm_val(tmp, k, pl) > goal) tmp[0] = max; // lol
             if (pm_less(pm, tmp, k, pl)) {
                 // target is better, update, report, return
@@ -271,7 +271,7 @@ QPTSolver::lift(int v, int target, int pl)
     bool first = true;
     for (int to : out[v]) {
         if (disabled[to]) continue;
-        au(tmp, pm_nodes + k*to, pr, k, max, pl ? max_even : max_odd, pl);
+        au(tmp, pm_nodes + k*to, pr, k, max, maxo, pl);
         if (pm_val(tmp, k, pl) > goal) tmp[0] = max; // goal reached, lift to Top
 #ifndef NDEBUG
         if (trace >= 2) {
@@ -318,14 +318,11 @@ QPTSolver::lift(int v, int target, int pl)
 
 
 void
-QPTSolver::liftloop(int pl)
+QPTSolver::liftloop()
 {
     /**
      * Initialize/reset progress measures / strategy
      */
-    k = pl ? k1 : k0;
-    max = pl ? max_odd : max_even;
-    goal = pl ? goal1 : goal0;
     for (int i=0; i<k*n_nodes; i++) pm_nodes[i] = -1; // initialize all to _
     for (int i=0; i<n_nodes; i++) strategy[i] = -1;
 
@@ -335,12 +332,12 @@ QPTSolver::liftloop(int pl)
     for (int n=n_nodes-1; n>=0; n--) {
         if (disabled[n]) continue;
         lift_attempt++;
-        if (lift(n, -1, pl)) {
+        if (lift(n, -1)) {
             lift_count++;
             for (int from : in[n]) {
                 if (disabled[from]) continue;
                 lift_attempt++;
-                if (lift(from, n, pl)) {
+                if (lift(from, n)) {
                     lift_count++;
                     todo_push(from);
                 }
@@ -356,7 +353,7 @@ QPTSolver::liftloop(int pl)
         for (int from : in[n]) {
             if (disabled[from]) continue;
             lift_attempt++;
-            if (lift(from, n, pl)) {
+            if (lift(from, n)) {
                 lift_count++;
                 todo_push(from);
             }
@@ -402,43 +399,74 @@ QPTSolver::liftloop(int pl)
 }
 
 
+static int
+ceil_log2(unsigned long long x)
+{
+    static const unsigned long long t[6] = {
+        0xFFFFFFFF00000000ull,
+        0x00000000FFFF0000ull,
+        0x000000000000FF00ull,
+        0x00000000000000F0ull,
+        0x000000000000000Cull,
+        0x0000000000000002ull
+    };
+
+    int y = (((x & (x - 1)) == 0) ? 0 : 1);
+    int j = 32;
+    int i;
+
+    for (i = 0; i < 6; i++) {
+        int k = (((x & t[i]) == 0) ? 0 : j);
+        y += k;
+        x >>= k;
+        j >>= 1;
+    }
+
+    return y;
+}
+
+
 void
-QPTSolver::run()
+QPTSolver::updateState(unsigned long &_n0, unsigned long &_n1, int &_max0, int &_max1, int &_k0, int &_k1)
 {
     // determine number of even/odd vertices and highest even/odd priority
-    unsigned long even_vertices = 0, odd_vertices = 0;
-    max_even = 0; max_odd = 0;
+    unsigned long n0 = 0;
+    unsigned long n1 = 0;
+    int max0 = -1;
+    int max1 = -1;
+
     for (int i=0; i<n_nodes; i++) {
         if (disabled[i]) continue;
-
-        if ((priority[i]&1) == 0) {
-            if (priority[i] > max_even) max_even = priority[i];
-            even_vertices++;
+        const int pr = priority[i];
+        if ((pr&1) == 0) {
+            if (pr > max0) max0 = pr;
+            n0++;
         } else {
-            if (priority[i] > max_odd) max_odd = priority[i];
-            odd_vertices++;
+            if (pr > max1) max1 = pr;
+            n1++;
         }
     }
 
-    // find k s.t. 2^{k-1} >= even_vertices+1
-    goal0 = even_vertices;
-    even_vertices++;
-    k0=1;
-    while (even_vertices != 0) {
-        k0++;
-        even_vertices >>= 1;
-    }
+    _n0 = n0;
+    _n1 = n1;
+    _max0 = max0;
+    _max1 = max1;
 
-    goal1 = odd_vertices;
-    odd_vertices++;
-    k1=1;
-    while (odd_vertices != 0) {
-        k1++;
-        odd_vertices >>= 1;
-    }
+    _k0 = 1+ceil_log2(n0+1);
+    _k1 = 1+ceil_log2(n1+1);
+}
 
-    logger << "for odd with even measures: k=" << k0 << std::endl;
-    logger << "for even with odd measures: k=" << k1 << std::endl;
+void
+QPTSolver::run()
+{
+    unsigned long goal0, goal1;
+    int max0, max1;
+    int k0, k1;
+
+    updateState(goal0, goal1, max0, max1, k0, k1);
+    
+    logger << "for odd with even measures: n0=" << goal0 << ", k=" << k0 << std::endl;
+    logger << "for even with odd measures: n1=" << goal1 << ", k=" << k1 << std::endl;
 
     // for allocation, just use biggest k
     int big_k = k0 > k1 ? k0 : k1;
@@ -451,22 +479,77 @@ QPTSolver::run()
     todo.resize(n_nodes);
     dirty.resize(n_nodes);
 
-    lift_count = lift_attempt = 0;
+    lift_count = 0;
+    lift_attempt = 0;
 
-    liftloop(0);
+    if (bounded) {
+        int i;
+        for (i=1; i<=big_k; i++) {
+            long _l = lift_count, _a = lift_attempt;
+            uint64_t _c = game->countUnsolved();
+            uint64_t c = _c;
 
-    logger << "after running for even, " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
-    logger << game->countUnsolved() << " unsolved vertices left." << std::endl;
+            if (i <= k0) {
+                pl = 0;
+                k = i;
+                max = max0;
+                maxo = max1;
+                goal = goal0;
+                liftloop();
 
-    liftloop(1);
+                c = game->countUnsolved();
+                logger << "after even with k=" << k << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
+                if (c == 0) break;
 
-    logger << "after running for odd, " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
-    logger << game->countUnsolved() << " unsolved vertices left." << std::endl;
+                if (c != _c) updateState(goal0, goal1, max0, max1, k0, k1);
+                _l = lift_count;
+                _a = lift_attempt;
+            }
+            if (i <= k1) {
+                pl = 1;
+                k = i;
+                max = max1;
+                maxo = max0;
+                goal = goal1;
+                liftloop();
+
+                c = game->countUnsolved();
+                logger << "after odd  with k=" << k << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
+                if (c == 0) break;
+
+                if (c != _c) updateState(goal0, goal1, max0, max1, k0, k1);
+            }
+            if (c != _c) i--;
+        } 
+
+        logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts, max k " << i << "." << std::endl;
+    } else {
+        pl = 0;
+        k = k0;
+        max = max0;
+        maxo = max1;
+        goal = goal0;
+        liftloop();
+
+        uint64_t c = game->countUnsolved();
+        logger << "after even, " << lift_count << " lifts, " << lift_attempt << " lift attempts, " << c << " unsolved left." << std::endl;
+
+        if (c != 0) {
+            updateState(goal0, goal1, max0, max1, k0, k1);
+
+            pl = 1;
+            k = k1;
+            max = max1;
+            maxo = max0;
+            goal = goal1;
+            liftloop();
+        }
+
+        logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
+    }
 
     delete[] pm_nodes;
     delete[] strategy;
-
-    logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
 }
 
 }

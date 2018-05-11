@@ -52,6 +52,7 @@ Solvers::Solvers()
     add("sspm", "succinct small progress measures", 0, [] (Oink* oink, Game* game) { return new SSPMSolver(oink, game); });
     add("bsspm", "bounded succinct small progress measures", 0, [] (Oink* oink, Game* game) { return new BoundedSSPMSolver(oink, game); });
     add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game) { return new QPTSolver(oink, game); });
+    add("bqpt", "bounded quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game) { return new BoundedQPTSolver(oink, game); });
     add("tl", "tangle learning", 0, [] (Oink* oink, Game* game) { return new TLSolver(oink, game); });
     add("atl", "alternating tangle learning", 0, [] (Oink* oink, Game* game) { return new ATLSolver(oink, game); });
     add("otftl", "on-the-fly tangle learning", 0, [] (Oink* oink, Game* game) { return new OTFTLSolver(oink, game); });

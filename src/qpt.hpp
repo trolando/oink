@@ -32,22 +32,26 @@ public:
 
     virtual void run();
 
-    int iterations = 0;
-    int lift_attempt = 0;
-    int lift_count = 0;
-
 protected:
     int *pm_nodes;
     int *strategy;
-    int k, k0, k1;
-    int max, max_even, max_odd;
-    unsigned long goal, goal0, goal1;
+
+    int pl;              // current measures of <pl> parity
+    int k;               // current measures: <k> components
+    int max, maxo;       // highest priority for current player / opponent
+    unsigned long goal;  // number of vertices of <pl> parity
+
+    long lift_count;
+    long lift_attempt;
 
     uintqueue todo;
     boost::dynamic_bitset<unsigned long long> dirty;
 
-    bool lift(int v, int target, int pl);
-    void liftloop(int pl);
+    bool bounded = false;
+
+    bool lift(int v, int target);
+    void liftloop();
+    void updateState(unsigned long &_n0, unsigned long &_n1, int &_max0, int &_max1, int &_k0, int &_k1);
 
     void todo_push(int node) {
         if (dirty[node]) return;
@@ -66,6 +70,13 @@ protected:
 #endif
         return node;
     }
+};
+
+class BoundedQPTSolver : public QPTSolver
+{
+public:
+    BoundedQPTSolver(Oink *oink, Game *game) : QPTSolver(oink, game) { bounded = true; }
+    virtual ~BoundedQPTSolver() { }
 };
 
 }
