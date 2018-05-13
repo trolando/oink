@@ -19,6 +19,7 @@
 #include <queue>
 #include <stack>
 #include <iostream>
+#include <chrono>
 
 #include "oink.hpp"
 #include "solvers.hpp"
@@ -48,7 +49,7 @@ Oink::~Oink()
 }
 
 /**
- * Find all SCCs at priority p, game limited to nodes with priority <= p 
+ * Find all SCCs at priority p, game limited to nodes with priority <= p
  * Then for every SCC that contains edges and a node with priority p, can win
  * with priority p and is therefore a counterexample to the strategy.
  */
@@ -399,8 +400,6 @@ VOID_TASK_1(solve_loop, Oink*, s)
 void
 Oink::solveLoop()
 {
-    if (game->gameSolved()) return;
-
     /**
      * Report chosen solver.
      */
@@ -445,11 +444,11 @@ Oink::solveLoop()
             flush();
 
             if (full_solver) {
-                break;
+                return;
             } else {
                 auto c = game->countUnsolved();
                 logger << c << " nodes left." << std::endl;
-                if (c == 0) break;
+                if (c == 0) return;
             }
         } while (true);
     }
@@ -458,6 +457,9 @@ Oink::solveLoop()
 void
 Oink::run()
 {
+    using namespace std::chrono;
+    auto time_before = high_resolution_clock::now();
+
     /**
      * Now inflate / compress / renumber...
      */
@@ -484,7 +486,14 @@ Oink::run()
     flush();
     */
 
-    if (solveSingle and solveSingleParity()) return;
+    if (solveSingle and solveSingleParity()) {
+        // already reported in solveSingleParity
+        auto time_after = high_resolution_clock::now();
+        double diff = duration_cast<duration<double>>(time_after - time_before).count();
+        logger << "preprocessing took " << std::fixed << diff << " sec." << std::endl;
+        logger << "solved by preprocessor." << std::endl;
+        return;
+    }
 
     if (removeLoops) {
         int count = solveSelfloops();
@@ -502,6 +511,15 @@ Oink::run()
         logger << "\033[1;7mWARNING\033[m: running PSI solver without removing winner-controlled winning cycles!" << std::endl;
     }
 
+    auto time_mid = high_resolution_clock::now();
+
+    if (game->gameSolved()) {
+        double preprocess_time = duration_cast<duration<double>>(time_mid - time_before).count();
+        logger << "preprocessing took " << std::fixed << preprocess_time << " sec." << std::endl;
+        logger << "solved by preprocessor." << std::endl;
+        return;
+    }
+        
     if (solver == -1) {
         logger << "no solver selected" << std::endl;
         return;
@@ -532,6 +550,9 @@ Oink::run()
         }
     }
 
+    // building these arrays is not really a preprocessing step in my opinion
+    time_mid = high_resolution_clock::now();
+
     /***
      * Start Lace if we are parallel
      */
@@ -553,6 +574,12 @@ Oink::run()
     } else {
         solveLoop();
     }
+
+    auto time_after = high_resolution_clock::now();
+    double preprocess_time = duration_cast<duration<double>>(time_mid - time_before).count();
+    logger << "preprocessing took " << std::fixed << preprocess_time << " sec." << std::endl;
+    double solving_time = duration_cast<duration<double>>(time_after - time_mid).count();
+    logger << "solving took " << std::fixed << solving_time << " sec." << std::endl;
 
     delete[] outa;
     delete[] ina;

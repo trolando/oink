@@ -329,7 +329,7 @@ int main(int argc, char **argv)
     double begin = wctime();
     en.run();
     double end = wctime();
-    out << "solving took " << std::fixed << (end-begin) << " sec." << std::endl;
+    out << "total solving time: " << std::fixed << (end-begin) << " sec." << std::endl;
 
     /**
      * STEP 7
