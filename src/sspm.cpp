@@ -611,7 +611,7 @@ SSPMSolver::run()
         }
     }
 
-    logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
+    logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts, max l " << i << "." << std::endl;
 }
 
 }
