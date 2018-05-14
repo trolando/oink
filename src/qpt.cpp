@@ -493,7 +493,7 @@ QPTSolver::run()
                 pl = 0;
                 k = i;
                 max = max0;
-                maxo = max1;
+                maxo = max1 != -1 ? max1 : 0; // used in bump
                 goal = goal0;
                 liftloop();
 
@@ -509,7 +509,7 @@ QPTSolver::run()
                 pl = 1;
                 k = i;
                 max = max1;
-                maxo = max0;
+                maxo = max0 != -1 ? max0 : 1; // used in bump
                 goal = goal1;
                 liftloop();
 
@@ -527,7 +527,7 @@ QPTSolver::run()
         pl = 0;
         k = k0;
         max = max0;
-        maxo = max1;
+        maxo = max1 != -1 ? max1 : 0; // used in bump
         goal = goal0;
         liftloop();
 
@@ -540,7 +540,7 @@ QPTSolver::run()
             pl = 1;
             k = k1;
             max = max1;
-            maxo = max0;
+            maxo = max0 != -1 ? max0 : 1; // used in bump
             goal = goal1;
             liftloop();
         }
