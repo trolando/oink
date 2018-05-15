@@ -440,12 +440,13 @@ Oink::solveLoop()
             s->run();
             delete s;
 
-            // flush the todo buffer
-            flush();
-
             if (full_solver) {
+                // trash the todo buffer
+                todo.clear();
                 return;
             } else {
+                // flush the todo buffer
+                flush();
                 auto c = game->countUnsolved();
                 logger << c << " nodes left." << std::endl;
                 if (c == 0) return;
