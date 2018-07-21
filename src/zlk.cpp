@@ -29,6 +29,8 @@ namespace pg {
 static const int DIS = 0x80000000; // permanently disabled vertex
 static const int BOT = 0x80000001; // bottom state for vertex
 
+#define KC "\033[36;1m"
+
 ZLKSolver::ZLKSolver(Oink *oink, Game *game) : Solver(oink, game), Q(game->n_nodes)
 {
 }
@@ -211,7 +213,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
         Q.push(i);
 
 #ifndef NDEBUG
-        if (trace >= 2) fmt::printf(logger, "head node %d (%d)\n", i, priority[i]);
+        if (trace >= 2) logger << KC"head\033[m " << label_vertex(i) << std::endl;
 #endif
 
         while (!Q.empty()) {
@@ -230,7 +232,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
                     strategy[from] = cur;
                     Q.push(from);
 #ifndef NDEBUG
-                    if (trace >= 2) fmt::printf(logger, "attracted %d (%d)\n", from, priority[from]);
+                    if (trace >= 2) logger << KC"attracted\033[m " << label_vertex(from) << std::endl;
 #endif
                 } else {
                     // owned by other parity
@@ -253,7 +255,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
                         strategy[from] = -1;
                         Q.push(from);
 #ifndef NDEBUG
-                        if (trace >= 2) fmt::printf(logger, "forced %d (%d)\n", from, priority[from]);
+                        if (trace >= 2) logger << KC"forced\033[m " << label_vertex(from) << std::endl;
 #endif
                     } else {
                         region[from] = count;
@@ -303,6 +305,9 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
                 break;
             }
             if (!can_escape) {
+#ifndef NDEBUG
+                if (trace >= 2) logger << KC"forced distraction\033[m " << label_vertex(i) << std::endl;
+#endif
                 // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", i, priority[i], 1-pl);
                 region[i] = r;
                 winning[i] = 1-pl;
@@ -315,6 +320,9 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
             for (int to = *_out; to != -1; to = *++_out) {
                 if (region[to] < r) continue; // not in subgame, or -1/-2
                 if (winning[to] == pl) continue; // not attracting
+#ifndef NDEBUG
+                if (trace >= 2) logger << KC"attracted distraction\033[m " << label_vertex(i) << std::endl;
+#endif
                 // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", i, priority[i], 1-pl);
                 region[i] = r;
                 winning[i] = 1-pl;
@@ -344,6 +352,9 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
 
             if (owner[from] != pl) {
                 // owned by other
+#ifndef NDEBUG
+                if (trace >= 2) logger << KC"attracted\033[m " << label_vertex(from) << std::endl;
+#endif
                 // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", from, priority[from], 1-pl);
                 region[from] = r;
                 winning[from] = 1-pl;
@@ -361,6 +372,9 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
                     break;
                 }
                 if (can_escape) continue;
+#ifndef NDEBUG
+                if (trace >= 2) logger << KC"forced\033[m " << label_vertex(from) << std::endl;
+#endif
                 // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", from, priority[from], 1-pl);
                 region[from] = r;
                 winning[from] = 1-pl;
@@ -461,7 +475,7 @@ ZLKSolver::run()
         const int pl = pr&1;
 
 #ifndef NDEBUG
-        if (trace) fmt::printf(logger, "\n\033[1mDepth %d phase %d\033[m: node %d priority %d\n", h-0, phase, i, pr);
+        if (trace) fmt::printf(logger, "\n\033[1;37mDepth %d phase %d\033[m: node %d priority %d\n", h-0, phase, i, pr);
 #endif
 
         if (phase == 0) {
