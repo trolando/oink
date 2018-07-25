@@ -623,8 +623,9 @@ TLSolver::run()
     int highestEven = -1;                // highest even region
     int highestOdd = -1;                 // highest odd region
 
-    if (trace >= 1 and alternating) {
-        logger << "\033[1;38;5;196mround\033[m \033[1;36m" << turns-1 << "\033[m" << std::endl;
+    if (trace >= 1) {
+        if (alternating) logger << "\033[1;38;5;196mround\033[m \033[1;36m" << turns-1 << "\033[m" << std::endl;
+        else logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "\033[m" << std::endl;
     }
 
     int pr = max_prio;
@@ -675,6 +676,9 @@ TLSolver::run()
                 attract(pr);
                 skipComputeRegion = true; // do not recompute region
                 iterations++;
+                if (trace >= 1) {
+                    logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations<< "\033[m" << std::endl;
+                }
                 foundNewTangles = false; // reset flag
                 skipUntilChange = false; // reset flag
                 highestAttracting = -1; // reset value
@@ -852,7 +856,7 @@ TLSolver::run()
                 logger << "solved with " << tangles << " tangles and " << turns << " turns." << std::endl;
             } else {
                 logger << "found " << dominions << " dominions." << std::endl;
-                logger << "solved with " << tangles << " tangles and " << iterations << " iterations." << std::endl;
+                logger << "solved with " << tangles << " tangles and " << iterations+1 << " iterations." << std::endl;
             }
             return;
         }
