@@ -89,9 +89,11 @@ RRDPSolver::run()
 
     // reset statistics
     promotions = 0;
+    int performances = 0;
 
     // set to track delayed promotions
     std::vector<int> P;
+    int del0 = 0, del1 = 0, discarded = 0;
 
     /**
      * Two loops: the outer (normal) loop, and the inner (promotion-chain) loop.
@@ -110,6 +112,7 @@ RRDPSolver::run()
             if (max == -1) break; // done
 
             if (trace) logger << "performing delayed promotions of player " << (max&1) << std::endl;
+            performances++;
             for (int i=0; i<n_nodes; i++) {
                 if (region[i] == -2) continue;
                 if (region_[i] != -1) {
@@ -123,6 +126,9 @@ RRDPSolver::run()
             P.clear();
             if (trace) logger << "finished performing delayed promotions" << std::endl;
             i = inverse[max];
+            promotions += (max&1) ? del1 : del0;
+            discarded += (max&1) ? del0 : del1;
+            del0 = del1 = 0;
             continue;
         }
 
@@ -154,10 +160,11 @@ RRDPSolver::run()
                     // restart algorithm and break inner loop
                     i = n_nodes - 1;
                     // reset everything... (sadly)
-                    for (int j=0; j<n_nodes; j++) region[j] = disabled[j] ? -2 : priority[j];
-                    for (int j=0; j<n_nodes; j++) strategy[j] = -1;
+                    // for (int j=0; j<n_nodes; j++) region[j] = disabled[j] ? -2 : priority[j];
+                    // for (int j=0; j<n_nodes; j++) strategy[j] = -1;
                     for (int j=0; j<n_nodes; j++) region_[j] = -1;
                     P.clear();
+                    del0 = del1 = 0;
                     break;
                 } else {
                     // check if we are locked or not
@@ -182,6 +189,8 @@ RRDPSolver::run()
                         // found delayed promotion
                         if (trace) logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m" << std::endl;
                         delayed++;
+                        if (p&1) del1++;
+                        else del0++;
                         // emulate delayed promotion in region_
                         for (int i : regions[p]) region_[i] = res;
                         // skip to next priority and break inner loop
@@ -213,7 +222,7 @@ RRDPSolver::run()
     delete[] strategy;
     delete[] inverse;
 
-    logger << "solved with " << promotions << "+" << delayed << " promotions." << std::endl;
+    logger << "solved with " << promotions << " promotions, " << performances << "x performing delayed promotions (delayed " << delayed << ", discarded " << discarded << ", total " << promotions+discarded << ")" << std::endl;
 }
 
 }

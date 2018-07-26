@@ -93,9 +93,11 @@ DPSolver::run()
 
     // reset statistics
     promotions = 0;
+    int performances = 0;
 
     // set to track delayed promotions
     std::vector<int> P;
+    int del0=0, del1=0, discarded=0;
 
     /**
      * Two loops: the outer (normal) loop, and the inner (promotion-chain) loop.
@@ -115,6 +117,7 @@ DPSolver::run()
 
             // perform delayed promotions of highest player
             if (trace) logger << "performing delayed promotions of player " << (max&1) << std::endl;
+            performances++;
             for (int i=0; i<n_nodes; i++) {
                 if (region[i] == -2) continue;
                 if (region_[i] != -1) {
@@ -129,11 +132,16 @@ DPSolver::run()
             // increase reset value if needed
             if (max&1) {
                 if (max > reset0) reset0 = max-1;
+                promotions += del1;
+                discarded += del0;
             } else {
                 if (max > reset1) reset1 = max-1;
+                promotions += del0;
+                discarded += del1;
             }
             if (trace) logger << "finished performing delayed promotions" << std::endl;
             i = inverse[max];
+            del1 = del0 = 0;
             continue;
         }
 
@@ -173,8 +181,8 @@ DPSolver::run()
                     // restart algorithm and break inner loop
                     i = n_nodes - 1;
                     // reset everything... (sadly)
-                    for (int j=0; j<n_nodes; j++) region[j] = disabled[j] ? -2 : priority[j];
-                    for (int j=0; j<n_nodes; j++) strategy[j] = -1;
+                    // for (int j=0; j<n_nodes; j++) region[j] = disabled[j] ? -2 : priority[j];
+                    // for (int j=0; j<n_nodes; j++) strategy[j] = -1;
                     for (int j=0; j<n_nodes; j++) region_[j] = -1;
                     reset0 = reset1 = -1;
                     P.clear();
@@ -204,8 +212,20 @@ DPSolver::run()
                     }
                     if (locked) {
                         // found delayed promotion
-                        if (trace) logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m" << std::endl;
+                        if (trace) {
+                            if (trace >= 2) {
+                                logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m:";
+                                for (int n : regions[p]) {
+                                    logger << " \033[37m" << label_vertex(n) << "\033[m";
+                                }
+                                logger << std::endl;
+                            } else {
+                                logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m" << std::endl;
+                            }
+                        }
                         delayed++;
+                        if (p&1) del1++;
+                        else del0++;
                         // emulate delayed promotion in region_
                         for (int i : regions[p]) region_[i] = res;
                         // skip to next priority and break inner loop
@@ -245,7 +265,7 @@ DPSolver::run()
     delete[] strategy;
     delete[] inverse;
 
-    logger << "solved with " << promotions << "+" << delayed << " promotions." << std::endl;
+    logger << "solved with " << promotions << " promotions, " << performances << "x performing delayed promotions (delayed " << delayed << ", discarded " << discarded << ", total " << promotions+discarded << ")" << std::endl;
 }
 
 }

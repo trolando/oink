@@ -63,7 +63,7 @@ PPSolver::attract(int prio, std::queue<int> queue)
                 region[from] = prio;
                 strategy[from] = cur;
                 queue.push(from);
-                if (trace >= 2) logger << "\033[1;37mattracted \033[36m" << priority[from] << " \033[37mto \033[36m" << prio << "\033[m (via " << priority[cur] << ")" << std::endl;
+                if (trace >= 3) logger << "\033[1;37mattracted \033[36m" << label_vertex(from) << " \033[37mto \033[36m" << prio << "\033[m (via " << label_vertex(cur) << ")" << std::endl;
             } else {
                 // if owned by other parity, check all outgoing edges
                 bool can_escape = false;
@@ -81,7 +81,7 @@ PPSolver::attract(int prio, std::queue<int> queue)
                 region[from] = prio;
                 strategy[from] = -1;
                 queue.push(from);
-                if (trace >= 2) logger << "\033[1;37mforced \033[36m" << priority[from] << " \033[37mto \033[36m" << prio << "\033[m" << std::endl;
+                if (trace >= 3) logger << "\033[1;37mforced \033[36m" << label_vertex(from)<< " \033[37mto \033[36m" << prio << "\033[m" << std::endl;
             }
         }
     }
@@ -92,7 +92,17 @@ PPSolver::promote(int from, int to)
 {
     assert(from < to);
 
-    if (trace) logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m" << std::endl;
+    if (trace) {
+        if (trace >= 2) {
+            logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m:";
+            for (int n : regions[from]) {
+                logger << " \033[37m" << label_vertex(n) << "\033[m";
+            }
+            logger << std::endl;
+        } else {
+            logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m" << std::endl;
+        }
+    }
 
     // promote all nodes of region <from> to region <to>
     std::queue<int> queue;
@@ -239,13 +249,13 @@ PPSolver::reportRegion(int p)
     const int pl = p&1;
     logger << "\033[1;33mregion \033[36m" << p << "\033[m";
     for (int n : regions[p]) {
-        if (region[n] == p) logger << " \033[1m" << priority[n] << "\033[m";
+        if (region[n] == p) logger << " \033[37m" << label_vertex(n) << "\033[m";
         if (owner[n] == pl) {
             if (strategy[n] == -1) {
                 if (priority[n] != p) logger << "\033[31;1m--\033[m";
             } else {
-                if (disabled[strategy[n]] or region[strategy[n]] != p) logger << "(\033[31;1m" << priority[strategy[n]] << "\033[m)";
-                else logger << "(" << priority[strategy[n]] << ")";
+                if (disabled[strategy[n]] or region[strategy[n]] != p) logger << "->\033[31;1m" << label_vertex(strategy[n]) << "\033[m";
+                else logger << "->" << label_vertex(strategy[n]);
             }
         } else {
             bool got = false;
