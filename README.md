@@ -89,6 +89,7 @@ counter\_dp    | Counterexample to the DP solver
 counter\_m     | Counterexample of Maciej Gazda, PhD Thesis, Sec. 3.5
 counter\_qpt   | Counterexample of Fearnley et al, An ordered approach to solving parity games in quasi polynomial time and quasi linear space, SPIN 2017
 counter\_core  | Counterexample of Benerecetti et al, Robust Exponential Worst Cases for Divide-et-Impera Algorithms for Parity Games, GandALF 2017
+tc             | Two Counters game (counterexample to TL, ZLK, PP family)
 
 Instructions
 -----------

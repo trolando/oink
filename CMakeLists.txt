@@ -90,6 +90,9 @@ if(BUILD_EXTRA_TOOLS)
     add_executable(counter_core src/tools/counter_core.cpp)
     target_link_libraries(counter_core oink)
 
+    add_executable(tc src/tools/tc.cpp)
+    target_link_libraries(tc oink)
+
     add_executable(counter_qpt src/tools/counter_qpt.cpp)
 endif()
 
