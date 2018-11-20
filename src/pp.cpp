@@ -32,7 +32,10 @@ PPSolver::PPSolver(Oink *oink, Game *game) : Solver(oink, game)
 PPSolver::~PPSolver()
 {
 }
-
+void PPSolver::unattracted(int) {
+}
+void PPSolver::endAttracting(int prio) {
+}
 void
 PPSolver::attract(int prio, std::queue<int> queue)
 {
@@ -75,7 +78,10 @@ PPSolver::attract(int prio, std::queue<int> queue)
                         break;
                     }
                 }
-                if (can_escape) continue;
+                if (can_escape) {
+                  unattracted(from);
+                  continue;
+                }
                 // if all outgoing edges are prio >= p, attract to a-maximal region
                 rv.push_back(from);
                 region[from] = prio;
@@ -85,6 +91,7 @@ PPSolver::attract(int prio, std::queue<int> queue)
             }
         }
     }
+    endAttracting(prio);
 }
 
 void

@@ -43,6 +43,8 @@ protected:
     //std::set<std::pair<int,int>> seen;
 
     virtual void attract(int prio, std::queue<int> queue=std::queue<int>());
+    virtual void unattracted(int node);
+    virtual void endAttracting(int prio);
     virtual void promote(int from, int to);
     virtual void resetRegion(int priority);
     virtual bool setupRegion(int index, int priority, bool mustReset);

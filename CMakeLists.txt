@@ -57,6 +57,9 @@ add_library(oink
     src/rtl.cpp
     src/ptl.cpp
     src/dtl.cpp
+    src/ppj.cpp
+    src/zlkj.cpp
+    src/zlkjb.cpp
 )
 find_package(Boost COMPONENTS iostreams)
 target_link_libraries(oink pthread ${Boost_LIBRARIES})
@@ -111,4 +114,3 @@ install(TARGETS oink DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(TARGETS solve DESTINATION "${CMAKE_INSTALL_BINDIR}")
 install(FILES src/oink.hpp src/game.hpp src/uintqueue.hpp DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/oink.pc" DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-

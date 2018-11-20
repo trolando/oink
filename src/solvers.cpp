@@ -17,6 +17,9 @@
 #include "solvers.hpp"
 
 #include "zlk.hpp"
+#include "zlkj.hpp"
+#include "zlkjb.hpp"
+#include "ppj.hpp"
 #include "pp.hpp"
 #include "ppp.hpp"
 #include "rr.hpp"
@@ -43,8 +46,11 @@ Solvers::Solvers()
     add("zlkq", "QPT Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKQSolver(oink, game); });
     add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKSolver(oink, game); });
     add("uzlk", "unoptimized Zielonka", 1, [] (Oink* oink, Game* game) { return new UnoptimizedZLKSolver(oink, game); });
+    add("zlkj", "justified Zielonka", 0, [] (Oink* oink, Game* game) { return new ZLKJSolver(oink, game); });
+    add("zlkjb", "justified Zielonka variant b", 0, [] (Oink* oink, Game* game) { return new ZLKJBSolver(oink, game); });
     add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game) { return new NPPSolver(oink, game); });
     add("pp", "priority promotion PP", 0, [] (Oink* oink, Game* game) { return new PPSolver(oink, game); });
+    add("ppj", "priority promotion PPJ", 0, [] (Oink* oink, Game* game) { return new PPJSolver(oink, game); });
     add("ppp", "priority promotion PP+", 0, [] (Oink* oink, Game* game) { return new PPPSolver(oink, game); });
     add("rr", "priority promotion RR", 0, [] (Oink* oink, Game* game) { return new RRSolver(oink, game); });
     add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink* oink, Game* game) { return new DPSolver(oink, game); });
