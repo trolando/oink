@@ -82,7 +82,10 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         } else {
             // if loser, check whether the loser can escape
             for (auto to : game->out[i]) {
-                if (!game->solved[to] or game->winner[to] != dom) throw "loser can escape";
+                if (!game->solved[to] or game->winner[to] != dom) {
+                    printf("escape edge from %d/%d to %d/%d\n", i, game->priority[i], to, game->priority[to]);
+                    throw "loser can escape";
+                }
             }
             // and of course that no strategy is set
             if (game->strategy[i] != -1) throw "losing node has strategy";
