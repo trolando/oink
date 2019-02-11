@@ -1,6 +1,8 @@
 #!/bin/bash
-mkdir dot
+mkdir -p dot
 for f in vb*
 do
-    ../build/dotty $f | dot -Tpng > dot/$f.png
+    if [ ! -e dot/$f.png ]; then
+        ../build/dotty $f | dot -Tpng > dot/$f.png
+    fi
 done

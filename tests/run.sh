@@ -2,10 +2,14 @@
 SOLVER=$1
 for f in vb*
 do
-    ../build/oink $f $SOLVER --no-loops --no-wcwc -v > /dev/null
+    LOGFILE=`mktemp` || exit 1
+    ../build/oink $f $SOLVER --no-loops --no-wcwc -t -v > $LOGFILE
     if [ $? -ne 0 ]; then
         echo "ERROR: $f"
     else
-        echo "GOOD: $f"
+        DUPLICATES=`grep -o "duplicate" $LOGFILE | wc -l`
+        SUBS=`grep -o "subtangle" $LOGFILE | wc -l`
+        echo "GOOD: $f ($DUPLICATES duplicates, $SUBS subtangles)"
     fi
+    rm -f $LOGFILE
 done
