@@ -187,7 +187,15 @@ RRDPSolver::run()
                     }
                     if (locked) {
                         // found delayed promotion
-                        if (trace) logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m" << std::endl;
+                        if (trace >= 2) {
+                            logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m:";
+                            for (int n : regions[p]) {
+                                logger << " \033[37m" << label_vertex(n) << "\033[m";
+                            }
+                            logger << std::endl;
+                        } else if (trace) {
+                            logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m" << std::endl;
+                        }
                         delayed++;
                         if (p&1) del1++;
                         else del0++;
