@@ -31,11 +31,13 @@
 #include "tl.hpp"
 #include "npp.hpp"
 #include "sspm.hpp"
+#include "zlkq.hpp"
 
 namespace pg {
 
 Solvers::Solvers()
 {
+    add("zlkq", "QPT Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKQSolver(oink, game); });
     add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKSolver(oink, game); });
     add("uzlk", "unoptimized Zielonka", 1, [] (Oink* oink, Game* game) { return new UnoptimizedZLKSolver(oink, game); });
     add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game) { return new NPPSolver(oink, game); });

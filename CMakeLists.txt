@@ -39,6 +39,7 @@ add_library(oink
     src/verifier.cpp
     # Solvers
     src/zlk.cpp
+    src/zlkq.cpp
     src/npp.cpp
     src/pp.cpp
     src/ppp.cpp
