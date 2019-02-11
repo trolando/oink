@@ -24,33 +24,26 @@ Oink implements various modern algorithms.
 
 Algorithm       | Description
 :-------------- | :----------
-NPP    | Priority promotion (bitvector implementation by Benerecetti et al)
-PP     | Priority promotion (basic algorithm)
-PPP    | Priority promotion PP+ (better reset heuristic)
-RR     | Priority promotion RR (even better improved reset heuristic)
-DP     | Priority promotion PP+ with the delayed promotion strategy
-RRDP   | Priority promotion RR with the delayed promotion strategy
-ZLK    | (parallel) Zielonka's recursive algorithm
-APT    | APT algorithm by Kupferman and Vardi
-PSI    | (parallel) strategy improvement
-TSPM   | Traditional small progress measures
-SPM    | Accelerated version of small progress measures
-MSPM   | Maciej Gazda's modified small progress measures
-SSPM   | Succinct small progress measures
-QPT    | Quasi-polynomial time progress measures
-TL     | Tangle learning (base algorithm)
-ATL    | Alternating tangle learning
-OTFTL  | On-the-fly tangle learning
-OTFATL | On-the-fly alternating tangle learning
+NPP  | Priority promotion (bitvector implementation by Benerecetti et al)
+PP   | Priority promotion (basic algorithm)
+PPP  | Priority promotion PP+ (better reset heuristic)
+RR   | Priority promotion RR (even better improved reset heuristic)
+DP   | Priority promotion PP+ with the delayed promotion strategy
+RRDP | Priority promotion RR with the delayed promotion strategy
+ZLK  | (parallel) Zielonka's recursive algorithm
+APT  | APT algorithm by Kupferman and Vardi
+PSI  | (parallel) strategy improvement
+TSPM | Traditional small progress measures
+SPM  | Accelerated version of small progress measures
+MSPM | Maciej Gazda's modified small progress measures
+QPT  | Quasi-polynomial time progress measures
 
 * The priority promotion family of algorithms has been proposed in 2016.
 * The Zielonka implementation is inspired by work in 2017.
 * The APT algorithm was published in 1998 and again in 2016.
 * The parallel strategy improvement implementation is inspired by work in 2017 but uses a different approach with work-stealing.
 * The accelerated SPM approach is a novel approach.
-* The succinct small progress measures algorithm was published in 2017. (Jurdzinski and Lazic, at LICS 2017)
-* The QPT progress measures algorithm was published in 2017. (Fearnley et al, at SPIN 2017.)
-* The tangle learning algorithms are accepted at CAV 2018.
+* The QPT progress measures algorithm was published in 2016. (Fearnley et al, at SPIN.)
 
 The parallel algorithms use the work-stealing framework Lace.
 
@@ -76,7 +69,6 @@ oink    | The main tool for solving parity games
 verify  | Small tool that just verifies a solution (can be done by Oink too)
 nudge   | Swiss army knife for transforming parity games
 dotty   | Small tool that just generates a .dot graph of a parity game
-simple  | Very simple example of a tool that solves parity games
 
 Tools to generate games:
 
@@ -89,7 +81,6 @@ counter\_dp    | Counterexample to the DP solver
 counter\_m     | Counterexample of Maciej Gazda, PhD Thesis, Sec. 3.5
 counter\_qpt   | Counterexample of Fearnley et al, An ordered approach to solving parity games in quasi polynomial time and quasi linear space, SPIN 2017
 counter\_core  | Counterexample of Benerecetti et al, Robust Exponential Worst Cases for Divide-et-Impera Algorithms for Parity Games, GandALF 2017
-tc             | Two Counters game (counterexample to TL, ZLK, PP family)
 
 Instructions
 -----------
@@ -112,7 +103,7 @@ What you want?                          | But how then?
 To quickly solve a gzipped parity game: | `oink -v game.pg.gz game.sol`
 To verify some solution:                | `oink -v game.pg.gz --sol game.sol`
 
-A typical call to Oink is: `oink [options] [solver] <filename> [solutionfile]`. This reads a parity game from `filename`, solves it with the chosen solver (default: `--atl`), then writes the solution to `<solutionfile>` (default: don't write).
+A typical call to Oink is: `oink [options] [solver] <filename> [solutionfile]`. This reads a parity game from `filename`, solves it with the chosen solver (default: `--npp`), then writes the solution to `<solutionfile>` (default: don't write).
 Typical options are:
 - `-v` verifies the solution after solving the game.
 - `-w <workers>` sets the number of worker threads for parallel solvers. By default, these solvers run their sequential version. Use `-w 0` to automatically determine the maximum number of worker threads.
@@ -124,7 +115,3 @@ Typical options are:
 - `--dot <dotfile>` writes a .dot file of the game as loaded.
 - `-p` writes the vertices won by even/odd to stdout.
 - `-t` (once or multiple times) increases verbosity level.
-
-For a very simple example of a tool that uses Oink, see `src/tools/simple.cpp`.
-
-For a very simple example of extending Oink, see e.g. commits `6899f7e` and `e68b2ee`.
