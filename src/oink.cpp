@@ -28,7 +28,7 @@
 
 namespace pg {
 
-Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.n_nodes), disabled(game.n_nodes)
+Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.n_nodes), disabled(game.solved)
 {
     /**
      * If the game was not yet reindexed, do it now.
