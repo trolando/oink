@@ -508,8 +508,6 @@ Oink::run()
         if (count == 0) logger << "no trivial cycles removed" << std::endl;
         else if (count == 1) logger << "1 trivial cycle removed" << std::endl;
         else logger << count << " trivial cycles removed" << std::endl;
-    } else if (Solvers().label(solver) == "psi") {
-        logger << "\033[1;7mWARNING\033[m: running PSI solver without removing winner-controlled winning cycles!" << std::endl;
     }
 
     auto time_mid = high_resolution_clock::now();

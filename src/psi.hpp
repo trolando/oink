@@ -39,6 +39,7 @@ public:
     int workers = 0; // number of workers for Lace
 
     bool si_val_less(int a, int b);
+    int si_top_val(int a);
     void print_debug();
 
     void compute_vals_seq(void);

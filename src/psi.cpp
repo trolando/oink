@@ -28,6 +28,7 @@ namespace pg {
 
 static int k;
 static int *str;
+static int *halt;
 static int *val;
 static int *done;
 static int *won;
@@ -70,6 +71,16 @@ PSISolver::si_val_less(int a, int b)
     return false;
 }
 
+int
+PSISolver::si_top_val(int a)
+{
+    // find highest priority
+    for (int i=k-1; i>=0; i--) {
+        if (val[k*a+i] != 0) return i;
+    }
+    return -1;
+}
+
 /**
  * Recursively update the value of <v> and its ancestors according to the
  * currently chosen strategy
@@ -85,15 +96,9 @@ VOID_TASK_2(compute_val, int, v, PSISolver *, s)
     // compute valuation of current node
     int st = str[v];
     int *dst = val + k*v;
-    if (st == -1) {
-        // set to zero (= copy from virtual sink)
-        // for (int i=0; i<k; i++) if (dst[i]) dst[i] = 0;
-    } else {
-        // copy from child
-        int *src = val + k*st;
-        memcpy(dst, src, sizeof(int[k]));
-        dst[s->priority[v]]++;
-    }
+    if (st == -1 or halt[st]) memset(dst, 0, sizeof(int[k]));
+    else memcpy(dst, val + k*st, sizeof(int[k])); // copy from successor
+    dst[s->priority[v]]++;
 
     // recursively update predecessor positions
     int count = 0;
@@ -125,7 +130,7 @@ VOID_TASK_2(set_in, int, begin, int, count)
             int n = begin+i;
             if (done[n] == 3) continue;
             int s = str[n];
-            if (s == -1) continue;
+            if (s == -1 or halt[s]) continue;
             next_in[n] = __sync_lock_test_and_set(first_in+s, n);
         }
     } else {
@@ -166,7 +171,7 @@ VOID_TASK_1(compute_all_val, PSISolver*, s)
     // for all unsolved enabled nodes that go to sink, run compute val
     int count = 0;
     for (int i=0; i<s->n_nodes; i++) {
-        if (str[i] == -1) { // str[i] is -2 for disabled and not -1 for won
+        if (str[i] == -1 or halt[str[i]]) { // str[i] is -2 for disabled and not -1 for won
             SPAWN(compute_val, i, s);
             count++;
         }
@@ -184,9 +189,9 @@ PSISolver::compute_vals_seq(void)
     memset(first_in, -1, sizeof(int[n_nodes]));
 
     for (int n=0; n<n_nodes; n++) {
-        if (done[n] == 3) continue;
+        if (done[n] == 3) continue; // disabled
         int s = str[n];
-        if (s == -1) {
+        if (s == -1 or halt[s]) { // either we halt or the dummy halts...
             // assuming that valuation is properly initialized...
             q.push_back(n);
         } else {
@@ -200,15 +205,17 @@ PSISolver::compute_vals_seq(void)
         int v = q.back();
         q.pop_back();
 
+        // set valuation
         int *val_v = val + k*v;
-        // recursively update predecessor positions
+        int s = str[v];
+        if (s == -1 or halt[s]) memset(val_v, 0, sizeof(int[k]));
+        else memcpy(val_v, val+k*s, sizeof(int[k]));
+        val_v[priority[v]]++;
+        done[v] = 1;
+
+        // add predecessors
         int from = first_in[v];
         while (from != -1) {
-            // compute valuation
-            int *val_from = val + k*from;
-            memcpy(val_from, val_v, sizeof(int[k]));
-            val_from[priority[from]]++;
-            done[from] = 1;
             q.push_back(from);
             from = next_in[from];
         }
@@ -254,6 +261,33 @@ PSISolver::mark_solved_seq(void)
 }
 
 /**
+ * Check if Even still wants to halt the path...
+ */
+TASK_3(int, switch_halting, PSISolver*, s, int, begin, int, count)
+{
+    // some cut-off point...
+    if (count <= 64) {
+        int res = 0;
+
+        for (int i=0; i<count; i++) {
+            int n = begin+i;
+
+            if (halt[n] and s->si_val_less(-1, n)) {
+                halt[n] = 0; // stop halting
+                res++;
+            }
+        }
+
+        return res;
+    } else {
+        SPAWN(switch_halting, s, begin+count/2, count-count/2);
+        int res = CALL(switch_halting, s, begin, count/2);
+        res += SYNC(switch_halting);
+        return res;
+    }
+}
+
+/**
  * Implementation of greedy-all-switches strategy
  */
 TASK_4(int, switch_strategy, PSISolver*, s, int, pl, int, begin, int, count)
@@ -263,6 +297,7 @@ TASK_4(int, switch_strategy, PSISolver*, s, int, pl, int, begin, int, count)
         int res = 0;
         for (int i=0; i<count; i++) {
             int n = begin+i;
+
             if (done[n] == 3) continue; // skip "disabled or won"
             if (done[n] == 0) LOGIC_ERROR; // expecting done==1 or done==2
             if (s->owner[n] != pl) continue; // only change strategy if owner
@@ -274,15 +309,13 @@ TASK_4(int, switch_strategy, PSISolver*, s, int, pl, int, begin, int, count)
                 if (to == cur_strat) continue; // skip strategy to same
                 if (pl == 0) {
                     // improving for player Even
-                    if (s->si_val_less(cur_strat, to)) {
-                        // if (s->trace >= 2) fmt::printf(logger, "changing e strategy for %d from %d to %d.\n", n, cur_strat, to);
+                    if (s->si_val_less(halt[cur_strat] ? -1 : cur_strat, halt[to] ? -1 : to)) {
                         str[n] = cur_strat = to;
                         res++;
                     }
                 } else {
                     // improving for player Odd
-                    if (s->si_val_less(to, cur_strat)) {
-                        // if (s->trace >= 2) fmt::printf(logger, "changing o strategy for %d from %d to %d.\n", n, cur_strat, to);
+                    if (s->si_val_less(halt[to] ? -1 : to, halt[cur_strat] ? -1 : cur_strat)) {
                         str[n] = cur_strat = to;
                         res++;
                     }
@@ -302,10 +335,11 @@ int
 PSISolver::switch_strategy_seq(int pl)
 {
     int res = 0;
+
     for (int n=0; n<n_nodes; n++) {
         if (done[n] == 3) continue; // skip "disabled or won"
         if (done[n] == 0) LOGIC_ERROR; // expecting done==1 or done==2
-        if (owner[n] != pl) continue; // only change strategy if owner
+        if (owner[n] != pl) continue; // only change strategy for vertices of player <pl>
 
         bool changed = false;
         int cur_strat = str[n];
@@ -315,13 +349,23 @@ PSISolver::switch_strategy_seq(int pl)
             if (to == cur_strat) continue; // skip strategy to same
             if (pl == 0) {
                 // improving for player Even
-                if (si_val_less(cur_strat, to)) {
+                if (si_val_less(halt[cur_strat] ? -1 : cur_strat, halt[to] ? -1 : to)) {
+#ifndef NDEBUG
+                    if (trace >= 2) {
+                        logger << "update even strategy " << label_vertex(n) << " from " << label_vertex(cur_strat) << " to " << label_vertex(to) << " (" << si_top_val(to) << ")" << std::endl;
+                    }
+#endif
                     str[n] = cur_strat = to;
                     changed = true;
                 }
             } else {
                 // improving for player Odd
-                if (si_val_less(to, cur_strat)) {
+                if (si_val_less(halt[to] ? -1 : to, halt[cur_strat] ? -1 : cur_strat)) {
+#ifndef NDEBUG
+                    if (trace >= 2) {
+                        logger << "update odd strategy " << label_vertex(n) << " from " << label_vertex(cur_strat) << " to " << label_vertex(to) << " (" << si_top_val(to) << ")" << std::endl;
+                    }
+#endif
                     str[n] = cur_strat = to;
                     changed = true;
                 }
@@ -329,6 +373,21 @@ PSISolver::switch_strategy_seq(int pl)
         }
         if (changed) res++;
     }
+
+    if (pl == 0) {
+        for (int n=0; n<n_nodes; n++) {
+            if (halt[n] and si_val_less(-1, n)) {
+                halt[n] = 0; // stop halting
+#ifndef NDEBUG
+                if (trace >= 2) {
+                    logger << "no longer halt before vertex " << label_vertex(n) << std::endl;
+                }
+#endif
+                res++;
+            }
+        }
+    }
+
     return res;
 }
 
@@ -341,9 +400,16 @@ PSISolver::print_debug()
     fmt::printf(logger, "\033[1mState\033[m\n");
     for (int i=0; i<n_nodes; i++) {
         if (done[i] == 3) continue; // disabled or won
-        fmt::printf(logger, "node % 3d str: % 3d val: [", i, str[i]);
-        for (int j=0; j<k; j++) fmt::printf(logger, "%s%d", j==0?"":" ", val[k*i+j]);
-        fmt::printf(logger, "]%s\n", done[i] == 2 ? " cycle" : "");
+        logger << "vertex " << label_vertex(i) << ": [";
+        for (int j=0; j<k; j++) logger << (j?" ":"") << val[k*i+j];
+        logger << "] ";
+        if (done[i] == 2) logger << "c ";
+        if (halt[i]) logger << "h ";
+        if (owner[i]) logger << "\033[1;35;160m=>\033[m ";
+        else logger << "\033[1m=>\033[m ";
+        if (str[i] == -1) logger << "-";
+        else logger << label_vertex(str[i]);
+        logger << std::endl;
     }
 }
 
@@ -361,6 +427,7 @@ PSISolver::run()
     // now create the data structure
     val = new int[k*n_nodes];
     str = new int[n_nodes];
+    halt = new int[n_nodes];
     done = new int[n_nodes];
     won = new int[n_nodes];
 
@@ -368,14 +435,13 @@ PSISolver::run()
     next_in = new int[n_nodes];
 
     // initialize the datastructure
-    for (int i=0; i<k*n_nodes; i++) val[i] = 0;
     for (int i=0; i<n_nodes; i++) {
         if (disabled[i]) {
             str[i] = -2; // set to "disabled sink"
             done[i] = 3; // set to "disabled/won"
             continue;
-        } else if (owner[i]) {
-            // owned by Odd, select first available edge
+        } else {
+            // select first available edge
             int to = -1;
             const int *_out = outs + outa[i];
             for (int x = *_out; x != -1; x = *++_out) {
@@ -385,14 +451,9 @@ PSISolver::run()
             }
             if (to == -1) LOGIC_ERROR;
             str[i] = to;
+            halt[i] = 1; // initially, halt at every vertex
             won[i] = 0;
             done[i] = 0;
-        } else {
-            // owned by Even, select virtual "sink"
-            str[i] = -1;
-            won[i] = 0;
-            done[i] = 1;
-            val[k*i+priority[i]] = 1;
         }
     }
 
@@ -403,6 +464,9 @@ PSISolver::run()
             for (;;) {
                 ++minor;
                 compute_vals_seq();
+#ifndef NDEBUG
+                if (trace >= 3) print_debug();
+#endif
                 int count = switch_strategy_seq(1);
                 if (trace) fmt::printf(logger, "%d changed strategies for Odd\n", count);
                 if (count == 0) break;                                  // if nothing left, done
@@ -422,6 +486,9 @@ PSISolver::run()
             for (;;) {
                 ++minor;
                 CALL(compute_all_val, this);                            // update valuation
+#ifndef NDEBUG
+                if (trace >= 3) print_debug();
+#endif
                 int count = CALL(switch_strategy, this, 1, 0, n_nodes); // switch strategies
                 if (trace) fmt::printf(logger, "%d changed strategies for Odd\n", count);
                 if (count == 0) break;                                  // if nothing left, done
@@ -429,6 +496,7 @@ PSISolver::run()
             int solved = CALL(mark_solved_rec, this, 0, n_nodes);       // mark nodes won by Even
             if (trace) fmt::printf(logger, "%d nodes marked as won by Even\n", solved);
             int count = CALL(switch_strategy, this, 0, 0, n_nodes);     // switch strategies
+            count += CALL(switch_halting, this, 0, n_nodes);     // switch halting strategies
             if (trace) fmt::printf(logger, "%d changed strategies for Even\n", count);
             if (count == 0) break;                                      // if nothing left, done
         }
@@ -443,6 +511,7 @@ PSISolver::run()
 
     delete[] val;
     delete[] str;
+    delete[] halt;
     delete[] done;
     delete[] won;
     delete[] first_in;
