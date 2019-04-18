@@ -31,7 +31,7 @@ RR   | Priority promotion RR (even better improved reset heuristic)
 DP   | Priority promotion PP+ with the delayed promotion strategy
 RRDP | Priority promotion RR with the delayed promotion strategy
 ZLK  | (parallel) Zielonka's recursive algorithm
-APT  | APT algorithm by Kupferman and Vardi
+FPI  | Distraction Fixpoint Iteration (similar to APT algorithm and to Bruse/Falk/Lange)
 PSI  | (parallel) strategy improvement
 TSPM | Traditional small progress measures
 SPM  | Accelerated version of small progress measures

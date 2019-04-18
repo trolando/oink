@@ -22,7 +22,7 @@
 #include "rr.hpp"
 #include "dp.hpp"
 #include "rrdp.hpp"
-#include "apt.hpp"
+#include "fpi.hpp"
 #include "psi.hpp"
 #include "spm.hpp"
 #include "tspm.hpp"
@@ -46,7 +46,7 @@ Solvers::Solvers()
     add("rr", "priority promotion RR", 0, [] (Oink* oink, Game* game) { return new RRSolver(oink, game); });
     add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink* oink, Game* game) { return new DPSolver(oink, game); });
     add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink* oink, Game* game) { return new RRDPSolver(oink, game); });
-    add("apt", "APT (no strategy)", 0, [] (Oink* oink, Game* game) { return new APTSolver(oink, game); });
+    add("fpi", "fixpoint iteration", 1, [] (Oink* oink, Game* game) { return new FPISolver(oink, game); });
     add("psi", "parallel strategy improvement", 1, [] (Oink* oink, Game* game) { return new PSISolver(oink, game); });
     add("spm", "accelerated small progress measures", 0, [] (Oink* oink, Game* game) { return new SPMSolver(oink, game); });
     add("tspm", "traditional small progress measures", 0, [] (Oink* oink, Game* game) { return new TSPMSolver(oink, game); });
