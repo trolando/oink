@@ -1,6 +1,6 @@
 #!/bin/bash
 SOLVER=$1
-for f in vb*
+for f in ../tests/vb*
 do
     LOGFILE=`mktemp` || exit 1
     ../build/oink $f $SOLVER --no-loops --no-wcwc -t -v > $LOGFILE
