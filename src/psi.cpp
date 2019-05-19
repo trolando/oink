@@ -352,7 +352,7 @@ PSISolver::switch_strategy_seq(int pl)
                 if (si_val_less(halt[cur_strat] ? -1 : cur_strat, halt[to] ? -1 : to)) {
 #ifndef NDEBUG
                     if (trace >= 2) {
-                        logger << "update even strategy " << label_vertex(n) << " from " << label_vertex(cur_strat) << " to " << label_vertex(to) << " (" << si_top_val(to) << ")" << std::endl;
+                        logger << "update even strategy \033[1;33m" << label_vertex(n) << "\033[m from \033[1;33m" << label_vertex(cur_strat) << "\033[m (" << si_top_val(cur_strat) << (halt[cur_strat]?")H":")") << " to \033[1;33m" << label_vertex(to) << "\033[m (" << si_top_val(to) << (halt[to] ? ")H" : ")") << std::endl;
                     }
 #endif
                     str[n] = cur_strat = to;
@@ -363,7 +363,7 @@ PSISolver::switch_strategy_seq(int pl)
                 if (si_val_less(halt[to] ? -1 : to, halt[cur_strat] ? -1 : cur_strat)) {
 #ifndef NDEBUG
                     if (trace >= 2) {
-                        logger << "update odd strategy " << label_vertex(n) << " from " << label_vertex(cur_strat) << " to " << label_vertex(to) << " (" << si_top_val(to) << ")" << std::endl;
+                        logger << "update odd strategy \033[1;33m" << label_vertex(n) << "\033[m from \033[1;33m" << label_vertex(cur_strat) << "\033[m (" << si_top_val(cur_strat) << (halt[cur_strat]?")H":")") << " to \033[1;33m" << label_vertex(to) << "\033[m (" << si_top_val(to) << (halt[to] ? ")H" : ")") << std::endl;
                     }
 #endif
                     str[n] = cur_strat = to;
@@ -451,7 +451,7 @@ PSISolver::run()
             }
             if (to == -1) LOGIC_ERROR;
             str[i] = to;
-            halt[i] = 1; // initially, halt at every vertex
+            halt[i] = 1;
             won[i] = 0;
             done[i] = 0;
         }
@@ -471,6 +471,19 @@ PSISolver::run()
                 if (trace) fmt::printf(logger, "%d changed strategies for Odd\n", count);
                 if (count == 0) break;                                  // if nothing left, done
             }
+            /* print selected strategies for the odd player */
+#ifndef NDEBUG
+            if (trace >= 3) {
+                for (int n=0; n<n_nodes; n++) {
+                    if (disabled[n]) continue;
+                    if (owner[n] == 0) continue;
+                    logger << "Odd plays from \033[1;33m" << label_vertex(n) << "\033[m to \033[1;33m" << label_vertex(str[n]) << "\033[m (";
+                    if (halt[str[n]]) logger << "H";
+                    else logger << si_top_val(str[n]);
+                    logger << ")" << std::endl;
+                }
+            }
+#endif
             int solved = mark_solved_seq(); // mark nodes won by Even
             if (trace) fmt::printf(logger, "%d nodes marked as won by Even\n", solved);
             int count = switch_strategy_seq(0);
