@@ -37,6 +37,7 @@ TSPM | Traditional small progress measures
 SPM  | Accelerated version of small progress measures
 MSPM | Maciej Gazda's modified small progress measures
 QPT  | Quasi-polynomial time progress measures
+ZLKQ | Quasi-polynomial time recursive algorithm
 
 * The priority promotion family of algorithms has been proposed in 2016.
 * The Zielonka implementation is inspired by work in 2017.
@@ -44,6 +45,7 @@ QPT  | Quasi-polynomial time progress measures
 * The parallel strategy improvement implementation is inspired by work in 2017 but uses a different approach with work-stealing.
 * The accelerated SPM approach is a novel approach.
 * The QPT progress measures algorithm was published in 2016. (Fearnley et al, at SPIN.)
+* The QPT recursive algorithm is based on work by Pawel Parys
 
 The parallel algorithms use the work-stealing framework Lace.
 
