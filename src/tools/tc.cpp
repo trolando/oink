@@ -18,8 +18,6 @@
 
 #include "game.hpp"
 
-#define COT 0
-
 using namespace std;
 using namespace pg;
 
@@ -43,87 +41,62 @@ void
 makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
 {
     const int pl = hipr&1;
-    const int sela = c+3;
+    int* _in = pl == 0 ? in1 : in0; // select _in of opponent
 
     /**
      * Create "core" of the bit.
      */
 
-    game.initNode(c,   hipr,   pl,   string_format("h%d(%d)", pl, i));  // high
-    game.initNode(c+1, lopr,   1-pl, string_format("l%d(%d)", pl, i));  // low (tangle)
-    game.initNode(c+2, inpr,   1-pl, string_format("i%d(%d)", pl, i));  // gate (distraction/input)
-#if COT
-    game.initNode(c+3, 0,      1-pl, string_format("z%d(%d)", pl, i));  // sela (distracted)
-#else
-    game.initNode(c+3, 0,      pl,   string_format("z%d(%d)", pl, i));  // sela (distracted)
-#endif
+    const char *plch = pl ? "Odd-" : "Even-";
 
-    game.addEdge(c+1, c);   // from low to high
-    game.addEdge(c+2, c+1); // from gate to low
-    game.addEdge(c+3, c+1); // from sela to low
+    game.initNode(c,   hipr,   pl,   string_format("%s%d-H", plch, i));  // high
+    game.initNode(c+1, lopr,   1-pl, string_format("%s%d-T", plch, i));  // low (tangle)
+    game.initNode(c+2, inpr,   1-pl, string_format("%s%d-L", plch, i));  // gate (distraction/input)
 
-    /**
-     * Connect to first connector
-     */
-
-    if (i == 0) game.addEdge(c+1, c+3); // from <low> to <sela> (no connectors)
-    else game.addEdge(c+1, c+4);        // from <low> to <sel0> (has connectors)
+    game.addEdge(c+1, c);   // from tangle to top
+    game.addEdge(c+2, c+1); // from input/distraction to tangle
+    game.addEdge(c+1, c+3); // from tangle to first connector
 
     /**
      * Create connectors (to higher bits)
      */
 
     for (int j=0; j<i; j++) {
-        const int d = c + 4 + 3*j;
+        const int d = c + 3 + 3*j;
 
-        game.initNode(d  , 0, pl,   string_format("s%d(%d,%d)", pl, i, j)); // selector
-        game.initNode(d+1, 0, 1-pl, string_format("a%d(%d,%d)", pl, i, j)); // exit one (even)
-        game.initNode(d+2, 0, 1-pl, string_format("b%d(%d,%d)", pl, i, j)); // exit two (odd)
+        game.initNode(d  , lopr-1, pl,   string_format("%s%d-S-%d", plch, i, j)); // selector
+        game.initNode(d+1, lopr-1, 1-pl, string_format("%s%d-A-%d", plch, i, j)); // exit one (even)
+        game.initNode(d+2, lopr-1, 1-pl, string_format("%s%d-B-%d", plch, i, j)); // exit two (odd)
 
         game.addEdge(d, d+1);  // s to one
         game.addEdge(d, d+2);  // s to two
 
-        if (j+1 != i) {
-            // not the last, connect to next
-            game.addEdge(d+1, d+3); // one to next selector
-            game.addEdge(d+2, d+3); // two to next selector
-        } else {
-            // last, connect to start
-            game.addEdge(d+1, sela); // one to <sela>
-            game.addEdge(d+2, sela); // two to <sela>
-        }
+        game.addEdge(d+1, d+3); // one to next selector
+        game.addEdge(d+2, d+3); // two to next selector
 
         int *ina = pl ? in1 : in0;
         int *inb = pl ? in0 : in1;
         game.addEdge(d+1, ina[j]); // one to even input of bit <j>
         game.addEdge(d+2, inb[j]); // two to odd input of bit <j>
+
+        // for (int j = i+pl; j<n; j++) game.addEdge(d, _in[j]);
     }
 
     /**
      * Connect from <high> either to the next <input>
      */
 
-    game.addEdge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]);
-
-    /**
-     * Connect from <sela> to lower bits.
-     */
-    int* _in = pl == 0 ? in1 : in0;
-    for (int j = i+pl; j<n; j++) {
-        // even (lower or same bit)
-        // odd (only to lower bits)
-#if COT
-        const int e = c + 4 + 3*i + (j-i-pl);
-        // const int pr = 2+pl + 2*(n-j+i+pl);
-        const int pr = lopr - 2*(n-j+i+pl);
-        game.initNode(e, pr, pl, string_format("d(%d,%d,%d)",pl,i,j)); // todo fix priority
-        game.addEdge(e, sela);
-        game.addEdge(sela, e);
-        game.addEdge(e, _in[j]);
+#if 0
+    game.addEdge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]-1);
 #else
-        game.addEdge(sela, _in[j]);
+    game.addEdge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]);
 #endif
-    }
+
+    // even (lower or same bit)
+    // odd (only to lower bits)
+    game.initNode(c+3+3*i, lopr-1, pl,   string_format("%s%d-Z", plch, i));  // Z (distracted)
+    game.addEdge(c+3+3*i, c+1); // from Z to tangle
+    for (int j = i+1-pl; j<n; j++) game.addEdge(c+3+3*i, _in[j]);
 }
 
 int
@@ -155,11 +128,11 @@ main(int argc, char** argv)
 
     for (int i=0; i<n; i++) {
         hi0[i] = size;
-        in0[i] = size + 2; // set even gate
-        size += (4+3*i) + (COT ? (n-i) : 0);
+        in0[i] = size + 2; // set even gate / distraction
+        size += 4+3*i;
         hi1[i] = size;
-        in1[i] = size + 2; // set odd gate
-        size += (4+3*i) + (COT ? (n-i-1) : 0);
+        in1[i] = size + 2; // set odd gate / distraction
+        size += 4+3*i;
     }
 
     /**
@@ -176,16 +149,18 @@ main(int argc, char** argv)
      */
 
     int lo = 0;
-    int toppo = (n+3)*n+6*n; // N*N + 9N actually
 #if 0
+    int toppo = (n+3)*n+6*n; // N*N + 9N actually
     for (int i=0; i<n; i++) {
         makeBit(game, hi0[i], toppo,   toppo-1, lo += 2*(n+1-i), i);
         makeBit(game, hi1[i], toppo-3, toppo-4, lo + 1, i);
         toppo -= 6;
     }
 #else
+    int toppo = (n+3)*n+6*n; // N*N + 9N actually
     for (int i=0; i<n; i++) {
-        makeBit(game, hi0[i], toppo,   toppo-2*n-1, lo += 2*(n+1-i), i);
+        // makeBit(game, hi0[i], toppo,   toppo-2*n-1, lo += 2*(n+1-i), i);
+        makeBit(game, hi0[i], toppo-2, toppo-2*n-3, lo + 2, i);
         makeBit(game, hi1[i], toppo-1, toppo-2*n-2, lo + 1, i);
         toppo -= 2;
     }
