@@ -272,7 +272,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
  * Find all nodes in S (and in the game with region >= r) that attract to the other player.
  */
 int
-ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
+ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vector<int> *R)
 {
     int count = 0;
 
@@ -309,8 +309,6 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
                 if (trace >= 2) logger << KC"forced distraction\033[m " << label_vertex(i) << std::endl;
 #endif
                 // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", i, priority[i], 1-pl);
-                region[i] = r;
-                winning[i] = 1-pl;
                 strategy[i] = -1;
                 Q.push(i);
             }
@@ -324,8 +322,6 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
                 if (trace >= 2) logger << KC"attracted distraction\033[m " << label_vertex(i) << std::endl;
 #endif
                 // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", i, priority[i], 1-pl);
-                region[i] = r;
-                winning[i] = 1-pl;
                 strategy[i] = to;
                 Q.push(i);
                 break;
@@ -342,6 +338,8 @@ ZLKSolver::attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R)
         ++count;
 
         R->push_back(cur);
+        region[cur] = r;
+        winning[cur] = 1-pl;
 
         // attract to <cur>
         const int *_in = ins + ina[cur];
