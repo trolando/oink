@@ -111,9 +111,13 @@ public:
 
     __attribute__((always_inline)) void swap(uintqueue & other)
     {
-        uint * tmp = other.queue;
-        other.queue = queue;
-        queue = tmp;
+        std::swap(queue, other.queue);
+        std::swap(pointer, other.pointer);
+    }
+
+    __attribute__((always_inline)) void swap_elements(uint idx1, uint idx2)
+    {
+        std::swap(queue[idx1], queue[idx2]);
     }
 
     /******************************************************************************/
