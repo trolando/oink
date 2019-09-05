@@ -54,6 +54,8 @@ add_library(oink
     src/sspm.cpp
     src/qpt.cpp
     src/tl.cpp
+    src/rtl.cpp
+    src/ptl.cpp
 )
 target_link_libraries(oink pthread)
 
@@ -93,6 +95,9 @@ if(BUILD_EXTRA_TOOLS)
 
     add_executable(tc src/tools/tc.cpp)
     target_link_libraries(tc oink)
+
+    add_executable(tc+ src/tools/tc+.cpp)
+    target_link_libraries(tc+ oink)
 
     add_executable(counter_qpt src/tools/counter_qpt.cpp)
 endif()
