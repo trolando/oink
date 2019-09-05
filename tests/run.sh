@@ -1,5 +1,5 @@
 #!/bin/bash
-SOLVER=$1
+SOLVER=$@
 for f in ../tests/vb*
 do
     LOGFILE=`mktemp` || exit 1
