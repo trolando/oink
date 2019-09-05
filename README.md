@@ -8,12 +8,17 @@ Oink is licensed with the Apache 2.0 license and is aimed at both researchers
 and practitioners. For convenience, Oink compiles into a library that can
 be used by other projects.
 
-Oink is developed (&copy; 2017) by Tom van Dijk and the
-[Formal Methods and Verification](http://fmv.jku.at/)
-group at the Johannes Kepler University Linz as part of the RiSE project.
+Oink was initially developed (&copy; 2017-2019) by Tom van Dijk and the
+[Formal Models and Verification](http://fmv.jku.at/)
+group at the Johannes Kepler University Linz as part of the RiSE project,
+and now in the [Formal Methods and Tools](https://fmt.ewi.utwente.nl) group
+at the University of Twente.
 
 The main author of Oink is Tom van Dijk who can be reached via <tom@tvandijk.nl>.
 Please let us know if you use Oink in your projects.
+If you are a researcher, please cite the following publication.
+
+Tom van Dijk (2018) [Oink: An Implementation and Evaluation of Modern Parity Game Solvers](https://doi.org/10.1007/978-3-319-89960-2_16). In: TACAS 2018.
 
 The main repository of Oink is https://github.com/trolando/oink.
 
@@ -36,7 +41,8 @@ PSI  | (parallel) strategy improvement
 TSPM | Traditional small progress measures
 SPM  | Accelerated version of small progress measures
 MSPM | Maciej Gazda's modified small progress measures
-QPT  | Quasi-polynomial time progress measures
+SSPM | Quasi-polynomial time succinct progress measures
+QPT  | Quasi-polynomial time ordered progress measures
 ZLKQ | Quasi-polynomial time recursive algorithm
 
 * The priority promotion family of algorithms has been proposed in 2016.
@@ -45,7 +51,7 @@ ZLKQ | Quasi-polynomial time recursive algorithm
 * The parallel strategy improvement implementation is inspired by work in 2017 but uses a different approach with work-stealing.
 * The accelerated SPM approach is a novel approach.
 * The QPT progress measures algorithm was published in 2016. (Fearnley et al, at SPIN.)
-* The QPT recursive algorithm is based on work by Pawel Parys
+* The QPT recursive algorithm is based on work by Pawel Parys.
 
 The parallel algorithms use the work-stealing framework Lace.
 
