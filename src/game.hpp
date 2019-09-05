@@ -224,9 +224,13 @@ public:
         public:
             _label_vertex(Game &g, int v) : g(g), v(v) { }
             friend std::ostream& operator<<(std::ostream& out, const _label_vertex &lv) {
-                std::string& l = lv.g.label[lv.v];
-                if (l.empty()) out << lv.v << "/" << lv.g.priority[lv.v];
-                else out << l;
+                if (lv.v == -1) {
+                    out << "-1";
+                } else {
+                    std::string& l = lv.g.label[lv.v];
+                    if (l.empty()) out << lv.v << "/" << lv.g.priority[lv.v];
+                    else out << l;
+                }
                 return out;
             }
         protected:
