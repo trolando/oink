@@ -36,7 +36,6 @@ RR   | Priority promotion RR (even better improved reset heuristic)
 DP   | Priority promotion PP+ with the delayed promotion strategy
 RRDP | Priority promotion RR with the delayed promotion strategy
 ZLK  | (parallel) Zielonka's recursive algorithm
-FPI  | Distraction Fixpoint Iteration (similar to APT algorithm and to Bruse/Falk/Lange)
 PSI  | (parallel) strategy improvement
 TSPM | Traditional small progress measures
 SPM  | Accelerated version of small progress measures
@@ -44,14 +43,19 @@ MSPM | Maciej Gazda's modified small progress measures
 SSPM | Quasi-polynomial time succinct progress measures
 QPT  | Quasi-polynomial time ordered progress measures
 ZLKQ | Quasi-polynomial time recursive algorithm
+FPI  | Distraction-based Fixpoint Iteration
+TL   | Tangle learning (basic)
+ATL  | Tangle learning (alternating)
+PTL  | Progressive tangle learning
+DTL  | Distraction-free tangle learning
 
-* The priority promotion family of algorithms has been proposed in 2016.
-* The Zielonka implementation is inspired by work in 2017.
-* The APT algorithm was published in 1998 and again in 2016.
-* The parallel strategy improvement implementation is inspired by work in 2017 but uses a different approach with work-stealing.
-* The accelerated SPM approach is a novel approach.
-* The QPT progress measures algorithm was published in 2016. (Fearnley et al, at SPIN.)
-* The QPT recursive algorithm is based on work by Pawel Parys.
+See the TACAS 2018 paper for more details on most of the implemented algorithms. In particular, this paper elaborates on the priority promotion algorithms, the implementation of Zielonka's recursive algorithm, on parallel strategy improvement, on small progress measures and the on QPT ordered progress measures algorithms. Furthermore:
+
+* The accelerated SPM approach is a novel unpublished approach.
+* The SSPM succinct progress measures algorithm is by Jurdzinski and Lazic, 2017.
+* The QPT recursive algorithm is based on work by Pawel Parys and the follow-up work by Karoliina Lehtinen, Sven Schewe, Dominik Wojtczak.
+* FPI is the distraction-based fixpoint algorithm by Tom van Dijk and Bob Rubbens.
+* All tangle learning algorithms are proposed by Tom van Dijk (me).
 
 The parallel algorithms use the work-stealing framework Lace.
 
@@ -89,6 +93,8 @@ counter\_dp    | Counterexample to the DP solver
 counter\_m     | Counterexample of Maciej Gazda, PhD Thesis, Sec. 3.5
 counter\_qpt   | Counterexample of Fearnley et al, An ordered approach to solving parity games in quasi polynomial time and quasi linear space, SPIN 2017
 counter\_core  | Counterexample of Benerecetti et al, Robust Exponential Worst Cases for Divide-et-Impera Algorithms for Parity Games, GandALF 2017
+tc             | Two Counters counterexample (GandALF 2019)
+tc+            | Two Counters counterexample modified for progressive tangle learning
 
 Instructions
 -----------

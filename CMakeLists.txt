@@ -56,6 +56,7 @@ add_library(oink
     src/tl.cpp
     src/rtl.cpp
     src/ptl.cpp
+    src/dtl.cpp
 )
 target_link_libraries(oink pthread)
 
