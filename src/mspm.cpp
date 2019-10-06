@@ -17,8 +17,6 @@
 #include <iomanip>
 #include "mspm.hpp"
 
-static const bool use_queue = true;
-
 namespace pg {
 
 MSPMSolver::MSPMSolver(Oink *oink, Game *game) : Solver(oink, game)

@@ -374,8 +374,9 @@ DTLSolver::partition(bitset &R, int top, bitset &Even, bitset &Odd, bool check_d
     for (; top!=-1; top--) {
         if (!R[top]) continue;
         if (check_distractions and Distractions[top]) continue;
-
+#ifndef NDEBUG
         const int pr = priority[top];
+#endif
         const int pl = priority[top]&1;
 
         Z[top] = true; // add to <Z>
@@ -392,7 +393,7 @@ DTLSolver::partition(bitset &R, int top, bitset &Even, bitset &Odd, bool check_d
             attractTangles(pl, v, R, Z, R);
         }
 
-#ifndef NDEBUG
+#ifndef NDEBUG     
         if (trace >= 2) {
             // report region
             logger << "\033[1;33mregion\033[m ";
@@ -698,8 +699,9 @@ DTLSolver::sptl(bitset &R, int top, int player, bitset &Even, bitset &Odd)
         // If the vertex is a distraction, just skip it.
         // It will be attracted by the opponent. And not used in a tangle.
         if (Distractions[top]) continue;
-
+#ifndef NDEBUG
         const int pr = priority[top];
+#endif
         const int pl = priority[top]&1;
 
         Z[top] = true; // add to <Z>

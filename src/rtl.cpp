@@ -504,9 +504,11 @@ tarjan_again:
         /**
          * We have a tangle. Compute the outgoing edges (into <tangleto>) and the next highest region.
          */
-
+#ifndef NDEBUG
         int esc = -1; // escape node (-1 for none, -2 for more)
         int best_esc = -1; // best escape
+#endif
+
         bool bottom_scc = true;
         const auto tangle_end = tangle.end();
         for (auto titer = tangle.begin(); titer != tangle_end;) {
