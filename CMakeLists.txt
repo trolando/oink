@@ -58,11 +58,13 @@ add_library(oink
     src/ptl.cpp
     src/dtl.cpp
 )
-target_link_libraries(oink pthread)
+find_package(Boost COMPONENTS iostreams)
+target_link_libraries(oink pthread ${Boost_LIBRARIES})
+target_include_directories(oink PUBLIC ${Boost_INCLUDE_DIRS})
 
 add_executable(solve src/tools/solve.cpp)
 set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
-target_link_libraries(solve oink boost_iostreams)
+target_link_libraries(solve oink)
 
 if(BUILD_EXTRA_TOOLS)
     add_executable(nudge src/tools/nudge.cpp)
