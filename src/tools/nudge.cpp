@@ -18,6 +18,7 @@
 #include <iostream>
 #include <fstream>
 #include <random>
+#include <stack>
 
 #include "cxxopts.hpp"
 #include "game.hpp"
