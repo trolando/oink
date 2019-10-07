@@ -3,7 +3,7 @@ solvers=( "" "--pp" "--ppp" "--rr" "--dp" "--rrdp" "--psi -w -1" "--psi -w 0" "-
 for SOLVER in "${solvers[@]}"
 do
     echo "Testing solver $SOLVER"
-    for f in "vb"*
+    for f in vb*
     do
         # echo "Testing file $f"
         if [ "$SOLVER" = "--psi -w -1" ] || [ "$SOLVER" = "--psi -w 0" ]; then
