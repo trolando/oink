@@ -72,17 +72,15 @@ protected:
     bitset S; // solved vertices (in queue Q)
 
     inline bool attracts(const int pl, const int v, bitset &Z, bitset &R);
-    inline void attractVertices(const int pl, int v, bitset &R, bitset &Z, bitset &G);
-    bool attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitset &G);
-    inline int attractTangles(const int pl, int v, bitset &R, bitset &Z, bitset &G);
-    inline void attractVerticesM(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
-    bool attractTangleM(const int t, const int pl, bitset &R, bitset &Z, bitset &G, const int max_prio);
-    inline int attractTanglesM(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
+    inline void attractVertices(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
+    bool attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitset &G, const int max_prio);
+    inline void attractTangles(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
 
     bool search(const int player);
     void search_rec(bitset &R, const int player);
-    bool sptl(bitset &R, int top, int player);
+    bool sptl(bitset &V, bitset &R, const int player);
     bool extractTangles(int i, bitset &R, int *str);
+    void computeValues(int* val, const int player);
 };
 
 }
