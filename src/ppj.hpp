@@ -26,30 +26,30 @@
 namespace pg {
 
 struct escape {
-		int region;
-		int play;
-		int to;
+    int region;
+    int play;
+    int to;
 };
 
 class PPJSolver : public PPSolver
 {
 public:
-PPJSolver(Oink *oink, Game *game);
-virtual void run();
+    PPJSolver(Oink *oink, Game *game);
+    virtual void run();
 
 protected:
 // Todo: possibly a large memory consumption.
-std::vector<int> *waiting;
-int waitingPriority;
-std::vector<int> lost;
-bitset is_lost;
+    std::vector<int> *waiting;
+    int waitingPriority;
+    std::vector<int> lost;
+    bitset is_lost;
 
-virtual void unattracted(int node);
-virtual void endAttracting(int prio);
-virtual bool setupRegion(int index, int priority, bool mustReset);
+    virtual void unattracted(int node);
+    virtual void endAttracting(int prio);
+    virtual bool setupRegion(int index, int priority, bool mustReset);
 
-void setWaiting(int node, int priority);
-escape bestEscape(int node);
+    void setWaiting(int node, int priority);
+    escape bestEscape(int node);
 };
 
 }

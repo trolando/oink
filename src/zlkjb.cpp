@@ -75,9 +75,9 @@ ZLKJBSolver::attractExt(int i, int r, std::vector<int> *R)
                     strategy[from] = cur;
                     Q.push(from);
                 } else {
-                  if (strategy[from] > -1 && strategy[from] != cur) {
-                    continue;
-                  }
+                    if (strategy[from] > -1 && strategy[from] != cur) {
+                        continue;
+                    }
                     // owned by other parity
                     int count = region[from];
                     if (count == BOT) {
@@ -110,7 +110,7 @@ ZLKJBSolver::attractExt(int i, int r, std::vector<int> *R)
 /**
  * Find all nodes in S (and in the game with region >= r) that attract to the other player.
  */
- std::pair<int, int> ZLKJBSolver::attractLosing(int i, int r, std::vector<int> *S, int next_r)
+std::pair<int, int> ZLKJBSolver::attractLosing(int i, int r, std::vector<int> *S, int next_r)
 {
     int count = 0;
     const int pr = priority[i];
@@ -130,7 +130,9 @@ ZLKJBSolver::attractExt(int i, int r, std::vector<int> *R)
      * But we do not record which nodes are head nodes.
      * TODO!
      */
-    S->erase(std::remove_if(S->begin(), S->end(), [this](int i) {return this->strategy[i] != -2;}), S->end());
+    S->erase(std::remove_if(S->begin(), S->end(), [this](int i) {
+            return this->strategy[i] != -2;
+        }), S->end());
     for (int i : *S) {
         if(strategy[i] != -2) continue;
         // check if the node is attracted
@@ -178,11 +180,11 @@ ZLKJBSolver::attractExt(int i, int r, std::vector<int> *R)
         const int *_in = ins + ina[cur];
         for (int from = *_in; from != -1; from = *++_in) {
             // if (region[from] == -1) LOGIC_ERROR;
-            if (region[from] < r && region[from] >= 0){
-              continue; // not in subgame, or disabled
+            if (region[from] < r && region[from] >= 0) {
+                continue; // not in subgame, or disabled
             }
             if (winning[from] != pl) {
-              continue; // already lost
+                continue; // already lost
             }
             // not watched
             if(strategy[from] > -1 && strategy[from] != cur) continue;
@@ -197,89 +199,89 @@ ZLKJBSolver::attractExt(int i, int r, std::vector<int> *R)
                 // owned by us
                 bool can_escape = false;
                 {
-                  const int *_out = outs + outa[from];
-                  for (int to = *_out; to != -1; to = *++_out) {
-                      // if (region[to] == -1) LOGIC_ERROR;
-                      if (region[to] >= 0 and region[to] < r) continue; // not in subgame, or disabled
-                      if (winning[to] == 1 - pl) continue; // not an escape
-                      can_escape = true;
-                      //switch strategy
-                      //just[strategy[from]].erase(from);
-                      strategy[from] = to;
-                      break;
-                  }
+                    const int *_out = outs + outa[from];
+                    for (int to = *_out; to != -1; to = *++_out) {
+                        // if (region[to] == -1) LOGIC_ERROR;
+                        if (region[to] >= 0 and region[to] < r) continue; // not in subgame, or disabled
+                        if (winning[to] == 1 - pl) continue; // not an escape
+                        can_escape = true;
+                        //switch strategy
+                        //just[strategy[from]].erase(from);
+                        strategy[from] = to;
+                        break;
+                    }
                 }
                 if (can_escape) {
-                  if(winning[from] == -1) {
-                    LOGIC_ERROR;
-                  }
-                  winning[from] = -1;
-                  D.push(from);
+                    if(winning[from] == -1) {
+                        LOGIC_ERROR;
+                    }
+                    winning[from] = -1;
+                    D.push(from);
                 } else {
-                  region[from] = r;
-                  winning[from] = 1-pl;
-                  strategy[from] = -1;
-                  Q.push(from);
+                    region[from] = r;
+                    winning[from] = 1-pl;
+                    strategy[from] = -1;
+                    Q.push(from);
                 }
             }
         }
     }
     for(unsigned int idx = 0; idx < D.size(); idx++) {
-      int cur = D[idx];
-      // destroy dependents on <cur>
-      if(winning[cur] != -1) {
-        continue;
-      }
-      region[cur] = BOT;
-      const int *_in = ins + ina[cur];
-      for (int from = *_in; from != -1; from = *++_in) {
-        if (region[from] < r){
-          continue; // not in subgame, or disabled
+        int cur = D[idx];
+        // destroy dependents on <cur>
+        if(winning[cur] != -1) {
+            continue;
         }
-        if (winning[from] != pl) {
-          continue;
+        region[cur] = BOT;
+        const int *_in = ins + ina[cur];
+        for (int from = *_in; from != -1; from = *++_in) {
+            if (region[from] < r) {
+                continue; // not in subgame, or disabled
+            }
+            if (winning[from] != pl) {
+                continue;
+            }
+            region[from] = BOT;
+            winning[from] = -1;
+            D.push(from);
         }
-        region[from] = BOT;
-        winning[from] = -1;
-        D.push(from);
-      }
     }
 
     for(unsigned int idx = 0; idx < D.size(); idx++) {
-      int cur = D[idx];
-      if(region[cur] != BOT) {
-        continue;
-      }
-      strategy[cur] = -3;
-      if (owner[cur] == pl) {
-        // "winner" attraction
-        const int *_out = outs + outa[cur];
-        for (int to = *_out; to != -1; to = *++_out) {
-            if (region[to] < r) continue; // not in subgame, or -1/-2
-            if (winning[to] == 1 - pl) continue; // not attracting
-            region[cur] = next_r;
-            winning[cur] = pl;
-            strategy[cur] = to;
-            Q.push(cur);
-            break;
+        int cur = D[idx];
+        if(region[cur] != BOT) {
+            continue;
         }
-      } else {
-          // "loser" attraction
-          bool can_escape = false;
-          const int *_out = outs + outa[cur];
-          for (int to = *_out; to != -1; to = *++_out) {
-              if (region[to] >= 0 and region[to] < r) continue; // not in subgame, or -1/-2, would otherwise be attracted to subgame previously
-              // if not previously attracted, then either DIS or winning[to] != pl;
-              if (winning[to] == 1 - pl) continue; // not an escape
-              can_escape = true;
-              break;
-          }
-          if (!can_escape) {
-              // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", i, priority[i], 1-pl);
-              region[cur] = next_r;
-              winning[cur] = pl;
-              strategy[cur] = -1;
-              Q.push(cur);
+        strategy[cur] = -3;
+        if (owner[cur] == pl) {
+            // "winner" attraction
+            const int *_out = outs + outa[cur];
+            for (int to = *_out; to != -1; to = *++_out) {
+                if (region[to] < r) continue; // not in subgame, or -1/-2
+                if (winning[to] == 1 - pl) continue; // not attracting
+                region[cur] = next_r;
+                winning[cur] = pl;
+                strategy[cur] = to;
+                Q.push(cur);
+                break;
+            }
+        } else {
+            // "loser" attraction
+            bool can_escape = false;
+            const int *_out = outs + outa[cur];
+            for (int to = *_out; to != -1; to = *++_out) {
+                if (region[to] >= 0 and region[to] < r) continue; // not in subgame, or -1/-2, would otherwise be attracted to subgame previously
+                // if not previously attracted, then either DIS or winning[to] != pl;
+                if (winning[to] == 1 - pl) continue; // not an escape
+                can_escape = true;
+                break;
+            }
+            if (!can_escape) {
+                // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", i, priority[i], 1-pl);
+                region[cur] = next_r;
+                winning[cur] = pl;
+                strategy[cur] = -1;
+                Q.push(cur);
             }
         }
         while (!Q.empty()) {
@@ -329,16 +331,16 @@ ZLKJBSolver::attractExt(int i, int r, std::vector<int> *R)
     }
     int lost = 0;
     while(!D.empty()) {
-      int cur = D.pop();
+        int cur = D.pop();
 
-      if(region[cur] != BOT) {
-        continue;
-      }
-      strategy[cur] = -3;
-      lost ++ ;
-      if(new_i < cur) {
-        new_i = cur;
-      }
+        if(region[cur] != BOT) {
+            continue;
+        }
+        strategy[cur] = -3;
+        lost++;
+        if(new_i < cur) {
+            new_i = cur;
+        }
     }
     return std::pair<int, int>(count, new_i);
 }
@@ -354,16 +356,16 @@ ZLKJBSolver::run()
     strategy = new int[n_nodes];
 
     std::vector<int> history;
-    std::vector<std::vector<int>> levels;
+    std::vector<std::vector<int> > levels;
 
     // get number of nodes and create and initialize inverse array
     max_prio = -1;
     for (int n=n_nodes-1; n>=0; n--) {
-        strategy[n] = -4 ;
+        strategy[n] = -4;
         winning[n] = -1;
         region[n] = disabled[n] ? DIS : BOT;
         if (disabled[n]) continue;
-        strategy[n] = -3 ;
+        strategy[n] = -3;
         const int pr = game->priority[n];
         if (max_prio == -1) {
             max_prio = pr;
@@ -448,7 +450,7 @@ ZLKJBSolver::run()
              */
 
 #ifndef NDEBUG
-             if (trace) fmt::printf(logger, "current level contains %zu nodes\n", A->size());
+            if (trace) fmt::printf(logger, "current level contains %zu nodes\n", A->size());
 #endif
 
             /**
@@ -466,9 +468,9 @@ ZLKJBSolver::run()
             }
 
             if (count <= 0) {
-              if(new_i >= 0) { // count =< 0 => new_i >= 0
-                LOGIC_ERROR;
-              }
+                if(new_i >= 0) { // count =< 0 => new_i >= 0
+                    LOGIC_ERROR;
+                }
                 /**
                  * Nothing attracted to opponent, add A to W0/W1, fix strategies, go up.
                  */
@@ -477,14 +479,14 @@ ZLKJBSolver::run()
                      * For nodes that are won and controlled by <pl>, check if their strategy needs to be fixed.
                      */
                     if (strategy[v] != -2) {
-                      if(strategy[v] != -1 && winning[strategy[v]] != pl) {
-                        LOGIC_ERROR;
-                      }
-                      continue; // good strategy
+                        if(strategy[v] != -1 && winning[strategy[v]] != pl) {
+                            LOGIC_ERROR;
+                        }
+                        continue; // good strategy
                     }
                     if (owner[v] != pl) {
-                      strategy[v] = -1;
-                      continue; // not controlled by <pl>
+                        strategy[v] = -1;
+                        continue; // not controlled by <pl>
                     }
                     /**
                      * Strategy of vertex <v> needs to be updated!
@@ -515,11 +517,11 @@ ZLKJBSolver::run()
                     /**
                      * And pop the stack to go up
                      */
-                     history.back() = 2; // set current phase to 2
+                    history.back() = 2;  // set current phase to 2
                     /*levels.pop_back();
-                    history.pop_back();
-                    history.pop_back();
-                    history.pop_back();*/
+                       history.pop_back();
+                       history.pop_back();
+                       history.pop_back();*/
                 } else {
                     /**
                      * And push the stack to go down
@@ -541,14 +543,14 @@ ZLKJBSolver::run()
                  * For nodes that are won and controlled by <pl>, check if their strategy needs to be fixed.
                  */
                 if (strategy[v] != -2) {
-                  if(strategy[v] != -1 && winning[strategy[v]] != winning[v]) {
-                    LOGIC_ERROR;
-                  }
-                  continue; // good strategy
+                    if(strategy[v] != -1 && winning[strategy[v]] != winning[v]) {
+                        LOGIC_ERROR;
+                    }
+                    continue; // good strategy
                 }
                 if (owner[v] != pl) {
-                  strategy[v] = -1;
-                  continue; // not controlled by <pl>
+                    strategy[v] = -1;
+                    continue; // not controlled by <pl>
                 }
                 /**
                  * Strategy of vertex <v> needs to be updated!

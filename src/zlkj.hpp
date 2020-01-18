@@ -30,31 +30,31 @@ namespace pg {
 class ZLKJSolver : public Solver
 {
 public:
-ZLKJSolver(Oink *oink, Game *game);
-virtual ~ZLKJSolver();
+    ZLKJSolver(Oink *oink, Game *game);
+    virtual ~ZLKJSolver();
 
-virtual void run();
+    virtual void run();
 
-int iterations;
+    int iterations;
 
 protected:
-int *inverse;
-int max_prio;
+    int *inverse;
+    int max_prio;
 
-int *region;
-int *winning;
-int *strategy;
-std::vector<std::unordered_set<int> > just;
+    int *region;
+    int *winning;
+    int *strategy;
+    std::vector<std::unordered_set<int> > just;
 
 
-bool to_inversion = true;
-bool only_recompute_when_attracted = true;
+    bool to_inversion = true;
+    bool only_recompute_when_attracted = true;
 
-uintqueue Q;
-uintqueue D;
+    uintqueue Q;
+    uintqueue D;
 
-int attractExt(int i, int r, std::vector<int> *R);
-std::pair<int, int> attractLosing(int i, int r, std::vector<int> *S, int next_r);
+    int attractExt(int i, int r, std::vector<int> *R);
+    std::pair<int, int> attractLosing(int i, int r, std::vector<int> *S, int next_r);
 };
 }
 #endif
