@@ -40,7 +40,7 @@ int pm_cmp(int pl, int p_left, int p_right) {
            ((p_left & 1) ^ (p_left < p_right)) ? -1 : 1;
 }
 
-PPJSolver::PPJSolver(Oink *oink, Game *game) : PPSolver(oink, game), waitingPriority(0)
+PPJSolver::PPJSolver(Oink *oink, Game *game) : PPSolver(oink, game), waitingPriority(0), waiting(NULL)
 {
 }
 
