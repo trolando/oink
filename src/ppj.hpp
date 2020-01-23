@@ -1,5 +1,6 @@
 /*
- * Copyright 2017-2018 Tom van Dijk, Johannes Kepler University Linz
+ * Copyright 2017-2020 Tom van Dijk, Johannes Kepler University Linz
+ * Copyright 2019-2020 Ruben Lapauw, KU Leuven
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,46 +15,37 @@
  * limitations under the License.
  */
 
-#ifndef PP_HPP
-#define PP_HPP
+#ifndef PPJ_HPP
+#define PPJ_HPP
 
 #include <queue>
-
+#include "pp.hpp"
 #include "oink.hpp"
 #include "solver.hpp"
 
 namespace pg {
 
-class PPSolver : public Solver
+class PPJSolver : public PPSolver
 {
 public:
-    PPSolver(Oink *oink, Game *game);
-    virtual ~PPSolver();
+    PPJSolver(Oink *oink, Game *game);
     virtual void run();
 
-    int promotions;
-
 protected:
-    int *inverse;
-    int max_prio;
+// Todo: possibly a large memory consumption.
+    std::vector<int> *waiting;
+    int waitingPriority;
+    std::vector<int> lost;
+    bitset is_lost;
 
-    std::vector<int> *regions;
-    int *region;
-    int *strategy;
-    //std::set<std::pair<int,int>> seen;
-
-    virtual void attract(int prio, std::queue<int> queue=std::queue<int>());
     virtual void unattracted(int node);
     virtual void endAttracting(int prio);
-    virtual void promote(int from, int to);
-    virtual void resetRegion(int priority);
     virtual bool setupRegion(int index, int priority, bool mustReset);
-    virtual void setDominion(int priority);
-    virtual int getRegionStatus(int index, int priority);
-    virtual void reportRegion(int priority);
-    virtual void printState();
+
+    void setWaiting(int node, int priority);
+    escape bestEscape(int node);
 };
 
 }
 
-#endif 
+#endif
