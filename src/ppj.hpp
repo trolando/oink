@@ -25,12 +25,6 @@
 
 namespace pg {
 
-struct escape {
-    int region;
-    int play;
-    int to;
-};
-
 class PPJSolver : public PPSolver
 {
 public:

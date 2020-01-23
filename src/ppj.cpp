@@ -26,16 +26,21 @@
 
 namespace pg {
 
+struct escape {
+    int region;
+    int play;
+    int to;
+};
 
 int pm_cmp(int pl, int p_left, int p_right) {
     p_left += pl;
     p_right += pl;
     return p_left == p_right ? 0 :
            (p_right & 1) != (p_left & 1) ? (p_right & 1) - (p_left & 1) :
-           (p_left & 1) ^ (p_left < p_right) ? -1 : 1;
+           ((p_left & 1) ^ (p_left < p_right)) ? -1 : 1;
 }
 
-PPJSolver::PPJSolver(Oink *oink, Game *game) : PPSolver(oink, game)
+PPJSolver::PPJSolver(Oink *oink, Game *game) : PPSolver(oink, game), waitingPriority(0)
 {
 }
 
