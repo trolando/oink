@@ -31,18 +31,19 @@ DPSolver::getRegionStatus(int i, int p)
     const int pl = p&1;
 
     // check if the region is closed in the subgame
-    for (int j=i; j>=0 && priority[j]==p; j--) {
+    for (int j=i; j>=0 && priority(j)==p; j--) {
         if (disabled[j] or region[j] > p) {
             // escape not in region
             continue;
-        } else if (owner[j] == pl) {
+        } else if (owner(j) == pl) {
             // region won by escape owner
             // it is therefore closed if it has a strategy
             if (strategy[j] == -1) return -2;
         } else {
             // region lost by escape owner
             // it is therefore closed if there are no edges to lower regions
-            for (auto to : out[j]) {
+            for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                int to = *curedge;
                 if (disabled[to]) continue;
                 int r = region[to];
                 if (region_[to] > r) r = region_[to]; // update from region_
@@ -53,9 +54,10 @@ DPSolver::getRegionStatus(int i, int p)
     // closed in the subgame, so find lowest higher region for possible promotion
     int lowest = -1;
     for (auto j : regions[p]) {
-        if (owner[j] != pl) {
+        if (owner(j) != pl) {
             // losing node, find lowest higher ...
-            for (auto to : out[j]) {
+            for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                int to = *curedge;
                 /** HOT SPOT of the iterator and minor hot spot of obtaining the region **/
                 if (disabled[to]) continue;
                 int r = region[to];
@@ -72,24 +74,24 @@ void
 DPSolver::run()
 {
     // obtain highest priority and allocate arrays
-    max_prio = priority[n_nodes-1];
+    max_prio = priority(nodecount()-1);
     regions = new std::vector<int>[max_prio+1];
-    region = new int[n_nodes];
-    region_ = new int[n_nodes];
-    strategy = new int[n_nodes];
+    region = new int[nodecount()];
+    region_ = new int[nodecount()];
+    strategy = new int[nodecount()];
     inverse = new int[max_prio+1];
 
     // initialize arrays
-    for (int i=0; i<n_nodes; i++) region[i] = disabled[i] ? -2 : priority[i];
-    for (int i=0; i<n_nodes; i++) region_[i] = -1;
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<nodecount(); i++) region[i] = disabled[i] ? -2 : priority(i);
+    for (int i=0; i<nodecount(); i++) region_[i] = -1;
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
     // initialize reset values
     reset0 = -1;
     reset1 = -1;
 
     // start loop at last node (highest priority)
-    int i = n_nodes - 1;
+    int i = nodecount() - 1;
 
     // reset statistics
     promotions = 0;
@@ -107,18 +109,18 @@ DPSolver::run()
 
     while (true) {
         // get current priority and skip all disabled/attracted nodes
-        int p = i < 0 ? -1 : priority[i];
-        while (i >= 0 and priority[i] == p and (disabled[i] or region[i] > p)) i--;
+        int p = i < 0 ? -1 : priority(i);
+        while (i >= 0 and priority(i) == p and (disabled[i] or region[i] > p)) i--;
 
         if (i < 0) {
             int max = -1;
-            for (int i=0; i<n_nodes; i++) if (max < region_[i]) max = region_[i];
+            for (int i=0; i<nodecount(); i++) if (max < region_[i]) max = region_[i];
             if (max == -1) break; // done
 
             // perform delayed promotions of highest player
             if (trace) logger << "performing delayed promotions of player " << (max&1) << std::endl;
             performances++;
-            for (int i=0; i<n_nodes; i++) {
+            for (int i=0; i<nodecount(); i++) {
                 if (region[i] == -2) continue;
                 if (region_[i] != -1) {
                     if ((region_[i]&1) == (max&1)) {
@@ -146,7 +148,7 @@ DPSolver::run()
         }
 
         // if empty, possibly reset and continue with next
-        if (priority[i] != p) {
+        if (priority(i) != p) {
             if (!regions[p].empty()) resetRegion(p);
             continue;
         }
@@ -173,17 +175,17 @@ DPSolver::run()
                 int res = getRegionStatus(i, p);
                 if (res == -2) {
                     // not closed, skip to next priority and break inner loop
-                    while (i >= 0 and priority[i] == p) i--;
+                    while (i >= 0 and priority(i) == p) i--;
                     break;
                 } else if (res == -1) {
                     // found dominion
                     setDominion(p);
                     // restart algorithm and break inner loop
-                    i = n_nodes - 1;
+                    i = nodecount() - 1;
                     // reset everything... (sadly)
-                    // for (int j=0; j<n_nodes; j++) region[j] = disabled[j] ? -2 : priority[j];
-                    // for (int j=0; j<n_nodes; j++) strategy[j] = -1;
-                    for (int j=0; j<n_nodes; j++) region_[j] = -1;
+                    // for (int j=0; j<nodecount(); j++) region[j] = disabled[j] ? -2 : priority(j);
+                    // for (int j=0; j<nodecount(); j++) strategy[j] = -1;
+                    for (int j=0; j<nodecount(); j++) region_[j] = -1;
                     reset0 = reset1 = -1;
                     P.clear();
                     break;
@@ -200,7 +202,7 @@ DPSolver::run()
                         }
                     }
                     if (!locked) {
-                        for (int i=0; i<n_nodes; i++) {
+                        for (int i=0; i<nodecount(); i++) {
                             // this loop is expensive, by the way
                             if (disabled[i]) continue;
                             if (region[i] < res && res <= region_[i]) {
@@ -229,7 +231,7 @@ DPSolver::run()
                         // emulate delayed promotion in region_
                         for (int i : regions[p]) region_[i] = res;
                         // skip to next priority and break inner loop
-                        while (i >= 0 and priority[i] == p) i--;
+                        while (i >= 0 and priority(i) == p) i--;
                         break;
                     } else {
                         // found instant promotion, perform it
@@ -246,7 +248,7 @@ DPSolver::run()
                         // add "to" to promotion targets
                         P.push_back(res);
                         // remove from region_ below res
-                        for (int i=0; i<n_nodes; i++) if (region[i] != -2 && region_[i] <= res) region_[i] = -1;
+                        for (int i=0; i<nodecount(); i++) if (region[i] != -2 && region_[i] <= res) region_[i] = -1;
                         // continue loop with the promotion target
                         i = inverse[res];
                         p = res;
@@ -255,7 +257,7 @@ DPSolver::run()
             }
         } else {
             // skip to next priority
-            while (i >= 0 and priority[i] == p) i--;
+            while (i >= 0 and priority(i) == p) i--;
         }
     }
 

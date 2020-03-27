@@ -29,22 +29,22 @@ void
 PPPSolver::run()
 {
     // obtain highest priority and allocate arrays
-    max_prio = game->priority[n_nodes-1];
+    max_prio = priority(nodecount()-1);
     regions = new std::vector<int>[max_prio+1];
-    region = new int[n_nodes];
-    strategy = new int[n_nodes];
+    region = new int[nodecount()];
+    strategy = new int[nodecount()];
     inverse = new int[max_prio+1];
 
     // initialize arrays
-    for (int i=0; i<n_nodes; i++) region[i] = disabled[i] ? -2 : priority[i];
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<nodecount(); i++) region[i] = disabled[i] ? -2 : priority(i);
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
     // initialize reset values
     reset0 = -1;
     reset1 = -1;
 
     // start loop at last node (highest priority)
-    int i = n_nodes - 1;
+    int i = nodecount() - 1;
 
     // reset statistics
     promotions = 0;
@@ -57,12 +57,12 @@ PPPSolver::run()
 
     while (i >= 0) {
         // get current priority and skip all disabled/attracted nodes
-        int p = priority[i];
-        while (i >= 0 and priority[i] == p and (disabled[i] or region[i] > p)) i--;
+        int p = priority(i);
+        while (i >= 0 and priority(i) == p and (disabled[i] or region[i] > p)) i--;
         if (i < 0) break;
 
         // if empty, possibly reset and continue with next
-        if (priority[i] != p) {
+        if (priority(i) != p) {
             if (!regions[p].empty()) resetRegion(p);
             continue;
         }
@@ -89,13 +89,13 @@ PPPSolver::run()
                 int res = getRegionStatus(i, p);
                 if (res == -2) {
                     // not closed, skip to next priority and break inner loop
-                    while (i >= 0 and priority[i] >= p) i--;
+                    while (i >= 0 and priority(i) >= p) i--;
                     break;
                 } else if (res == -1) {
                     // found dominion, return
                     setDominion(p);
                     // restart algorithm and break inner loop
-                    i = n_nodes - 1;
+                    i = nodecount() - 1;
                     break;
                 } else {
                     // found promotion, promote
@@ -113,7 +113,7 @@ PPPSolver::run()
             }
         } else {
             // skip to next priority
-            while (i >= 0 and priority[i] == p) i--;
+            while (i >= 0 and priority(i) == p) i--;
         }
     }
 

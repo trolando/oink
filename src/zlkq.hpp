@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Tom van Dijk, Johannes Kepler University Linz
+ * Copyright 2019 Tom van Dijk, University of Twente
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 #ifndef ZLKQ_HPP
 #define ZLKQ_HPP
 
-#include <boost/dynamic_bitset.hpp>
 #include <vector>
 
 #include "oink.hpp"
@@ -41,18 +40,20 @@ public:
 
     virtual void run();
 
-    typedef boost::dynamic_bitset<unsigned long long> bitset;
-
 protected:
-    int iterations = 0;
+    unsigned long long iterations = 0;
 
     uintqueue Q;
+    uintqueue Hs;
     int *str;
 
     bitset W0, W1; // current approximation of winning areas
 
     inline void attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y);
     void solve(bitset &Subgame, int vtop, int pr, int pe, int po);
+
+    // version of the Liverpools
+    void solve2(bitset &Subgame, int vtop, int pr, int pl, int pe, int po);
 };
 
 }

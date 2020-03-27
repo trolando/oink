@@ -20,6 +20,7 @@
 #include <iostream>
 #include <vector>
 
+#include "error.hpp"
 #include "game.hpp"
 #include "uintqueue.hpp"
 
@@ -165,10 +166,6 @@ protected:
 
     uintqueue todo;          // internal queue for solved nodes for flushing
     int *outcount;           // number of unsolved outgoing edges per node (for fast attraction)
-    int *outa;               // index array for outgoing edges
-    int *ina;                // index array for incoming edges
-    int *outs;               // all outgoing edges
-    int *ins;                // all incoming edges
     bitset disabled;         // which vertices are disabled
 
     friend class pg::Solver; // to allow access to edges

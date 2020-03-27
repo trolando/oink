@@ -21,7 +21,6 @@
 #include <set>
 #include <map>
 #include <tuple>
-#include <boost/dynamic_bitset.hpp>
 
 #include "oink.hpp"
 #include "solver.hpp"
@@ -38,8 +37,6 @@ public:
     virtual ~RTLSolver();
 
     virtual void run();
-
-    typedef boost::dynamic_bitset<unsigned long long> bitset;
 
 protected:
     int max_prio;

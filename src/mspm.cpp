@@ -123,12 +123,12 @@ MSPMSolver::lift(int node, int target)
     lift_attempt++;
 
     // initialize stuff
-    const int pl_max = owner[node];
+    const int pl_max = owner(node);
     const int pl_min = 1 - pl_max;
-    const int d = priority[node];
+    const int d = priority(node);
 
     if (trace >= 2) {
-        logger << "\033[1mupdating node " << node << "/" << d << (owner[node]?" (odd)":" (even)") << "\033[m with current progress measure";
+        logger << "\033[1mupdating node " << node << "/" << d << (owner(node)?" (odd)":" (even)") << "\033[m with current progress measure";
         pm_stream(logger, pm);
         logger << std::endl;
     }
@@ -145,7 +145,7 @@ MSPMSolver::lift(int node, int target)
             Prog(tmp, pms + k*target, d, pl_max);
 
             if (trace >= 2) {
-                logger << "successor node " << target << "/" << priority[target] << " results in";
+                logger << "successor node " << target << "/" << priority(target) << " results in";
                 pm_stream(logger, tmp);
                 logger << std::endl;
             }
@@ -155,20 +155,23 @@ MSPMSolver::lift(int node, int target)
                 if (pl_max) best_ch1 = target;
                 else best_ch0 = target;
             }
-       } else for (int to : out[node]) {
-            if (cover[to] == -2) continue;
-            Prog(tmp, pms + k*to, d, pl_max);
+        } else {
+            for (auto curedge = outs(node); *curedge != -1; curedge++) {
+                int to = *curedge;
+                if (cover[to] == -2) continue;
+                Prog(tmp, pms + k*to, d, pl_max);
 
-            if (trace >= 2) {
-                logger << "successor node " << to << "/" << priority[to] << " results in";
-                pm_stream(logger, tmp);
-                logger << std::endl;
-            }
+                if (trace >= 2) {
+                    logger << "successor node " << to << "/" << priority(to) << " results in";
+                    pm_stream(logger, tmp);
+                    logger << std::endl;
+                }
 
-            if (pm_less(pm, tmp, d, pl_max)) {
-                pm_copy(pm, tmp, pl_max);
-                if (pl_max) best_ch1 = to;
-                else best_ch0 = to;
+                if (pm_less(pm, tmp, d, pl_max)) {
+                    pm_copy(pm, tmp, pl_max);
+                    if (pl_max) best_ch1 = to;
+                    else best_ch0 = to;
+                }
             }
         }
     }
@@ -178,12 +181,13 @@ MSPMSolver::lift(int node, int target)
         if (trace >= 2) logger << "computing min" << std::endl;
         if (trace >= 2) pm_copy(tmp, pm, 1-pl_min);
         int best_to = -1;
-        for (int to : out[node]) {
+        for (auto curedge = outs(node); *curedge != -1; curedge++) {
+            int to = *curedge;
             if (cover[to] == -2) continue;
             Prog(tmp, pms + k*to, d, pl_min);
 
             if (trace >= 2) {
-                logger << "successor node " << to << "/" << priority[to] << " results in";
+                logger << "successor node " << to << "/" << priority(to) << " results in";
                 pm_stream(logger, tmp);
                 logger << std::endl;
             }
@@ -209,7 +213,7 @@ MSPMSolver::lift(int node, int target)
 
     if (ch0 or ch1) {
         if (trace) {
-            logger << "\033[1;32mupdated node " << node << "/" << d << (owner[node]?" (odd)":" (even)") << "\033[m to";
+            logger << "\033[1;32mupdated node " << node << "/" << d << (owner(node)?" (odd)":" (even)") << "\033[m to";
             pm_stream(logger, pm);
             logger << std::endl;
         }
@@ -234,14 +238,14 @@ MSPMSolver::solve(int node, int str)
     const int pl = pm[0] == -1 ? 0 : 1;
     if (pm[pl] != -1) LOGIC_ERROR;
 
-    if (trace) logger << "Detected \033[1;31mTop\033[m from " << node << "/" << priority[node] << " to " << str << "/" << priority[str] << std::endl;
+    if (trace) logger << "Detected \033[1;31mTop\033[m from " << node << "/" << priority(node) << " to " << str << "/" << priority(str) << std::endl;
 
     // initialize
     std::queue<int> q;
 
     // solve <node>
-    oink->solve(node, pl, owner[node] == pl ? str : -1);
-    // if (pl == (priority[node]&1)) counts[priority[node]]--;
+    oink->solve(node, pl, owner(node) == pl ? str : -1);
+    // if (pl == (priority(node)&1)) counts[priority(node)]--;
     cover[node] = -1;
     q.push(node);
     todo_push(node);
@@ -250,13 +254,15 @@ MSPMSolver::solve(int node, int str)
     while (!q.empty()) {
         int n = q.front();
         q.pop();
-        for (int from : in[n]) {
-            // logger << "trying edge " << from << "/" << priority[from] << " to " << n << std::endl;
+        for (auto curedge = ins(n); *curedge != -1; curedge++) {
+            int from = *curedge;
+            // logger << "trying edge " << from << "/" << priority(from) << " to " << n << std::endl;
             if (cover[from]) continue;
-            if (priority[from] > priority[node]) continue;
-            if (owner[from] != pl) {
+            if (priority(from) > priority(node)) continue;
+            if (owner(from) != pl) {
                 bool escapes = false;
-                for (int to : out[from]) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (cover[to] < 0) continue; // disabled or already solved
                     // if (cover[to] != 0) LOGIC_ERROR; // should have been covered
                     // ^--- it can escape, happens when alternating!
@@ -265,8 +271,8 @@ MSPMSolver::solve(int node, int str)
                 }
                 if (escapes) continue;
             }
-            oink->solve(from, pl, owner[from] == pl ? n : -1); 
-            // if (winner == (priority[from]&1)) counts[priority[from]]--;
+            oink->solve(from, pl, owner(from) == pl ? n : -1);
+            // if (winner == (priority(from)&1)) counts[priority(from)]--;
             cover[from] = -1;
             pms[k*from+pl] = -1;
             q.push(from);
@@ -279,8 +285,8 @@ MSPMSolver::solve(int node, int str)
 
     if (trace >= 1) {
         logger << "Cover status:" << std::endl;
-        for (int i=0; i<n_nodes; i++) {
-            if (cover[i]) logger << i << "/" << priority[i] << ": " << cover[i] << std::endl;
+        for (int i=0; i<nodecount(); i++) {
+            if (cover[i]) logger << i << "/" << priority(i) << ": " << cover[i] << std::endl;
         }
     }
 }
@@ -289,22 +295,24 @@ void
 MSPMSolver::coverlower(int node, int k)
 {
     // initialize
-    const int pr = priority[node];
+    const int pr = priority(node);
     const int pl = 1-(pr&1); // attract for other player
 
     bool banner = false;
 
     std::queue<int> q;
 
-    for (int n=node; n<n_nodes; n++) {
+    for (int n=node; n<nodecount(); n++) {
         if (cover[n]) continue; // also for "disabled"
-        if (priority[n] <= pr) continue; // skip nodes of same priority
+        if (priority(n) <= pr) continue; // skip nodes of same priority
         cover[n] = k;
-        for (int from : in[n]) {
+        for (auto curedge = ins(n); *curedge != -1; curedge++) {
+            int from = *curedge;
             if (cover[from]) continue;
-            if (owner[from] != pl) {
+            if (owner(from) != pl) {
                 bool escapes = false;
-                for (int to : out[from]) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (cover[to]) continue;
                     escapes = true;
                     break;
@@ -324,11 +332,13 @@ MSPMSolver::coverlower(int node, int k)
     while (!q.empty()) {
         int n = q.front();
         q.pop();
-        for (int from : in[n]) {
+        for (auto curedge = ins(n); *curedge != -1; curedge++) {
+            int from = *curedge;
             if (cover[from]) continue;
-            if (owner[from] != pl) {
+            if (owner(from) != pl) {
                 bool escapes = false;
-                for (int to : out[from]) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (cover[to]) continue;
                     escapes = true;
                     break;
@@ -348,28 +358,28 @@ void
 MSPMSolver::run()
 {
     // determine k = highest priority + 1
-    k = priority[n_nodes-1]+1;
+    k = priority(nodecount()-1)+1;
 
     // now create the data structure, for each node
-    pms = new int[k*n_nodes];
-    strategy = new int[n_nodes];
+    pms = new int[k*nodecount()];
+    strategy = new int[nodecount()];
     counts = new int[k];
-    cover = new int[n_nodes];
+    cover = new int[nodecount()];
     tmp = new int[k];
     best = new int[k];
 
     // initialize all measures to 0
-    for (int i=0; i<k*n_nodes; i++) pms[i] = 0;
+    for (int i=0; i<k*nodecount(); i++) pms[i] = 0;
 
     // initialize strategy to -1
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
     // initialize cover
-    for (int i=0; i<n_nodes; i++) cover[i] = disabled[i] ? -2 : 0;
+    for (int i=0; i<nodecount(); i++) cover[i] = disabled[i] ? -2 : 0;
 
     // initialize counts for each priority
     for (int i=0; i<k; i++) counts[i] = 0;
-    for (int i=0; i<n_nodes; i++) if (cover[i] == 0) counts[priority[i]]++;
+    for (int i=0; i<nodecount(); i++) if (cover[i] == 0) counts[priority(i)]++;
 
     // set number of lifts and lift attempts to 0
     lift_count = lift_attempt = 0;
@@ -380,8 +390,8 @@ MSPMSolver::run()
      */
 
     // initialize all nodes as not dirty
-    dirty = new int[n_nodes];
-    for (int n=0; n<n_nodes; n++) dirty[n] = 0;
+    dirty = new int[nodecount()];
+    for (int n=0; n<nodecount(); n++) dirty[n] = 0;
 
     // initialize cover depth to 0
     coverdepth = 0;
@@ -390,15 +400,16 @@ MSPMSolver::run()
      * First loop, starting with standard "lift" for nodes and "liftR" for predecessors.
      * Can already find "Top" here, so add covered nodes to <deferred>.
      */
-    for (int n=n_nodes-1; n>=0; n--) {
+    for (int n=nodecount()-1; n>=0; n--) {
         bool lifted = cover[n] == 0 and lift(n, -1);
         if (cover[n] == -1 or lifted) {
-            for (int from : in[n]) {
+            for (auto curedge = ins(n); *curedge != -1; curedge++) {
+                int from = *curedge;
                 if (cover[from] == 0 and lift(from, n)) todo_push(from);
             }
         }
     }
-    
+
     /**
      * The main loop
      */
@@ -406,7 +417,8 @@ MSPMSolver::run()
     while (!todo.empty()) {
         int n = todo_pop();
         if (cover[n] == -1 or cover[n] == 0) {
-            for (int from : in[n]) {
+            for (auto curedge = ins(n); *curedge != -1; curedge++) {
+                int from = *curedge;
                 if (cover[from] == 0 and lift(from, n)) todo_push(from);
             }
         }
@@ -415,16 +427,18 @@ MSPMSolver::run()
             int m = coverdepth--;
             std::queue<int> q;
 
-            for (int n=0; n<n_nodes; n++) {
+            for (int n=0; n<nodecount(); n++) {
                 if (cover[n] != m) continue;
                 cover[n] = 0;
 
                 if (trace) logger << "\033[7;31;1muncovering\033[m " << n << std::endl;
 
                 // try to see if it is attracted
-                const int pl = owner[n];
+                const int pl = owner(n);
                 bool escapes = false;
-                for (int to : out[n]) {
+                for (auto curedge = outs(n); *curedge != -1; curedge++) {
+                    int to = *curedge;
+                    if (cover[to] == -2) continue;
                     if (game->solved[to]) {
                         if (game->winner[to] == pl) {
                             oink->solve(n, pl, to);
@@ -461,11 +475,13 @@ MSPMSolver::run()
                 q.pop();
                 if (!game->solved[n]) LOGIC_ERROR;
                 const bool pl = game->winner[n];
-                for (int from : in[n]) {
+                for (auto curedge = ins(n); *curedge != -1; curedge++) {
+                    int from = *curedge;
                     if (cover[from]) continue;
-                    if (owner[from] != pl) {
+                    if (owner(from) != pl) {
                         bool escapes = false;
-                        for (int to : out[from]) {
+                        for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                            int to = *curedge;
                             if (cover[to] < 0) continue;
                             if (cover[to] != 0) LOGIC_ERROR;
                             escapes = true;
@@ -473,8 +489,8 @@ MSPMSolver::run()
                         }
                         if (escapes) continue;
                     }
-                    oink->solve(from, pl, owner[from] == pl ? n : -1); 
-                    // counts[priority[node]]--;
+                    oink->solve(from, pl, owner(from) == pl ? n : -1);
+                    // counts[priority(node)]--;
                     cover[from] = -1;
                     pms[k*from+pl] = -1;
                     q.push(from);
@@ -485,21 +501,21 @@ MSPMSolver::run()
     }
 
     if (trace) {
-        for (int n=0; n<n_nodes; n++) {
-            logger << "\033[1;31mnode " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m is";
+        for (int n=0; n<nodecount(); n++) {
+            logger << "\033[1;31mnode " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m is";
             pm_stream(logger, pms + k*n);
             if (cover[n] >= 0) logger << " cover: " << cover[n];
             logger << std::endl;
         }
     }
-    
+
     // Now set dominions and derive strategy for even.
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (disabled[i]) continue;
         int *pm = pms + k*i;
         if ((pm[0] == -1) == (pm[1] == -1)) LOGIC_ERROR;
         const int winner = pm[0] == -1 ? 0 : 1;
-        oink->solve(i, winner, game->owner[i] == winner ? strategy[i] : -1);
+        oink->solve(i, winner, game->owner(i) == winner ? strategy[i] : -1);
     }
 
     delete[] pms;

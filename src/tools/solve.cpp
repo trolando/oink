@@ -143,18 +143,19 @@ catchsig(int sig)
         resetsighandlers();
         out << std::endl << "received INT signal" << std::endl;
         out.flush();
-        exit(-1);
+        exit(-SIGINT);
     } else if (sig == SIGABRT) {
         // really bad
         resetsighandlers();
         out << std::endl << "terminated due to ABORT signal" << std::endl;
         out.flush();
+        exit(-SIGABRT);
         raise(sig);
     } else {
         resetsighandlers();
         out << std::endl << "terminated due to signal " << sig << std::endl;
         out.flush();
-        exit(-1);
+        exit(-sig);
     }
 }
 
@@ -195,14 +196,15 @@ int main(int argc, char **argv)
         ("v,verify", "Verify solution")
         ("p,print", "Print solution to stdout")
         ("i,input", "Input parity game", cxxopts::value<std::string>())
-        ("sol", "Input solution", cxxopts::value<std::string>())
+        ("sol", "Input (partial) solution", cxxopts::value<std::string>())
         ("o,output", "Output game or solution", cxxopts::value<std::string>())
         ("dot", "Write .dot file (before preprocessing)", cxxopts::value<std::string>())
         /* Preprocessing */
         ("inflate", "Inflate game")
         ("compress", "Compress game")
         ("no-single", "Do not solve single-parity games during preprocessing")
-        ("no-loops", "Do not process self-loops during preprocessing")
+        ("no-loops", "Do not remove self-loops during preprocessing (default behavior)")
+        ("loops", "Remove self-loops during preprocessing")
         ("no-wcwc", "Do not solve winner-controlled winning cycles during preprocessing")
         /* Solving */
         ("scc", "Iteratively solve bottom SCCs")
@@ -220,14 +222,14 @@ int main(int argc, char **argv)
 
     /* Parse command line */
     opts.parse_positional(std::vector<std::string>({"input", "output"}));
-    opts.parse(argc, argv);
+    auto options = opts.parse(argc, argv);
 
-    if (opts.count("help")) {
+    if (options.count("help")) {
         std::cout << opts.help() << std::endl;
         return 0;
     }
 
-    if (opts.count("solvers")) {
+    if (options.count("solvers")) {
         solvers.list(std::cout);
         return 0;
     }
@@ -246,17 +248,19 @@ int main(int argc, char **argv)
     Game pg;
 
     try {
-        if (opts.count("input")) {
-            std::string filename = opts["input"].as<std::string>();
+        if (options.count("input")) {
+            std::string filename = options["input"].as<std::string>();
             io::filtering_istream in;
             if (boost::algorithm::ends_with(filename, ".bz2")) in.push(io::bzip2_decompressor());
             if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
             std::ifstream file(filename, std::ios_base::binary);
             in.push(file);
-            pg.parse_pgsolver(in);
+            pg.parse_pgsolver(in, options.count("loops") != 0);
+            pg.build_arrays();
             file.close();
         } else {
-            pg.parse_pgsolver(std::cin);
+            pg.parse_pgsolver(std::cin, options.count("loops") != 0);
+            pg.build_arrays();
         }
         out << "parity game with " << pg.nodecount() << " nodes and " << pg.edgecount() << " edges." << std::endl;
     } catch (const char *err) {
@@ -270,8 +274,8 @@ int main(int argc, char **argv)
      */
 
     try {
-        if (opts.count("sol")) {
-            std::ifstream file(opts["sol"].as<std::string>());
+        if (options.count("sol")) {
+            std::ifstream file(options["sol"].as<std::string>());
             pg.parse_solution(file);
             file.close();
             out << "solution parsed." << std::endl;
@@ -286,8 +290,8 @@ int main(int argc, char **argv)
      * If requested, write .dot file
      */
 
-    if (opts.count("dot")) {
-        std::ofstream file(opts["dot"].as<std::string>());
+    if (options.count("dot")) {
+        std::ofstream file(options["dot"].as<std::string>());
         pg.write_dot(file);
         file.close();
         out << "dot file written." << std::endl;
@@ -299,8 +303,8 @@ int main(int argc, char **argv)
      * (Remember the mapping to reverse the reindex later.)
      */
 
-    int *mapping = new int[pg.n_nodes];
-    pg.reindex(mapping);
+    int *mapping = new int[pg.nodecount()];
+    pg.sort(mapping);
     out << "parity game reindexed" << std::endl;
 
     /**
@@ -309,47 +313,54 @@ int main(int argc, char **argv)
      */
 
     Oink en(pg, out);
-    en.setTrace(opts.count("t"));
+    en.setTrace(options.count("t"));
 
     // preprocessing options
-    if (opts.count("inflate")) en.setInflate();
-    else if (opts.count("compress")) en.setCompress();
+    if (options.count("inflate")) en.setInflate();
+    else if (options.count("compress")) en.setCompress();
     else en.setRenumber();
-    if (opts.count("no-single")) en.setSolveSingle(false);
-    if (opts.count("no-loops")) en.setRemoveLoops(false);
-    if (opts.count("no-wcwc")) en.setRemoveWCWC(false);
+    if (options.count("no-single")) en.setSolveSingle(false);
+    if (options.count("loops")) en.setRemoveLoops(true);
+    if (options.count("no-loops")) en.setRemoveLoops(false);
+    if (options.count("no-wcwc")) en.setRemoveWCWC(false);
 
     // solver
-    if (opts.count("solver")) {
-        en.setSolver(solvers.id(opts["solver"].as<std::string>()));
+    if (options.count("solver")) {
+        en.setSolver(solvers.id(options["solver"].as<std::string>()));
     } else {
         en.setSolver("atl"); // default solver :)
         for (unsigned id=0; id<solvers.count(); id++) {
-            if (opts.count(solvers.label(id))) en.setSolver(id);
+            if (options.count(solvers.label(id))) en.setSolver(id);
         }
     }
 
     // solving options
-    if (opts.count("scc")) en.setBottomSCC(true);
-    if (opts.count("workers")) en.setWorkers(opts["workers"].as<int>());
+    if (options.count("scc")) en.setBottomSCC(true);
+    if (options.count("workers")) en.setWorkers(options["workers"].as<int>());
 
     /**
      * STEP 6
      * Run the solver and report the time.
      */
 
-    if (opts.count("timeout")) alarm(opts["timeout"].as<int>());
-    double begin = wctime();
-    en.run();
-    double end = wctime();
-    out << "total solving time: " << std::fixed << (end-begin) << " sec." << std::endl;
+    if (options.count("timeout")) alarm(options["timeout"].as<int>());
+
+    try {
+        double begin = wctime();
+        en.run();
+        double end = wctime();
+        out << "total solving time: " << std::fixed << (end-begin) << " sec." << std::endl;
+    } catch (pg::Error &err) {
+        out << "solving error: " << err.what() << std::endl;
+        return -1;
+    }
 
     /**
      * STEP 7
      * Verify the solution.
      */
 
-    if (opts.count("v")) {
+    if (options.count("v")) {
         try {
             out << "verifying solution..." << std::endl;
             Verifier v(&pg, out);
@@ -375,33 +386,34 @@ int main(int argc, char **argv)
      * Revert reindex if we need to output.
      */
 
-    if (opts.count("output") or opts.count("p")) pg.permute(mapping);
+    if (options.count("output") or options.count("p")) pg.permute(mapping);
 
-    if (opts.count("output")) {
+    if (options.count("output")) {
         // write solution to file
-        if (opts.count("output")) {
-            std::ofstream file(opts["output"].as<std::string>());
+        if (options.count("output")) {
+            std::ofstream file(options["output"].as<std::string>());
             pg.write_sol(file);
         }
     }
 
-    if (opts.count("p")) {
+    if (options.count("p")) {
         // print winning nodes
         bool banner = false;
-        for (int i=0; i<pg.n_nodes; i++) {
+        for (int i=0; i<pg.nodecount(); i++) {
             if (pg.solved[i] and pg.winner[i] == 0) {
                 if (!banner) out << "won by even:";
                 banner = true;
-                out << " " << pg.label[i];
+                // out << " " << i; // << "(" << pg.priority(i) << ")";
+                out << " " << pg.label_vertex(i);
             }
         }
         if (banner) out << std::endl;
         banner = false;
-        for (int i=0; i<pg.n_nodes; i++) {
+        for (int i=0; i<pg.nodecount(); i++) {
             if (pg.solved[i] and pg.winner[i] == 1) {
                 if (!banner) out << "won by odd:";
                 banner = true;
-                out << " " << pg.label[i];
+                out << " " << pg.label_vertex(i);
             }
         }
         if (banner) out << std::endl;

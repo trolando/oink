@@ -15,12 +15,12 @@
  */
 
 #include <algorithm> // for sort
+#include <climits> // for INT_MAX
 #include <cstring> // for memset
 
 #include "dtl.hpp"
 
-#define CHECK_UNIQUE !NDEBUG // detect duplicate dominions
-#define FASTDOMINION 0
+#define CHECK_UNIQUE (1 or !NDEBUG) // detect duplicate dominions
 
 namespace pg {
 
@@ -40,15 +40,15 @@ DTLSolver::~DTLSolver()
 inline bool
 DTLSolver::attracts(const int pl, const int v, bitset &Z, bitset &R)
 {
-    const int *_out = outs + outa[v];
-    if (owner[v] == pl) {
-        for (int to = *_out; to != -1; to = *++_out) {
-            if (Z[to]) return true;
+    if (owner(v) == pl) {
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            if (Z[*curedge]) return true;
         }
         return false;
     } else {
         bool hasZ = false;
-        for (int to = *_out; to != -1; to = *++_out) {
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            int to = *curedge;
             if (Z[to]) { hasZ = true; continue; }
             if (R[to]) return false;
         }
@@ -66,17 +66,17 @@ void
 DTLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z, bitset &G, const int max_prio)
 {
     // attract vertices with an edge to <v>
-    const int *_in = ins + ina[v];
-    for (int from = *_in; from != -1; from = *++_in) {
+    for (auto curedge = ins(v); *curedge != -1; curedge++) {
+        int from = *curedge;
         if (Z[from]) {
             // already in Z, maybe set strategy (for vertices in the original target set)
-            if (owner[from] == pl and str[from] == -1) str[from] = v;
-        } else if (R[from] and (max_prio < 0 or priority[from] <= max_prio)) {
-            if (owner[from] != pl) {
+            if (owner(from) == pl and str[from] == -1) str[from] = v;
+        } else if (R[from] and (max_prio < 0 or priority(from) <= max_prio)) {
+            if (owner(from) != pl) {
                 // check if opponent can escape
                 bool escapes = false;
-                const int *_out = outs + outa[from];
-                for (int to = *_out; to != -1; to = *++_out) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (G[to] and !Z[to]) {
                         escapes = true;
                         break;
@@ -86,13 +86,13 @@ DTLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z, bits
             }
             // attract
             Z[from] = true;
-            str[from] = owner[from] == pl ? v : -1;
+            str[from] = owner(from) == pl ? v : -1;
             Q.push(from);
 #ifndef NDEBUG
             // maybe report event
             if (trace >= 3) {
                 logger << "\033[1;37mattracted \033[36m" << label_vertex(from) << "\033[m by \033[1;36m" << pl << "\033[m";
-                if (owner[from] == pl) logger << " (via " << label_vertex(v) << ")" << std::endl;
+                if (owner(from) == pl) logger << " (via " << label_vertex(v) << ")" << std::endl;
                 else logger << " (forced)" << std::endl;
             }
 #endif
@@ -135,12 +135,12 @@ DTLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitset
                 return false; // is now a deleted tangle
             } else if (Z[v]) {
                 continue; // already attracted
-            } else if (max_prio >= 0 and priority[v] > max_prio) {
-                return false;
-            } else if (R[v]) {
-                can_attract_new = true; // has vertices not yet attracted
-            } else {
+            } else if (!R[v]) {
                 return false; // not contained in Z+R
+            } else if (max_prio >= 0 and priority(v) > max_prio) {
+                return false;
+            } else {
+                can_attract_new = true; // has vertices not yet attracted
             }
         }
         if (!can_attract_new) return false;
@@ -211,7 +211,7 @@ bool
 DTLSolver::extractTangles(int startvertex, bitset &R, int *str)
 {
     bool new_tangles = false;
-    const int pr = priority[startvertex];
+    const int pr = priority(startvertex);
     const int pl = pr&1;
 
     /**
@@ -231,18 +231,18 @@ pearce_again:
         const unsigned int n = pea_vS.back();
         unsigned int i = pea_iS.back();
 
-        if (owner[n] != pl) {
-            const int *_out = outs + outa[n];
+        if (owner(n) != pl) {
+            auto edges = outs(n);
             if (i>0) {
                 // finishEdge
-                const int w = _out[i-1];
+                const int w = edges[i-1];
                 if (pea_vidx[w] < pea_vidx[n]) {
                     pea_vidx[n] = pea_vidx[w];
                     pea_root[n] = false;
                 }
             }
             for (;;) {
-                const int to = _out[i];
+                const int to = edges[i];
                 if (to == -1) break; // done
                 // beginEdge
                 if (R[to]) {
@@ -314,7 +314,7 @@ pearce_again:
 
         const bool is_tangle = (tangle.size() > 1) or
             ((unsigned int)str[n] == n) or
-            (std::find(out[n].begin(), out[n].end(), n) != out[n].end());
+            (str[n] == -1 and game->has_edge(n, n));
         if (!is_tangle) {
             tangle.clear();
             continue;
@@ -327,9 +327,9 @@ pearce_again:
         for (const int v : tangle) escapes[v] = true;
 
         for (const int v : tangle) {
-            if (owner[v] != pl) {
-                const int *_out = outs + outa[v];
-                for (int to = *_out; to != -1; to = *++_out) {
+            if (owner(v) != pl) {
+                for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (G[to] and !escapes[to]) {
                         escapes[to] = true;
                         tangleto.push(to);
@@ -348,6 +348,11 @@ pearce_again:
             // dominion
             if (trace) {
                 logger << "\033[1;38;5;201mdominion \033[36m" << pr << "\033[m";
+                logger << " (depth " << cur_depth <<")";
+                if (cur_depth != 0) {
+                    LOGIC_ERROR;
+                    exit(-1);
+                }
 #ifndef NDEBUG
                 if (trace >= 2) {
                     for (const int v : tangle) {
@@ -363,11 +368,13 @@ pearce_again:
                 if (S[v] == false) {
                     S[v] = true;
                     SQ.push(v);
+                    dom_vector.push_back(v);
+                    dom_vector.push_back(str[v]);
                 }
             }
             dominions++;
-            new_tangles = true;
             tangle.clear();
+            new_tangles = true;
             continue;
         }
 
@@ -418,7 +425,7 @@ pearce_again:
 
         if (trace >= 1) {
             logger << "\033[1;38;5;198mnew tangle " << pr << "\033[m (" << tpr.size() << ")";
-#ifndef NDEBUG
+            logger << " (depth " << cur_depth <<")";
             if (trace >= 2) {
                 for (const int v : tangle) {
                     logger << " \033[1;36m" << label_vertex(v) << "\033[m";
@@ -426,7 +433,6 @@ pearce_again:
                 }
             }
             logger << " with " << tangleto.size() << " escape vertices.";
-#endif
             logger << std::endl;
         }
 
@@ -468,11 +474,11 @@ pearce_again:
  * Find new tangles for <player> given the set of best vertices <V> in the subgame <R>.
  */
 bool
-DTLSolver::sptl(bitset &V, bitset &R, const int player)
+DTLSolver::sptl(bitset &V, bitset &W, bitset &R, const int player)
 {
     bool changes = false;
 
-    for (int top=n_nodes-1; top>=0; top--) {
+    for (int top=nodecount()-1; top>=0; top--) {
         if (!V[top] or !R[top]) continue; // meh
 
         Z[top] = true; // add to <Z>
@@ -485,14 +491,14 @@ DTLSolver::sptl(bitset &V, bitset &R, const int player)
 #ifndef NDEBUG
             if (trace >= 2) Zvec.push(v);
 #endif
-            attractVertices(player, v, R, Z, R, priority[top]);
-            attractTangles(player, v, R, Z, R, priority[top]);
+            attractVertices(player, v, R, Z, R, priority(top));
+            attractTangles(player, v, R, Z, R, priority(top));
         }
 
 #ifndef NDEBUG
         if (trace >= 2) {
             // report region
-            logger << "\033[1;33mregion\033[m \033[1;36m" << priority[top] << "\033[m";
+            logger << "\033[1;33mregion\033[m \033[1;36m" << priority(top) << "\033[m";
             for (unsigned int i=0; i<Zvec.size(); i++) {
                 int v = Zvec[i];
                 logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
@@ -505,13 +511,13 @@ DTLSolver::sptl(bitset &V, bitset &R, const int player)
 
         bool closed_region = true;
 
-        if (owner[top] == player) {
+        if (owner(top) == player) {
             if (str[top] == -1) {
                 closed_region = false;
             }
         } else {
-            const int *_out = outs + outa[top];
-            for (int to = *_out; to != -1; to = *++_out) {
+            for (auto curedge = outs(top); *curedge != -1; curedge++) {
+                int to = *curedge;
                 if (R[to]) {
                     closed_region = false;
                     break;
@@ -519,37 +525,18 @@ DTLSolver::sptl(bitset &V, bitset &R, const int player)
             }
         }
 
-        if (closed_region) {
+        if (closed_region and !W[top]) {
+            W[top] = true;
+
             /**
              * Extract tangles by computing SCCs starting at each top vertex.
              * Note: each bottom SCC must contain a head vertex.
              */
 
-            memset(pea_vidx, 0, sizeof(int[n_nodes]));
+            memset(pea_vidx, 0, sizeof(int[nodecount()]));
             pea_curidx = 1;
 
             if (extractTangles(top, Z, str)) changes = true;
-
-#if FASTDOMINION
-            /**
-             * Extend any dominions that were found.
-             * (Any solved vertices are now in <SQ>.)
-             */
-
-            if (SQ.nonempty()) {
-                SQ.swap(Q);
-                while (Q.nonempty()) {
-                    const int v = Q.pop();
-                    oink->solve(v, player, str[v]);
-                    G[v] = false; // remove from Game
-                    R[v] = false; // remove from region
-                    attractVertices(player, v, G, S, G, -1);
-                    attractTangles(player, v, G, S, G, -1);
-                }
-
-                S.reset();
-            }
-#endif
         }
 
         Z.reset();
@@ -558,461 +545,490 @@ DTLSolver::sptl(bitset &V, bitset &R, const int player)
     return changes;
 }
 
-void
-DTLSolver::computeValues(int* val, const int player)
+/**
+ * Computes the distances of <player>-priority vertices <V> in region <R> in subgame <G>.
+ * Meaning the opponent can escape to <G>.
+ */
+bool
+DTLSolver::computeDistanceValues(bitset &V, bitset &R, bitset &G, int* val, const int player)
 {
-    memset(val, 0, sizeof(int[n_nodes]));
-    int dist = 1;
+    int dist = 1; // start distance 1
 
-    bitset Z(n_nodes);
-    bitset V(n_nodes); // the current V
-    for (int v=0; v<n_nodes; v++) {
-        if (G[v] and (priority[v]&1) == player) V[v] = true;
-    }
-
-    if (!V.any()) return;
-
-    while (true) {
-        for (int top=n_nodes-1; top>=0; top--) {
+    while (V.any()) {
+        // make the partition (attract lower to higher)
+        for (int top=nodecount()-1; top>=0; top--) {
             if (V[top] and !Z[top]) {
-                Z[top] = true; // add to <Z>
+                Z[top] = true;
+                str[top] = -1; // avoid valgrind warnings...
                 Q.push(top);
                 while (Q.nonempty()) {
                     const int v = Q.pop();
-                    attractVertices(player, v, G, Z, G, priority[top]);
-                    attractTangles(player, v, G, Z, G, priority[top]);
+                    attractVertices(player, v, R, Z, G, priority(top));
+                    attractTangles(player, v, R, Z, G, priority(top));
                 }
             }
         }
 
+        // find candidate vertices to remove from V
         int n_candidates = 0;
-        for (int v=n_nodes-1; v>=0; v--) {
+
+        for (int v=nodecount()-1; v>=0; v--) {
             if (V[v] and !attracts(player, v, Z, G)) Candidates[n_candidates++] = v;
         }
-        if (n_candidates == 0) break;
+        if (n_candidates == 0) {
+            for (int v=0; v<nodecount(); v++) if (V[v]) val[v] = INT_MAX;
+            Z.reset();
+            return true;
+        }
 
+        // attract higher to lower
         int t = 0;
-        for (int v=0; v<=n_nodes; v++) {
-            if (v == n_nodes) {
+        for (int v=0; v<=nodecount();) {
+            if (v == nodecount()) {
                 if (Q.empty()) break;
-            } else if (!G[v]) {
-                continue;
+            } else if (!R[v] or Z[v]) {
+                v++;
+                continue; // only attract vertices in <R\Z>
             } else {
-                if (priority[v] > t and Q.empty()) t = priority[v];
-                if (priority[v] <= t) {
-                    if (!Z[v] and attracts(player, v, Z, G)) {
+                if (priority(v) > t and Q.empty()) t = priority(v);
+                if (priority(v) <= t) {
+                    if (attracts(player, v, Z, G)) {
                         Z[v] = true;
                         Q.push(v);
                     }
+                    v++;
                     continue;
                 } 
             }
-            v--;
 
             while (Q.nonempty()) {
                 const int u = Q.pop();
-                attractVertices(player, u, G, Z, G, t);
-                attractTangles(player, u, G, Z, G, t);
+                attractVertices(player, u, R, Z, G, t);
+                attractTangles(player, u, R, Z, G, t);
             }
 
             for (int x=0; x<n_candidates; x++) {
                 const int u = Candidates[x];
                 if (u == -1) continue;
-                if (priority[u] <= t) break; // stop checking once we are below the threshold
+                if (priority(u) <= t) break; // stop checking once we are below the threshold
                 if (attracts(player, u, Z, G)) Candidates[x] = -1;
             }
         }
 
-        bool new_distractions = false;
+        // remaining Candidates have no path from high to low, remove them from V
+
+        bool V_changed = false;
         for (int x=0; x<n_candidates; x++) {
             const int u = Candidates[x];
-            if (u != -1) {
-                val[u] = dist;
-                V[u] = false;
-                new_distractions = true;
-            }
+            if (u == -1) continue;
+            val[u] = dist;
+            V[u] = false;
+            V_changed = true;
         }
 
         Z.reset();
+        dist++;
 
-        if (!new_distractions) break;
-        if (!V.any()) return;
+        if (!V_changed) {
+            for (int v=0; v<nodecount(); v++) if (V[v]) val[v] = INT_MAX;
+            return true;
+        }
     }
 
-    for (int v=0; v<n_nodes; v++) {
-        if (V[v]) val[v] = INT_MAX;
-    }
+    return false;
 }
 
-void
-DTLSolver::search_rec(bitset &R, const int player)
+
+
+int
+DTLSolver::best_vertices(bitset &V, bitset &R, const int player)
 {
-    bitset Ra(n_nodes); // region for recursive call
-    bitset V(n_nodes); // the current V
-    bitset prevV(n_nodes); // the previous V
-    bitset Z(n_nodes); // the current Z
-    bitset CurR(n_nodes);
-    bitset CurZ(n_nodes);
-    bitset lastZ(n_nodes); // copy of Z, for after pruning
+#ifndef NDEBUG
+    // Assume: V is empty
+    assert(V.none());
+#endif
+
+    bitset prevV(nodecount()); // the previous V
+    bitset Z(nodecount()); // the current Z
+    bitset CurR(nodecount());
+    bitset CurZ(nodecount());
+    int curdist = 0;
 
     /**
-     * This is a do-while loop that avoids some of the recursion.
+     * Initialize V := vertices in <R> with priority of <player>
      */
 
-    do {
-        /**
-         * Initialize V := vertices in <R> with priority of <player>
-         * We monotonically remove vertices from V that are distractions, w.r.t. the
-         * tangles that we currently know.
-         */
-
-        bool hasV = false;
-        for (int v=0; v<n_nodes; v++) {
-            if (R[v] and (priority[v]&1) == player) {
-                hasV = true;
-                V[v] = true;
-            }
+    bool hasV = false;
+    for (int v=0; v<nodecount(); v++) {
+        if (R[v] and (priority(v)&1) == player) {
+            hasV = true;
+            V[v] = true;
         }
-        if (!hasV) {
-            if (trace) {
-                for (int v=0; v<n_nodes; v++) if (R[v]) reg[v] = regidx;
-                regidx++;
-            }
+    }
+    if (!hasV) return 0;
 
-            return; // No vertices left with <player>'s priority, return.
-        }
+    /**
+     * Now we prune until no more vertices are removed from V, or V is empty.
+     */
 
-        // we only count partition steps where we actually do work.
+    while (true) {
+        curdist++;
+        prevV = V;
 
+#ifndef NDEBUG
         if (trace >= 3) {
-            logger << "\033[1;38;5;196mstep\033[m \033[1;36m" << steps << (player ? "-odd\033[m\n": "-even\033[m\n");
-        }
-        steps++;
-
-        /**
-         * Now we prune until no more vertices are removed from V, or V is empty.
-         */
-
-        bool lastIsEmpty = false;
-        while (true) {
-            prevV = V;
-
-#ifndef NDEBUG
-            if (trace >= 3) {
-                logger << "\033[1;38;5;202mcurrent best vertices:\033[m";
-                for (int v=n_nodes-1; v>=0; v--) {
-                    if (V[v]) logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
-                }
-                logger << std::endl;
-            }
-#endif
-
-            CurR = R;
-            // First compute the current <player> region Z
-            for (int top=n_nodes-1; top>=0; top--) {
-                if (!V[top] or Z[top]) continue;
-
-                CurZ[top] = true; // add to <Z>
-                str[top] = -1; // don't care, but needed for correct trace reporting
-                Q.push(top);
-                while (Q.nonempty()) {
-                    const int v = Q.pop();
-                    CurR[v] = false;
-#ifndef NDEBUG
-                    if (trace >= 3) Zvec.push(v);
-#endif
-                    attractVertices(player, v, CurR, CurZ, CurR, priority[top]);
-                    attractTangles(player, v, CurR, CurZ, CurR, priority[top]);
-                }
-
-                Z |= CurZ;
-                CurZ.reset();
-
-#ifndef NDEBUG
-                if (trace >= 3) {
-                    // report region
-                    logger << "\033[1;33mregion\033[m ";
-                    logger << "\033[1;36m" << priority[top] << "\033[m";
-                    for (unsigned int i=0; i<Zvec.size(); i++) {
-                        int v = Zvec[i];
-                        logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
-                        if (str[v] != -1) logger << "->" << label_vertex(str[v]);
-                    }
-                    logger << std::endl;
-                    Zvec.clear();
-                }
-#endif
-            }
-
-            lastZ = Z; // Make a copy, in case this was the last one. (Saves recomputing cost.)
-
-            /**
-             * Now find all Candidates: vertices in V that could be removed from V if the player
-             * has no good path through the opponent's regions back to the player's regions.
-             */
-
-            int n_candidates = 0;
-            for (int v=n_nodes-1; v>=0; v--) {
-                // vertices in V that the opponent attracts out of Z
-                if (V[v] and !attracts(player, v, Z, R)) {
-#ifndef NDEBUG
-                    if (trace >= 3) {
-                        logger << "\033[1;38;5;202mcandidate distraction\033[m \033[1;36m" << label_vertex(v) << "\033[m\n";
-                    }
-#endif
-                    Candidates[n_candidates++] = v;
-                }
-            }
-            if (n_candidates == 0) break; // No more vertices can be removed from V.
-
-            // Now attract from R to Z, "slowly"
-            int t = 0; // initial threshold
-            for (int v=0; v<=n_nodes; v++) {
-                if (v == n_nodes) {
-                    if (Q.empty()) break; // done (otherwise: still vertices in the queue)
-                } else if (!R[v]) {
-                    continue;
-                } else {
-                    if (priority[v] > t and Q.empty()) t = priority[v];
-                    if (priority[v] <= t) {
-                        if (!Z[v] and attracts(player, v, Z, R)) {
-                            Z[v] = true;
-                            Q.push(v);
-#ifndef NDEBUG
-                            if (trace >= 2) {
-                                logger << "\033[1;37mattracted opponent vertex\033[m " << label_vertex(v) << " with pr=" << priority[v] << ", t=" << t << std::endl;
-                            }
-#endif
-                        }
-                        continue;
-                    } 
-                }
-                v--;
-
-                // The above quickly skips to the correct threshold
-                // and find all vertices <= threshold that can be attracted (added to Q)
-                // if we're here, we now found vertices to attract that are <= threshold
-
-                while (Q.nonempty()) {
-                    const int u = Q.pop();
-                    attractVertices(player, u, R, Z, R, t);
-                    attractTangles(player, u, R, Z, R, t);
-                }
-
-                // Now check if any candidate distraction stays
-                // meaning we check which candidate vertices actually have a good path back to Z
-                for (int x=0; x<n_candidates; x++) {
-                    const int u = Candidates[x];
-                    if (u == -1) continue;
-                    if (priority[u] <= t) break; // stop checking once we are below the threshold
-                    if (attracts(player, u, Z, R)) {
-                        Candidates[x] = -1;
-#ifndef NDEBUG
-                        if (trace >= 3) { 
-                            logger << "\033[1;38;5;202mnon-distraction\033[m \033[1;36m" << label_vertex(u) << "\033[m\n";
-                        }
-#endif
-                    }
-                }
-            }
-
-            /**
-             * We have now attracted all possible vertices to <Z>.
-             * Any remaining vertices in Candidates are now distractions...
-             */
-
-            bool new_distractions = false;
-            for (int x=0; x<n_candidates; x++) {
-                const int u = Candidates[x];
-                if (u == -1) continue;
-                V[u] = false;
-                new_distractions = true;
-#ifndef NDEBUG
-                if (trace >= 2) { 
-                    logger << "\033[1;38;5;202mdistraction\033[m \033[1;36m" << label_vertex(u) << "\033[m\n";
-                }
-#endif
-            }
-
-            Z.reset();
-
-            if (!new_distractions) {
-                // No vertices were removed from V
-                break;
-            } else if (!V.any()) {
-                // All vertices were removed from V
-                V.swap(prevV);
-                lastIsEmpty = true;
-                break;
-            }
-        }
-
-        if (trace >= 2) {
-            logger << "\033[1;38;5;202mbest vertices in current block:\033[m";
-            for (int v=n_nodes-1; v>=0; v--) {
-                if (V[v]) logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+            logger << "\033[1;38;5;202mcurrent best vertices:\033[m";
+            for (auto v = V.find_first(); v != bitset::npos; v = V.find_next(v)) {
+                logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
             }
             logger << std::endl;
         }
-
-#if 1
-        // Just use last computed Z
-        Z.swap(lastZ);
-#else
-        // Compute the current <player> region Z
-        for (int top=n_nodes-1; top>=0; top--) {
-            if (V[top] and !Z[top]) {
-                Z[top] = true; // add to <Z>
-                str[top] = -1;
-                Q.push(top);
-                while (Q.nonempty()) {
-                    const int v = Q.pop();
-                    attractVertices(player, v, R, Z, R, priority[top]);
-                    attractTangles(player, v, R, Z, R, priority[top]);
-                }
-            }
-        }
 #endif
 
-        if (!lastIsEmpty) {
-            // If <Z> contains new tangles, then the fixpoint was not empty.
-            // So if the fixpoint was empty, then there are no new tangles to learn.
-            Ra = R;
-            if (trace) logger << "\033[1;38;5;28msptl\033[m in block " << regidx << "\n";
-            sptl(V, Ra, player);
-            Ra.reset();
-        } else {
-            if (trace) logger << "\033[1;38;5;28mno sptl\033[m in block " << regidx << "\n";
-        }
+        // First compute the current <player> region Z
 
-        if (trace) {
-            for (int v=0; v<n_nodes; v++) if (Z[v]) reg[v] = regidx;
-            if (!lastIsEmpty) regflag[regidx] = true;
-            regidx++;
+        CurR = R;
+        for (int top=nodecount()-1; top>=0; top--) {
+            if (V[top] and !Z[top]) {
+                CurZ[top] = true; // add to <Z>
+                str[top] = -1; // don't care, but needed for correct trace reporting
+                Q.push(top);
+                const int pr = priority(top);
+                while (Q.nonempty()) {
+                    const int v = Q.pop();
+                    CurR[v] = false;
+                    attractVertices(player, v, CurR, CurZ, CurR, pr);
+                    attractTangles(player, v, CurR, CurZ, CurR, pr);
+                }
+                Z |= CurZ;
+                CurZ.reset();
+            }
         }
 
         /**
-         * Compute the R_p sets, of vertices attracted to <R> but via a vertex of opponent's
-         * priority p, and p is then the highest priority to reach any vertex in V.
+         * Now find all Candidates: v \in V that do not yet have a good path to Z
          */
-        int t = 0; // initial threshold
-        for (int v=0; v<=n_nodes; v++) {
-            if (v == n_nodes) {
-                if (Q.empty()) break; // done (otherwise: still vertices in the queue)
-            } else if (!R[v]) {
-                continue; // only vertices in R
-            } else {
-                if (priority[v] > t and Q.empty()) t = priority[v];
-                if (priority[v] <= t) {
-                    if (!Z[v] and attracts(player, v, Z, R)) {
-                        Z[v] = true;
-                        Q.push(v);
-                    }
-                    continue;
-                } 
-            }
-            v--;
 
+        int n_candidates = 0;
+        for (int v=nodecount()-1; v>=0; v--) {
+            if (V[v] and !attracts(player, v, Z, R)) Candidates[n_candidates++] = v;
+        }
+        if (n_candidates == 0) return 1; // no more vertices are removed
+
+        // Now attract from R to Z, "slowly"
+        // Note: we have to be carefully increasing t. Why?
+        // because we might attract tangles OR vertices at some threshold...
+        const int max_prio = priority(nodecount()-1);
+        for (int t=0; t<=max_prio; t++) {
+            // add vertices in Z to Q
+            for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) Q.push(v);
+
+            // run tangle attractor to Z with the given threshold
             while (Q.nonempty()) {
                 const int u = Q.pop();
-                Ra[u] = true; // also add to Ra
                 attractVertices(player, u, R, Z, R, t);
                 attractTangles(player, u, R, Z, R, t);
             }
 
-            // We now have Ra := the R_t set associated with threshold t.
+            // Now check if any candidate is now attracted (via the good path)
+            for (int x=0; x<n_candidates; x++) {
+                const int u = Candidates[x];
+                if (u != -1) {
+                    if (priority(u) <= t) break; // stop checking once we are below the threshold
+                    if (attracts(player, u, Z, R)) Candidates[x] = -1;
+                }
+            }
+        }
+
+        /**
+         * We have now attracted all possible vertices to <Z>.
+         * Any remaining vertices in Candidates are now distractions...
+         */
+
+        bool changed_V = false;
+        for (int x=0; x<n_candidates; x++) {
+            const int u = Candidates[x];
+            if (u == -1) continue;
+            V[u] = false;
+            if (trace >= 2) {
+                if (!changed_V) {
+                    logger << "\033[1;38;5;202mdistance " << curdist << "\033[m:";
+                }
+                logger << " \033[1;36m" << label_vertex(u) << "\033[m";
+            }
+            changed_V = true;
+        }
+        if (changed_V and trace >= 1) logger << std::endl;
+
+        Z.reset();
+
+        if (!changed_V) {
+            // No vertices were removed from V
+            return 1;
+        } else if (!V.any()) {
+            // All vertices were removed from V
+            V.swap(prevV);
+            return -1;
+        }
+    }
+
+    return true;
+}
+
+/*
+void
+DTLSolver::new_algorithm(bitset &R, const int player)
+{
+    // COMPUTE DISTANCES
+
+    int dodd[nodecount()], deven[nodecount()];
+    bitset V(nodecount()); // the current V
+    for (int v=0; v<nodecount(); v++) {
+        if (R[v] and (priority(v)&1) == 0) V[v] = true;
+    }
+    computeDistanceValues(V, R, R, deven, 0);
+    V.reset();
+    for (int v=0; v<nodecount(); v++) {
+        if (R[v] and (priority(v)&1) == 1) V[v] = true;
+    }
+    computeDistanceValues(V, R, R, dodd, 1);
+
+    // COMPUTE PARTITION
+
+    bitset Z(nodecount());
+
+    for (; top!=-1; top--) {
+        if (!R[top]) continue;
+
+        const int pr = priority(top);
+        const int pl = priority(top)&1;
+
+        Z[top] = true; // add to <Z>
+        str[top] = -1;
+        Q.push(top);
+
+        while (Q.nonempty()) {
+            const int v = Q.pop();
+            attractVertices(pl, v, R, Z, R);
+            attractTangles(pl, v, R, Z, R);
+        }
 
 #ifndef NDEBUG
-            if (trace >= 3) {
-                logger << "\033[1;38;5;202mattracted with threshold " << t << ":\033[m";
-                for (int v=n_nodes-1; v>=0; v--) {
-                    if (Ra[v]) logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+        if (trace >= 2) {
+            // report region
+            logger << "\033[1;33mregion\033[m \033[1;36m" << pr << "\033[m";
+            for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) {
+                logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+                if (str[v] != -1) logger << "->" << label_vertex(str[v]);
+            }
+            logger << std::endl;
+        }
+#endif
+      
+        // now find tangles in the region
+    }
+}
+*/
+
+
+void
+DTLSolver::search_rec(bitset &R, const int player, const int depth)
+{
+    bitset X(nodecount()); // vertices removed from R
+    bitset V(nodecount()); // the best vertices each iteration
+    bitset Z(nodecount()); // holds various subregions
+    bitset Z2(nodecount()); // holds various subregions
+
+    if (trace >= 2) {
+        logger << "\033[1;38;5;202mcurrent region:\033[m";
+        for (auto v = R.find_first(); v != bitset::npos; v = R.find_next(v)) {
+            logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+        }
+        logger << std::endl;
+    }
+
+    while (true) {
+        // Compute the best vertices V
+        V.reset();
+        int result = best_vertices(V, R, player);
+        if (result == 0) return; // done
+
+        if (trace >= 1) {
+            logger << "\033[1;38;5;202mbest vertices:\033[m";
+            for (auto v = V.find_first(); v != bitset::npos; v = V.find_next(v)) {
+                logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+            }
+            if (result == 1) logger << " (stable)";
+            logger << std::endl;
+        }
+
+        // If the best vertices are stable, run SPTL to learn local dominions and add them to X
+
+        if (result == 1) {
+            // Run SPTL for a while
+            bool more = true;
+            while (more) {
+                Z = R;
+                cur_depth = depth;
+                more = sptl(V, W, Z, player);
+            }
+            Z.reset();
+
+            // Add Dom(V,R) to X
+            for (int top=nodecount()-1; top>=0; top--) {
+                if (V[top] and !X[top]) {
+                    X[top] = true; // add to <X>
+                    str[top] = -1;
+                    Q.push(top);
+                    while (Q.nonempty()) {
+                        const int v = Q.pop();
+                        R[v] = false;
+                        attractVertices(player, v, R, X, R, priority(top));
+                        attractTangles(player, v, R, X, R, priority(top));
+                    }
+                }
+            }
+
+            continue;
+        }
+
+        // If the best vertices are not stable, first try to attract to X.
+        // Find the lowest threshold to attract to X.
+
+        int t = 0; // initial threshold
+        for (int v=0; v<nodecount(); v++) {
+            if (R[v]) {
+                if (priority(v) > t) {
+                    if (Q.nonempty()) break;
+                    // update threshold
+                    t = priority(v);
+                }
+                if (attracts(player, v, X, R)) {
+                    Z[v] = true;
+                    str[v] = -1;
+                    Q.push(v);
+                }
+            }
+        }
+
+        if (Q.nonempty()) {
+            // Apparently, we found the lowest threshold t, they are in Z
+            // Now attract with threshold t from R to Z
+
+            while (Q.nonempty()) {
+                const int u = Q.pop();
+                R[u] = false;
+                attractVertices(player, u, R, Z, R, t);
+                attractTangles(player, u, R, Z, R, t);
+            }
+
+#ifndef NDEBUG
+            if (trace >= 2) {
+                logger << "X ∪= attracted with threshold " << t << ":\033[m";
+                for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) {
+                    logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
                 }
                 logger << std::endl;
             }
 #endif
 
-            // Recursively partition set R_t <Ra>.
-
-            search_rec(Ra, player);
-            Ra.reset();
-
-#if FASTDOMINION
-            R &= G; // in case there were new dominions
-#endif
-        }
-
-        // Continue partitioning the remainder
-        R -= Z;
-        Z.reset();
-        V.reset();
-
-#ifndef NDEBUG
-        if (trace >= 3) {
-            logger << "\033[1;38;5;202mremainder:\033[m";
-            for (int v=n_nodes-1; v>=0; v--) {
-                if (R[v]) logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+            // Now remove the attractor to threshold vertices from Z (by moving them to X)
+            for (int u=nodecount()-1; u >= 0; u--) {
+                if (priority(u) < t) break; // done
+                if (Z[u] and priority(u) == t) {
+                    X[u] = true;
+                    Q.push(u);
+                }
             }
-            logger << std::endl;
-        }
+
+            while (Q.nonempty()) {
+                const int u = Q.pop();
+                Z[u] = false;
+                attractVertices(1-player, u, Z, X, Z, t);
+            }
+
+            // And add all vertices in Z also to X
+            X |= Z;
+
+            // Recursively Z
+            /*if (depth == 0)*/ search_rec(Z, player, depth+1);
+            Z.reset();
+        } else {
+#ifndef NDEBUG
+            if (trace >= 2) logger << "X ∪= Dom(V)" << std::endl;
 #endif
-    } while (R.any());
+
+            // Add Dom(V,R) to X
+            for (int top=nodecount()-1; top>=0; top--) {
+                if (V[top] and !X[top]) {
+                    X[top] = true; // add to <X>
+                    str[top] = -1;
+                    Q.push(top);
+                    while (Q.nonempty()) {
+                        const int v = Q.pop();
+                        R[v] = false;
+#ifndef NDEBUG
+                        if (trace >= 3) Zvec.push(v);
+#endif
+                        attractVertices(player, v, R, X, R, priority(top));
+                        attractTangles(player, v, R, X, R, priority(top));
+                    }
+#ifndef NDEBUG
+                    if (trace >= 2) {
+                        // report region
+                        logger << "\033[1;33mregion\033[m ";
+                        logger << "\033[1;36m" << priority(top) << "\033[m";
+                        for (unsigned int i=0; i<Zvec.size(); i++) {
+                            int v = Zvec[i];
+                            logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+                            if (str[v] != -1) logger << "->" << label_vertex(str[v]);
+                        }
+                        logger << std::endl;
+                        Zvec.clear();
+                    }
+#endif
+                }
+            }
+        }
+    }
 }
+
 
 bool
 DTLSolver::search(const int player)
 {
-    if (trace) {
-        memset(reg, 0, sizeof(int[n_nodes]));
-        regidx = 1; // initialize
-        regflag.reset();
-    }
-
-
     const int T = tangles;
     const int D = dominions;
 
 #ifndef NDEBUG
-    int val1[n_nodes], val2[n_nodes];
+    int val1[nodecount()], val2[nodecount()];
     if (trace) {
-        computeValues(val1, player);
+        bitset V(nodecount()); // the current V
+        for (int v=0; v<nodecount(); v++) {
+            if (G[v] and (priority(v)&1) == player) V[v] = true;
+        }
+        computeDistanceValues(V, G, G, val1, player);
     }
 #endif
 
     bitset CurG(G);
-    search_rec(CurG, player);
+    search_rec(CurG, player, 0);
+    W.reset();
 
-    if (trace) {
-#ifndef NDEBUG
-        for (int v=0; v<n_nodes; v++) {
-            if (G[v] and (reg[v] <= 0 or reg[v] >= regidx)) {
-                logger << "logic error\n";
-                exit(-1);
-            }
-        }
-#endif
-        for (int i=1; i<regidx; i++) {
-            logger << "\033[1;38;5;33mblock\033[m \033[1;38;5;231m" << i;
-            if (regflag[i]) logger << "*";
-            logger << "\033[m:";
-            for (int v=0; v<n_nodes; v++) {
-                if (reg[v] == i) {
-                    if ((priority[v]&1) == player) logger << " \033[38;5;231;1m" << label_vertex(v) << "\033[m";
-                    else logger << " " << label_vertex(v);
-                }
-            }
-            logger << std::endl;
-        }
-    }
-
-#if !FASTDOMINION
     /**
      * Extend any dominions that were found.
      * (Any solved vertices are now in <SQ>.)
      */
 
-    if (SQ.nonempty()) {
-        SQ.swap(Q);
+    if (!dom_vector.empty()) {
+        for (unsigned i = 0; i<dom_vector.size(); i+=2) {
+            int v = dom_vector[i];
+            int s = dom_vector[i+1];
+            str[v] = s;
+            Q.push(v);
+        }
+        dom_vector.clear();
+
         while (Q.nonempty()) {
             const int v = Q.pop();
             oink->solve(v, player, str[v]);
@@ -1022,14 +1038,17 @@ DTLSolver::search(const int player)
         }
         S.reset();
     }
-#endif
 
 #ifndef NDEBUG
-    if (trace) {
+    if (trace >= 3) {
         if (tangles != T and dominions == D) {
-            computeValues(val2, player);
+            bitset V(nodecount()); // the current V
+            for (int v=0; v<nodecount(); v++) {
+                if (G[v] and (priority(v)&1) == player) V[v] = true;
+            }
+            computeDistanceValues(V, G, G, val2, player);
             bool a_change = false;
-            for (int v=0; v<n_nodes; v++) {
+            for (int v=0; v<nodecount(); v++) {
                 if (val1[v] != val2[v]) {
                     logger << label_vertex(v) << ": " << val1[v] << " => ";
                     if (val2[v] == INT_MAX)  logger << "MAX\n";
@@ -1038,9 +1057,9 @@ DTLSolver::search(const int player)
                 }
             }
             if (!a_change) {
-                for (int v=0; v<n_nodes; v++) logger << label_vertex(v) << ": " << val1[v] << "\n";
+                for (int v=0; v<nodecount(); v++) logger << label_vertex(v) << ": " << val1[v] << "\n";
                 logger << "nothing changed!\n";
-                // exit(-1);
+                // throw "nothing changed!";
             }
         }
     }
@@ -1052,74 +1071,82 @@ DTLSolver::search(const int player)
 void
 DTLSolver::run()
 {
-    tin = new std::vector<int>[n_nodes];
-    str = new int[n_nodes];
+    tin = new std::vector<int>[nodecount()];
+    str = new int[nodecount()];
 
-    reg = new int[n_nodes];
-    regflag.resize(n_nodes);
+    dvalue = new int[nodecount()];
 
-    Z.resize(n_nodes);
-    S.resize(n_nodes);
+    Z.resize(nodecount());
+    S.resize(nodecount());
+    W.resize(nodecount());
     G = disabled;
     G.flip();
 
-    Candidates = new int[n_nodes];
+    Candidates = new int[nodecount()];
 
-    Q.resize(n_nodes);
-    SQ.resize(n_nodes);
+    Player.resize(nodecount());
+    for (int v=0; v<nodecount(); v++) Player[v] = priority(v)&1;
 
-    Zvec.resize(n_nodes);
-    tangleto.resize(n_nodes);
-    escapes.resize(n_nodes);
+    Q.resize(nodecount());
+    SQ.resize(nodecount());
 
-    pea_vS.resize(n_nodes);
-    pea_iS.resize(n_nodes);
-    pea_S.resize(n_nodes);
-    pea_vidx = new unsigned int[n_nodes];
-    pea_root.resize(n_nodes);
+    Zvec.resize(nodecount());
+    tangleto.resize(nodecount());
+    escapes.resize(nodecount());
 
-#if 1
-    // First solve for player Even, then solve for player Odd
+    pea_vS.resize(nodecount());
+    pea_iS.resize(nodecount());
+    pea_S.resize(nodecount());
+    pea_vidx = new unsigned int[nodecount()];
+    pea_root.resize(nodecount());
 
-    while (G.any()) {
-        if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-even\033[m\n";
-        iterations++;
-        if (!search(0)) break;
-    }
+    int even_iterations = 0;
+    int odd_iterations = 0;
 
-    while (G.any()) {
-        if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-odd\033[m\n";
-        iterations++;
-        if (!search(1)) break;
-    }
-#else
-    // Interleave solving for player Even and player Odd
+    if (!interleaved) {
+        // First solve for player Odd, then solve for player Even
 
-    while (true) {
-        iterations++;
+        while (G.any()) {
+            if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-even\033[m\n";
+            iterations++;
+            even_iterations++;
+            if (!search(0)) break;
+        }
 
-        if (!G.any()) break;
-        if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "-even\033[m\n";
-        bool found0 = search(0);
+        while (G.any()) {
+            if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-odd\033[m\n";
+            iterations++;
+            odd_iterations++;
+            if (!search(1)) break;
+        }
+    } else {
+        // Interleave solving for player Even and player Odd
 
-        if (!G.any()) break;
-        if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "-odd\033[m\n";
-        bool found1 = search(1);
+        while (true) {
+            iterations++;
 
-        if (!found0 and !found1) {
-            logger << "stuck\n";
-            exit(-1);
+            if (!G.any()) break;
+            if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "-even\033[m\n";
+            bool found0 = search(0);
+
+            if (!G.any()) break;
+            if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "-odd\033[m\n";
+            bool found1 = search(1);
+
+            if (!found0 and !found1) THROW_ERROR("solver stuck");
+            
         }
     }
-#endif
 
     logger << "found " << dominions << " dominions and "<< tangles << " tangles.\n";
     logger << "solved in " << iterations << " iterations and " << steps << " pruning steps.\n";
+    logger << "odd iterations: " << odd_iterations << std::endl;
+    logger << "even iterations: " << even_iterations << std::endl;
 
 #ifndef NDEBUG
     // Check if the whole game is now solved
-    for (int i=0; i<n_nodes; i++) {
-        if (!disabled[i]) { logger << "search was incomplete!" << std::endl; exit(-1); }
+    for (int i=0; i<nodecount(); i++) {
+        if (!disabled[i]) { THROW_ERROR("search was incomplete!"); }
     }
 #endif
 
@@ -1130,7 +1157,7 @@ DTLSolver::run()
     delete[] str;
     delete[] pea_vidx;
     delete[] Candidates;
-    delete[] reg;
+    delete[] dvalue;
 }
 
 }

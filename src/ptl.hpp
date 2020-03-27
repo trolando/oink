@@ -17,8 +17,6 @@
 #ifndef PTL_HPP
 #define PTL_HPP
 
-#include <boost/dynamic_bitset.hpp>
-
 #include "oink.hpp"
 #include "solver.hpp"
 
@@ -31,8 +29,6 @@ public:
     virtual ~PTLSolver();
 
     virtual void run();
-
-    typedef boost::dynamic_bitset<unsigned long long> bitset;
 
 protected:
     bool multiplayer = true;

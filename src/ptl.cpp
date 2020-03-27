@@ -41,17 +41,17 @@ void
 PTLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z, bitset &G)
 {
     // attract vertices with an edge to <v>
-    const int *_in = ins + ina[v];
-    for (int from = *_in; from != -1; from = *++_in) {
+    for (auto curedge = ins(v); *curedge != -1; curedge++) {
+        int from = *curedge;
         if (Z[from]) {
             // already in Z, maybe set strategy (for vertices in the original target set)
-            if (owner[from] == pl and str[from] == -1) str[from] = v;
+            if (owner(from) == pl and str[from] == -1) str[from] = v;
         } else if (R[from]) {
-            if (owner[from] != pl) {
+            if (owner(from) != pl) {
                 // check if opponent can escape
                 bool escapes = false;
-                const int *_out = outs + outa[from];
-                for (int to = *_out; to != -1; to = *++_out) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (G[to] and !Z[to]) {
                         escapes = true;
                         break;
@@ -61,13 +61,13 @@ PTLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z, bits
             }
             // attract
             Z[from] = true;
-            str[from] = owner[from] == pl ? v : -1;
+            str[from] = owner(from) == pl ? v : -1;
             Q.push(from);
 #ifndef NDEBUG
             // maybe report event
             if (trace >= 3) {
                 logger << "\033[1;37mattracted \033[36m" << label_vertex(from) << "\033[m by \033[1;36m" << pl << "\033[m";
-                if (owner[from] == pl) logger << " (via " << label_vertex(v) << ")" << std::endl;
+                if (owner(from) == pl) logger << " (via " << label_vertex(v) << ")" << std::endl;
                 else logger << " (forced)" << std::endl;
             }
 #endif
@@ -192,7 +192,7 @@ PTLSolver::extractTangles(int startvertex, bitset &R, int *str)
 {
     bool good = false;
 
-    const int pr = priority[startvertex];
+    const int pr = priority(startvertex);
     const int pl = pr&1;
 
     /**
@@ -212,18 +212,18 @@ pearce_again:
         const unsigned int n = pea_vS.back();
         unsigned int i = pea_iS.back();
 
-        if (owner[n] != pl) {
-            const int *_out = outs + outa[n];
+        if (owner(n) != pl) {
+            auto edges = outs(n);
             if (i>0) {
                 // finishEdge
-                const int w = _out[i-1];
+                const int w = edges[i-1];
                 if (pea_vidx[w] < pea_vidx[n]) {
                     pea_vidx[n] = pea_vidx[w];
                     pea_root[n] = false;
                 }
             }
             for (;;) {
-                const int to = _out[i];
+                const int to = edges[i];
                 if (to == -1) break; // done
                 // beginEdge
                 if (R[to]) {
@@ -295,7 +295,7 @@ pearce_again:
 
         bool is_tangle = (tangle.size() > 1) or
             ((unsigned int)str[n] == n) or
-            (std::find(out[n].begin(), out[n].end(), n) != out[n].end());
+            (str[n] == -1 and game->has_edge(n, n));
         if (!is_tangle) {
             tangle.clear();
             continue;
@@ -308,9 +308,9 @@ pearce_again:
         for (const int v : tangle) bs_exits[v] = true;
 
         for (const int v : tangle) {
-            if (owner[v] != pl) {
-                const int *_out = outs + outa[v];
-                for (int to = *_out; to != -1; to = *++_out) {
+            if (owner(v) != pl) {
+                for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (G[to] and !bs_exits[to]) {
                         bs_exits[to] = true;
                         tangleto.push(to);
@@ -405,8 +405,8 @@ pearce_again:
                 logger << std::endl;
             }
             // We can currently find duplicate tangles if they lead to a dominion?
-            logger << "duplicate tangle" << std::endl;
-            exit(-1);
+            // logger << "duplicate tangle" << std::endl;
+            // exit(-1);
             tangle.clear();
             tangleto.clear();
             continue;
@@ -466,14 +466,16 @@ PTLSolver::search(bitset &R, int top, int player)
 {
     bool changes = false;
 
-    bitset Z(n_nodes);
+    bitset Z(nodecount());
+
+    // Partition the game <R>
 
     for (; top!=-1; top--) {
         // find next top
         if (!R[top]) continue;
 
-        const int pr = priority[top];
-        const int pl = priority[top]&1;
+        const int pr = priority(top);
+        const int pl = priority(top)&1;
 
         Z[top] = true; // add to <Z>
         str[top] = -1;
@@ -481,11 +483,9 @@ PTLSolver::search(bitset &R, int top, int player)
 
         while (Q.nonempty()) {
             const int v = Q.pop();
-            R[v] = false; // remove from <R>
-#ifndef NDEBUG
-            if (trace >= 2) Zvec.push(v);
-#endif
+            /*/ R[v] = false; // remove from <R> */
             attractVertices(pl, v, R, Z, R);
+            // attract tangles if correct player, or <player> equals -1
             if ((1-pl) != player) attractTangles(pl, v, R, Z, R);
         }
 
@@ -493,35 +493,30 @@ PTLSolver::search(bitset &R, int top, int player)
         if (trace >= 2) {
             // report region
             logger << "\033[1;33mregion\033[m \033[1;36m" << pr << "\033[m";
-            for (unsigned int i=0; i<Zvec.size(); i++) {
-                int v = Zvec[i];
+            for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) {
                 logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
                 if (str[v] != -1) logger << "->" << label_vertex(str[v]);
             }
             logger << std::endl;
-            Zvec.clear();
         }
 #endif
 
         if (player == -1 or pl == player) {
             /**
-             * Now Z is the lowest region, <top> the top vertex
+             * Now Z is the current region and <top> the top vertex
              */
 
             bool closed_region = true;
 
             /**
-             * Lowest region, check if globally closed.
+             * Check if Z is locally closed by looking at <top>.
              */
 
-            if (owner[top] == pl) {
-                if (str[top] == -1) {
-                    closed_region = false;
-                }
+            if (owner(top) == pl) {
+                if (str[top] == -1) closed_region = false;
             } else {
-                const int *_out = outs + outa[top];
-                for (int to = *_out; to != -1; to = *++_out) {
-                    if (R[to]) {
+                for (auto curedge = outs(top); *curedge != -1; curedge++) {
+                    if (!Z[*curedge] and R[*curedge]) {
                         closed_region = false;
                         break;
                     }
@@ -534,7 +529,7 @@ PTLSolver::search(bitset &R, int top, int player)
                  * Note: each bottom SCC must contain a head vertex.
                  */
 
-                memset(pea_vidx, 0, sizeof(int[n_nodes]));
+                memset(pea_vidx, 0, sizeof(int[nodecount()]));
                 pea_curidx = 1;
                 changes |= extractTangles(top, Z, str);
             } else {
@@ -542,13 +537,13 @@ PTLSolver::search(bitset &R, int top, int player)
                  * Not a closed region, go recursive.
                  */
 
-               std::string px = path;
+               // initialize path (for trace output) to <pr>
                path = std::to_string(pr);
                changes |= search_rec(Z, top, pl, R);
-               path = px;
             }
         }
 
+        R -= Z;
         Z.reset();
     }
 
@@ -556,16 +551,17 @@ PTLSolver::search(bitset &R, int top, int player)
 }
 
 bool
-PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
+PTLSolver::search_rec(bitset &Region, int vtop, int player, bitset &Subgame)
 {
-    bool changes = false;
+    bool changes = false; // whether we found tangles/dominions
 
-    bitset Z(n_nodes); // move me
-    bitset Y(R); // the remaining subgame including <vtop>
-    bitset Y2(n_nodes); // the remaining subgame including <vtop>
+    bitset Y(Region); // the remaining subgame of <R>
+    bitset Z(nodecount()); // move me
+    bitset Lower(Subgame);
 
-#if 1
+#if 0 /**/
     // First, attract to the open "exit" for the opponent
+    // That is, remove Attr(top) from <Y>.
 
     Z[vtop] = true; // add to <Z>
     str[vtop] = -1;
@@ -573,69 +569,39 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
 
     while (Q.nonempty()) {
         const int v = Q.pop();
-        R[v] = false; // remove from <R>
-#ifndef NDEBUG
-        if (trace >= 2) Zvec.push(v);
-#endif
-        attractVertices(1-player, v, R, Z, Y);
-        if (multiplayer) attractTangles(1-player, v, R, Z, Y);
+        attractVertices(1-player, v, Y, Z, Y);
+        if (multiplayer) attractTangles(1-player, v, Y, Z, Y);
     }
 
-#ifndef NDEBUG
-    if (trace >= 2) {
-        // report region
-        logger << "\033[1;33mregion\033[m \033[1;36m" << path << "-X" << "\033[m";
-        for (unsigned int i=0; i<Zvec.size(); i++) {
-            int v = Zvec[i];
-            logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
-            if (str[v] != -1) logger << "->" << label_vertex(str[v]);
-        }
-        logger << std::endl;
-        Zvec.clear();
-    }
-#endif
-
-    if (0 and multiplayer and (priority[vtop]&1) != player) {
-        /**
-         ** This is a source of duplicate tangles!!
-         **/
-
-        // Check if closed?
-        bool closed_region = true;
-        if (owner[vtop] == (1-player)) {
-            if (str[vtop] == -1) {
-                closed_region = false;
-            }
-        } else {
-            const int *_out = outs + outa[vtop];
-            for (int to = *_out; to != -1; to = *++_out) {
-                if (XX[to]) {
-                    closed_region = false;
-                    break;
-                }
-            }
-        }
-
-        if (closed_region) {
-            memset(pea_vidx, 0, sizeof(int[n_nodes]));
-            pea_curidx = 1;
-            changes |= extractTangles(vtop, Z, str);
-        }
-    }
-
+    Y -= Z;
     Z.reset();
 #else
-    R[vtop] = false;
+    Y[vtop] = false; // ensure <vtop> is never attracted...
+    // Lower[vtop] = false; // and that 
 #endif
 
+    /////////////////
+    // After each iteration:
+    // <Y> and <Lower> are updated, removing subregions
+    // if top is "good": attract to Z, remove from <Y> and <Lower>
+    // if <Z> is a "bad" ... ..
+    /////////////////
+
     for (int top=vtop-1; top!=-1; top--) {
-        // find next top
-        if (!R[top]) continue;
+        // find next top below <vtop> in Y
+        if (!Y[top]) continue;
 
-        const int pr = priority[top];
-        const int pl = priority[top]&1;
+        /*
+        logger << "Contents of Y:";
+        for (auto v = Y.find_first(); v != bitset::npos; v = Y.find_next(v)) logger << " " << label_vertex(v);
+        logger << std::endl;
+        logger << "Contents of Lower:";
+        for (auto v = Lower.find_first(); v != bitset::npos; v = Lower.find_next(v)) logger << " " << label_vertex(v);
+        logger << std::endl;
+        */
 
-        // logger << "next top: " << label_vertex(top) << " with priority " << pr << "\n";
+        const int pr = priority(top);
+        const int pl = priority(top)&1;
 
         if (pl == player) {
             Z[top] = true; // add to <Z>
@@ -644,26 +610,19 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
 
             while (Q.nonempty()) {
                 const int v = Q.pop();
-                R[v] = false; // remove from <R>
-                Y[v] = false; // remove from <Y>
-#ifndef NDEBUG
-                if (trace >= 2) Zvec.push(v);
-#endif
-                attractVertices(player, v, R, Z, Y);
-                attractTangles(player, v, R, Z, Y);
+                attractVertices(player, v, Y, Z, Lower);
+                attractTangles(player, v, Y, Z, Lower);
             }
 
 #ifndef NDEBUG
             if (trace >= 2) {
                 // report region
                 logger << "\033[1;33mregion\033[m \033[1;36m" << path << "-" << pr << "\033[m";
-                for (unsigned int i=0; i<Zvec.size(); i++) {
-                    int v = Zvec[i];
+                for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) {
                     logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
                     if (str[v] != -1) logger << "->" << label_vertex(str[v]);
                 }
                 logger << std::endl;
-                Zvec.clear();
             }
 #endif
 
@@ -674,25 +633,19 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
             bool closed_region = true;
 
             /**
-             * Lowest region, check if globally closed.
+             * Lowest region, check if closed.
              */
 
-            if (owner[top] == player) {
-                if (str[top] == -1) {
-                    closed_region = false;
-                }
+            if (owner(top) == player) {
+                if (str[top] == -1) closed_region = false;
             } else {
-                const int *_out = outs + outa[top];
-                for (int to = *_out; to != -1; to = *++_out) {
-                    if (Y[to]) {
+                for (auto curedge = outs(top); *curedge != -1; curedge++) {
+                    if (!Z[*curedge] and Lower[*curedge]) {
                         closed_region = false;
-                        // logger << "escapes to " << label_vertex(to) << "\n";
                         break;
                     }
                 }
             }
-
-            // logger << "region is closed ? " << closed_region  << "\n";
 
             if (closed_region) {
                 /**
@@ -700,7 +653,7 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
                  * Note: each bottom SCC must contain a head vertex.
                  */
 
-                memset(pea_vidx, 0, sizeof(int[n_nodes]));
+                memset(pea_vidx, 0, sizeof(int[nodecount()]));
                 pea_curidx = 1;
                 changes |= extractTangles(top, Z, str);
             } else {
@@ -710,12 +663,24 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
 
                 std::string px = path;
                 path += "-" + std::to_string(pr);
-                changes |= search_rec(Z, top, player, R);
+                changes |= search_rec(Z, top, player, Lower);
                 path = px;
             }
+
+            Y -= Z;
+            Lower -= Z;
         } else {
-            Y2 = Y;
+            // Now recompute the region: reattract to <vtop>,
+            // but not via higher (already removed) regions or via the bad vertex <top>
+
+            // Y := remaining region except <top>
+            // Lower := remaining region plus remaining lower game
+
             Y[top] = false; // remove <top> from consideration
+
+            // logger << "Contents of Y2:";
+            // for (auto v = Y2.find_first(); v != bitset::npos; v = Y2.find_next(v)) logger << " " << label_vertex(v);
+            // logger << std::endl;
 
             Z[vtop] = true; // add to <Z>
             str[vtop] = -1;
@@ -723,14 +688,20 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
 
             while (Q.nonempty()) {
                 const int v = Q.pop();
-                attractVertices(player, v, Y, Z, Y2);
-                attractTangles(player, v, Y, Z, Y2);
+                attractVertices(player, v, Y, Z, Lower);
+                attractTangles(player, v, Y, Z, Lower);
             }
 
-            Y &= Z; // remaining subgame Y: all that are in Z
-            Z = R;  // now set Z := R - Y
+            // Now Z is everything that can go to <vtop> avoiding <top>
+            // And Y\Z is everything that must go via <top>
+
+            // Set Y := everything to <vtop> not via <top>
+            // Set Z := everything only to <vtop> via <top>
+
+            Y.swap(Z);
+            Y[vtop] = false; // but remove <vtop> again
             Z -= Y;
-            R &= Y;
+            Z[top] = true;
 
 #ifndef NDEBUG
             if (trace >= 2) {
@@ -739,7 +710,7 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
                 for (int v=top; v>=0; v--) {
                     if (Z[v]) {
                         logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
-                        if (str[v] != -1) logger << "->" << label_vertex(str[v]);
+                        if (str[v] != -1 and Z[str[v]]) logger << "->" << label_vertex(str[v]);
                     }
                 }
                 logger << std::endl;
@@ -748,9 +719,10 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
 
             std::string px = path;
             path += "-" + std::to_string(pr);
-            changes |= search_rec(Z, top, player, R);
+            changes |= search_rec(Z, top, player, Lower);
             path = px;
         }
+
         Z.reset();
     }
 
@@ -761,7 +733,7 @@ PTLSolver::search_rec(bitset &R, int vtop, int player, bitset &XX)
 void
 PTLSolver::solve()
 {
-    bitset CurG(n_nodes);
+    bitset CurG(nodecount());
 
     iterations = 0;
 
@@ -774,18 +746,32 @@ PTLSolver::solve()
         if (multiplayer) {
             if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "\033[m\n";
             CurG = G;
-            search(CurG, n_nodes-1, -1);
+            search(CurG, nodecount()-1, -1);
         } else {
-            if (play0) {
+            // play for player 0 until no changes, then player 1
+
+            while (play0) {
+                iterations++;
                 if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "\033[m, player Even\n";
                 CurG = G;
-                play0 = search(CurG, n_nodes-1, 0);
+                play0 = search(CurG, nodecount()-1, 0);
+
+                if (SolvedQ0.nonempty()) {
+                    Q.swap(SolvedQ0);
+                    while (Q.nonempty()) {
+                        const int v = Q.pop();
+                        if (!game->solved[v]) oink->solve(v, 0, str[v]);
+                        G[v] = false; // remove from Game
+                        attractVertices(0, v, G, S0, G);
+                        attractTangles(0, v, G, S0, G);
+                    }
+                }
             }
 
             if (play1) {
                 if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "\033[m, player Odd\n";
                 CurG = G;
-                play1 = search(CurG, n_nodes-1, 1);
+                play1 = search(CurG, nodecount()-1, 1);
             }
         }
 
@@ -834,27 +820,27 @@ PTLSolver::run()
     dominions = 0;
     tangles = 0;
 
-    tin = new std::vector<int>[n_nodes];
-    str = new int[n_nodes];
+    tin = new std::vector<int>[nodecount()];
+    str = new int[nodecount()];
 
-    H.resize(n_nodes);
-    S0.resize(n_nodes);
-    S1.resize(n_nodes);
+    H.resize(nodecount());
+    S0.resize(nodecount());
+    S1.resize(nodecount());
     G = disabled;
     G.flip();
 
-    Q.resize(n_nodes);
-    SolvedQ0.resize(n_nodes);
-    SolvedQ1.resize(n_nodes);
-    Zvec.resize(n_nodes);
-    tangleto.resize(n_nodes);
-    bs_exits.resize(n_nodes);
+    Q.resize(nodecount());
+    SolvedQ0.resize(nodecount());
+    SolvedQ1.resize(nodecount());
+    Zvec.resize(nodecount());
+    tangleto.resize(nodecount());
+    bs_exits.resize(nodecount());
 
-    pea_vS.resize(n_nodes);
-    pea_iS.resize(n_nodes);
-    pea_S.resize(n_nodes);
-    pea_vidx = new unsigned int[n_nodes];
-    pea_root.resize(n_nodes);
+    pea_vS.resize(nodecount());
+    pea_iS.resize(nodecount());
+    pea_S.resize(nodecount());
+    pea_vidx = new unsigned int[nodecount()];
+    pea_root.resize(nodecount());
 
     solve();
 
@@ -863,7 +849,7 @@ PTLSolver::run()
 
     // check if actually all solved
 #ifndef NDEBUG
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (!disabled[i]) { logger << "search was incomplete!" << std::endl; exit(-1); }
     }
 #endif

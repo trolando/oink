@@ -40,9 +40,9 @@ void
 tarjan(Game *game, int n, std::vector<int> &res, bool nonempty)
 {
     // initialize
-    unsigned n_nodes = game->n_nodes;
-    int *low = new int[n_nodes];
-    memset(low, 0, sizeof(int[n_nodes]));
+    unsigned n_vertices = game->vertexcount();
+    int *low = new int[n_vertices];
+    memset(low, 0, sizeof(int[n_vertices]));
     int pre = 0;
 
     // search stack "st"
@@ -58,15 +58,16 @@ tarjan(Game *game, int n, std::vector<int> &res, bool nonempty)
         }
         int min = low[idx];
         bool pushed = false;
-        for (auto to_idx : game->out[idx]) {
-            if (low[to_idx] == 0) {
+        for (auto curedge = game->outs(idx); *curedge != -1; curedge++) {
+            int to = *curedge;
+            if (low[to] == 0) {
                 // not visited
-                st.push(to_idx);
+                st.push(to);
                 pushed = true;
                 break;
             } else {
                 // visited it, update min
-                if (low[to_idx] < min) min = low[to_idx];
+                if (low[to] < min) min = low[to];
             }
         }
         if (pushed) continue; // we pushed...
@@ -79,12 +80,11 @@ tarjan(Game *game, int n, std::vector<int> &res, bool nonempty)
 
         /**
          * At this point, we found a bottom SCC. Now check if it is empty.
-         * A SCC is "empty" if it contains no edges, i.e., consists of 1 node without self-loops.
+         * A SCC is "empty" if it contains no edges, i.e., consists of 1 vertex without self-loops.
          */
 
         if (nonempty) {
-            auto &out_idx = game->out[idx];
-            if (res.back() == idx and std::find(out_idx.begin(), out_idx.end(), idx) == out_idx.end()) {
+            if (res.back() == idx and !game->has_edge(idx, idx)) {
                 // it has no edges!
                 res.pop_back();
                 st.pop();
@@ -93,7 +93,7 @@ tarjan(Game *game, int n, std::vector<int> &res, bool nonempty)
             }
         }
 
-        // found bottom SCC; remove nodes not in the bottom SCC...
+        // found bottom SCC; remove vertices not in the bottom SCC...
         if (res.front() != idx) res.erase(res.begin(), std::find(res.begin(), res.end(), idx));
         break;
     }
@@ -106,16 +106,16 @@ bool
 nudge(Game *game, int profile)
 {
     /**
-     * Select a random node
+     * Select a random vertex
      */
-    int n = rng(0, game->n_nodes-1);
+    int n = rng(0, game->vertexcount()-1);
 
     /**
      * Select a random action
-     * action=0: change owner of the node
-     * action=1: change priority of the node
-     * action=2: remove the node without forwarding edges
-     * action=3: remove the node and forward edges if it has only 1 outgoing edge
+     * action=0: change owner of the vertex
+     * action=1: change priority of the vertex
+     * action=2: remove the vertex without forwarding edges
+     * action=3: remove the vertex and forward edges if it has only 1 outgoing edge
      * action=4: for one predecessor replace the edge to me by all my edges
      * action=5: remove a random edge (if 2+ outgoing edges)
      * action=6: add a random edge
@@ -128,7 +128,7 @@ nudge(Game *game, int profile)
         // only actions 0 1 5 6 : just change edges and owner/priority
         action = (int[4]){0,1,5,6}[rng(0, 3)];
     } else if (profile == 2) {
-        // only actions 0 1 2 3 4 5 : only add edge when removing nodes
+        // only actions 0 1 2 3 4 5 : only add edge when removing vertices
         action = (int[6]){0,1,2,3,4,5}[rng(0, 5)];
     } else {
         action = rng(0, 6);
@@ -138,67 +138,71 @@ nudge(Game *game, int profile)
      * Perform the action
      */
     if (action == 0) {
-        // change owner of the node
-        game->owner[n] = 1 - game->owner[n];
+        // flip owner of the vertex
+        game->set_owner(n, 1-game->owner(n));
         return true;
     } else if (action == 1) {
-        // change priority of the node
-        game->priority[n] = rng(0, game->n_nodes*2);
+        // change priority of the vertex
+        game->set_priority(n, rng(0, game->vertexcount()*2));
         return true;
     } else if (action == 2) {
-        // remove the node
-        std::vector<int> tokeep;
-        for (int i=0; i<game->n_nodes; i++) if (n != i) tokeep.push_back(i);
-        Game *sub = game->extract_subgame(tokeep, NULL);
-        *game = *sub;
-        delete sub;
+        // remove the vertex, but only if no incoming edge is a solo edge
+        for (auto curedge = game->ins(n); *curedge != -1; curedge++) {
+            if (game->outcount(*curedge) == 1) return false;
+        }
+        pg::bitset mask(game->vertexcount());
+        mask.set();
+        mask[n] = false;
+        Game subgame(*game, mask);
+        game->swap(subgame);
         return true;
     } else if (action == 3) {
-        // remove the node and forward edges if it has only 1 outgoing edge
-        if (game->out[n].size() == 1 && game->out[n][0] != n) {
-            for (auto &from : game->in[n]) {
-                // add each <to> to <from>
-                for (auto &to : game->out[n]) game->addEdge(from, to);
+        // remove the vertex and forward incoming edges if it has only 1 outgoing edge
+        if (game->outcount(n) == 1 and game->outs(n)[0] != n) {
+            for (auto curedge = game->ins(n); *curedge != -1; curedge++) {
+                int from = *curedge;
+                // add each edge "n -> to" to "from -> to"
+                for (auto curedge = game->outs(n); *curedge != -1; curedge++) {
+                    game->add_edge(from, *curedge);
+                }
             }
-            // remove the node
-            std::vector<int> tokeep;
-            for (int i=0; i<game->n_nodes; i++) if (n != i) tokeep.push_back(i);
-            Game *sub = game->extract_subgame(tokeep, NULL);
-            *game = *sub;
-            delete sub;
+            game->rebuild_arrays();
+            // remove the vertex
+            pg::bitset mask(game->vertexcount());
+            mask.set();
+            mask[n] = false;
+            Game subgame(*game, mask);
+            game->swap(subgame);
             return true;
         }
     } else if (action == 4) {
-        // for one predecessor replace the edge to me by all my edges
-        if (game->in[n].size() > 0) {
-            int from = game->in[n][rng(0, game->in[n].size()-1)];
+        // for one random predecessor replace the edge to me by all my edges
+        if (game->incount(n) > 0) {
+            int from = game->ins(n)[rng(0, game->incount(n)-1)];
             if (from != n) {
-                auto &out = game->out[from];
-                out.erase(std::remove(out.begin(), out.end(), n), out.end());
-
-                // add each <to> to <from>
-                for (auto &to : game->out[n]) {
-                    if (std::find(game->out[from].begin(), game->out[from].end(), to) == game->out[from].end()) {
-                        game->out[from].push_back(to);
-                        game->in[to].push_back(from);
-                    }
+                game->remove_edge(from, n);
+                for (auto curedge = game->outs(n); *curedge != -1; curedge++) {
+                    game->add_edge(from, *curedge);
                 }
+                game->rebuild_arrays();
                 return true;
             }
         }
     } else if (action == 5) {
         // remove a random edge (if there are outgoing edges to remove)
-        if (game->out[n].size() > 1) {
-            int edge = rng(0, game->out[n].size()-1);
-            int m = game->out[n][edge];
-            game->out[n].erase(game->out[n].begin()+edge);
-            auto &in = game->in[m];
-            in.erase(std::remove(in.begin(), in.end(), n), in.end());
+        if (game->outcount(n) > 1) {
+            int edge = rng(0, game->outcount(n)-1);
+            int m = game->outs(n)[edge];
+            game->remove_edge(n, m);
+            game->rebuild_arrays();
             return true;
         }
     } else if (action == 6) {
         // add a random edge
-        if (game->addEdge(n, rng(0, game->n_nodes-1))) return true;
+        if (game->add_edge(n, rng(0, game->vertexcount()-1))) {
+            game->rebuild_arrays();
+            return true;
+        }
     }
     return false;
 }
@@ -214,20 +218,20 @@ main(int argc, char **argv)
         ("input", "Input parity game", cxxopts::value<std::string>())
         ("output", "Output parity game", cxxopts::value<std::string>())
         ("help", "Print help")
-        ("m,modify", "Modify graph with profile 0=only remove, 1=stable #nodes, 2=everything", cxxopts::value<int>())
+        ("m,modify", "Modify graph with profile 0=only remove, 1=stable #vertices, 2=everything", cxxopts::value<int>())
         ("b,bottom-scc", "Obtain random bottom SCC before writing")
         ("i,inflate", "Inflate before writing")
         ("c,compress", "Compress before writing")
         ("r,renumber", "Renumber before writing")
-        ("o,order", "Order nodes by priority before writing")
+        ("o,order", "Order vertices by priority before writing")
         ("u,unlabel", "Remove labels")
         ("evenodd", "Swap players")
         ("minmax", "Turn a mingame into a maxgame and vice versa")
         ;
     opts.parse_positional(std::vector<std::string>({"input", "output"}));
-    opts.parse(argc, argv);
+    auto options = opts.parse(argc, argv);
 
-    if (opts.count("help")) {
+    if (options.count("help")) {
         std::cout << opts.help() << std::endl;
         return 0;
     }
@@ -237,8 +241,8 @@ main(int argc, char **argv)
      */
     Game *game;
     try {
-        if (opts.count("input")) {
-            std::ifstream file(opts["input"].as<std::string>());
+        if (options.count("input")) {
+            std::ifstream file(options["input"].as<std::string>());
             game = new Game(file);
             file.close();
         } else {
@@ -252,18 +256,19 @@ main(int argc, char **argv)
     /**
      * Check if we have to modify the game randomly.
      */
-    if (opts.count("modify")) {
-        int profile = opts["modify"].as<int>();
+    if (options.count("modify")) {
+        int profile = options["modify"].as<int>();
+        game->build_vectors();
         while (nudge(game, profile) == false) {}
     }
 
     /**
-     * If asked, compute a bottom SCC from a random node
+     * If asked, compute a bottom SCC from a random vertex
      */
-    if (opts.count("b")) {
+    if (options.count("b")) {
         std::vector<int> scc;
-        tarjan(game, rng(0, game->n_nodes-1), scc, true);
-        Game *sub = game->extract_subgame(scc, NULL);
+        tarjan(game, rng(0, game->vertexcount()-1), scc, true);
+        Game *sub = game->extract_subgame(scc);
         delete game;
         game = sub;
     }
@@ -271,40 +276,40 @@ main(int argc, char **argv)
     /**
      * Reindex before transformations
      */
-    int *mapping = new int[game->n_nodes];
-    game->reindex(mapping);
+    int *mapping = new int[game->vertexcount()];
+    game->sort(mapping);
 
     /**
      * Perform even/odd or min/max transformations
      */
-    if (opts.count("evenodd")) game->evenodd();
-    if (opts.count("minmax")) game->minmax();
+    if (options.count("evenodd")) game->evenodd();
+    if (options.count("minmax")) game->minmax();
 
     /**
      * Inflate/compress/renumber
      */
-    if (opts.count("i")) game->inflate();
-    if (opts.count("c")) game->compress();
-    if (opts.count("r")) game->renumber();
+    if (options.count("i")) game->inflate();
+    if (options.count("c")) game->compress();
+    if (options.count("r")) game->renumber();
 
     /**
      * Either reindex again (-o) or undo previous reindex
      */
-    if (opts.count("o")) game->reindex();
+    if (options.count("o")) game->sort();
     else game->permute(mapping);
 
     /**
      * Remove labels
      */
-    if (opts.count("u")) {
-        for (int i=0; i<game->n_nodes; i++) game->label[i] = "";
+    if (options.count("u")) {
+        for (int i=0; i<game->vertexcount(); i++) game->set_label(i, "");
     }
 
     /**
      * Write to output file or to stdout
      */
-    if (opts.count("output")) {
-        std::ofstream file(opts["output"].as<std::string>());
+    if (options.count("output")) {
+        std::ofstream file(options["output"].as<std::string>());
         game->write_pgsolver(file);
         file.close();
     } else {

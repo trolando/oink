@@ -20,7 +20,6 @@
 #include <list>
 #include <deque>
 #include <vector>
-#include <boost/dynamic_bitset.hpp>
 
 #include "oink.hpp"
 #include "solver.hpp"
@@ -64,8 +63,6 @@ protected:
     typedef std::deque<uint> uideque;
 
     typedef std::list<uideque> uidlist;
-
-    typedef boost::dynamic_bitset<unsigned long long> bitset;
 
     typedef std::vector<bool> bvector;
 

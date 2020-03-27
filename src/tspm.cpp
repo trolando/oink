@@ -120,11 +120,12 @@ TSPMSolver::canlift(int node, int pl)
     // check if already Top
     if (pm[pl] == -1) return false;
 
-    const int d = priority[node];
+    const int d = priority(node);
 
-    if (owner[node] == pl) {
+    if (owner(node) == pl) {
         // do max
-        for (int to : out[node]) {
+        for (auto curedge = outs(node); *curedge != -1; curedge++) {
+            int to = *curedge;
             if (disabled[to]) continue;
             Prog(tmp, pms + k*to, d, pl);
             if (pm_less(pm, tmp, d, pl)) return true;
@@ -133,7 +134,8 @@ TSPMSolver::canlift(int node, int pl)
     } else {
         // do min
         int best_to = -1;
-        for (int to : out[node]) {
+        for (auto curedge = outs(node); *curedge != -1; curedge++) {
+            int to = *curedge;
             if (disabled[to]) continue;
             Prog(tmp, pms + k*to, d, pl);
             if (best_to == -1 or pm_less(tmp, best, d, pl)) {
@@ -158,13 +160,13 @@ TSPMSolver::lift(int node, int target)
     lift_attempt++;
 
     // initialize stuff
-    const int pl_max = owner[node];
+    const int pl_max = owner(node);
     const int pl_min = 1 - pl_max;
-    const int d = priority[node];
+    const int d = priority(node);
 
 #ifndef NDEBUG
     if (trace >= 2) {
-        logger << "\033[1mupdating node " << node << "/" << d << (owner[node]?" (odd)":" (even)") << "\033[m with current progress measure";
+        logger << "\033[1mupdating node " << node << "/" << d << (owner(node)?" (odd)":" (even)") << "\033[m with current progress measure";
         pm_stream(logger, pm);
         logger << std::endl;
     }
@@ -185,7 +187,7 @@ TSPMSolver::lift(int node, int target)
             Prog(tmp, pms + k*target, d, pl_max);
 #ifndef NDEBUG
             if (trace >= 2) {
-                logger << "successor node " << target << "/" << priority[target] << " results in";
+                logger << "successor node " << target << "/" << priority(target) << " results in";
                 pm_stream(logger, tmp);
                 logger << std::endl;
             }
@@ -195,20 +197,23 @@ TSPMSolver::lift(int node, int target)
                 if (pl_max) best_ch1 = target;
                 else best_ch0 = target;
             }
-        } else for (int to : out[node]) {
-            if (disabled[to]) continue;
-            Prog(tmp, pms + k*to, d, pl_max);
+        } else {
+            for (auto curedge = outs(node); *curedge != -1; curedge++) {
+                int to = *curedge;
+                if (disabled[to]) continue;
+                Prog(tmp, pms + k*to, d, pl_max);
 #ifndef NDEBUG
-            if (trace >= 2) {
-                logger << "successor node " << to << "/" << priority[to] << " results in";
-                pm_stream(logger, tmp);
-                logger << std::endl;
-            }
+                if (trace >= 2) {
+                    logger << "successor node " << to << "/" << priority(to) << " results in";
+                    pm_stream(logger, tmp);
+                    logger << std::endl;
+                }
 #endif
-            if (pm_less(pm, tmp, d, pl_max)) {
-                pm_copy(pm, tmp, pl_max);
-                if (pl_max) best_ch1 = to;
-                else best_ch0 = to;
+                if (pm_less(pm, tmp, d, pl_max)) {
+                    pm_copy(pm, tmp, pl_max);
+                    if (pl_max) best_ch1 = to;
+                    else best_ch0 = to;
+                }
             }
         }
     }
@@ -220,12 +225,13 @@ TSPMSolver::lift(int node, int target)
         if (trace >= 2) pm_copy(tmp, pm, 1-pl_min);
 #endif
         int best_to = -1;
-        for (int to : out[node]) {
+        for (auto curedge = outs(node); *curedge != -1; curedge++) {
+            int to = *curedge;
             if (disabled[to]) continue;
             Prog(tmp, pms + k*to, d, pl_min);
 #ifndef NDEBUG
             if (trace >= 2) {
-                logger << "successor node " << to << "/" << priority[to] << " results in";
+                logger << "successor node " << to << "/" << priority(to) << " results in";
                 pm_stream(logger, tmp);
                 logger << std::endl;
             }
@@ -251,7 +257,7 @@ TSPMSolver::lift(int node, int target)
 
     if (ch0 or ch1) {
         if (trace) {
-            logger << "\033[1;32mupdated node " << node << "/" << d << (owner[node]?" (odd)":" (even)") << "\033[m to";
+            logger << "\033[1;32mupdated node " << node << "/" << d << (owner(node)?" (odd)":" (even)") << "\033[m to";
             pm_stream(logger, pm);
             logger << std::endl;
         }
@@ -272,7 +278,7 @@ TSPMSolver::update(int pl)
     std::queue<int> q;
 
     // find unstable nodes (for measure <pl>)
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (disabled[i]) continue;
         unstable[i] = 0; // first mark as stable
         if (pms[k*i + pl] == -1 or canlift(i, pl)) {
@@ -284,12 +290,14 @@ TSPMSolver::update(int pl)
     while (!q.empty()) {
         int n = q.front();
         q.pop();
-        for (int m : in[n]) {
+        for (auto curedge = ins(n); *curedge != -1; curedge++) {
+            int m = *curedge;
             if (disabled[m] or unstable[m]) continue;
-            if (owner[m] != pl) {
+            if (owner(m) != pl) {
                 int best_to = -1;
-                const int d = priority[m];
-                for (int to : out[m]) {
+                const int d = priority(m);
+                for (auto curedge = outs(m); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (disabled[to]) continue;
                     if (unstable[to]) continue;
                     Prog(tmp, pms + k*to, d, pl);
@@ -305,15 +313,15 @@ TSPMSolver::update(int pl)
         }
     }
 
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (disabled[i]) continue;
         if (unstable[i] == 0 and pms[k*i + 1-pl] != -1) {
-            if ((priority[i]&1) != pl) counts[priority[i]]--;
+            if ((priority(i)&1) != pl) counts[priority(i)]--;
             pms[k*i + 1-pl] = -1;
             todo_push(i);
 
             if (trace) {
-                logger << "\033[1;33mupdated node " << i << "/" << priority[i] << (owner[i]?" (odd)":" (even)") << "\033[m to";
+                logger << "\033[1;33mupdated node " << i << "/" << priority(i) << (owner(i)?" (odd)":" (even)") << "\033[m to";
                 pm_stream(logger, pms + i*k);
                 logger << std::endl;
             }
@@ -325,30 +333,30 @@ void
 TSPMSolver::run()
 {
     // determine k = highest priority + 1
-    k = priority[n_nodes-1]+1;
+    k = priority(nodecount()-1)+1;
     if (k < 2) k = 2;
 
     // now create the data structure, for each node
-    pms = new int[(size_t)k*n_nodes];
-    strategy = new int[n_nodes];
+    pms = new int[(size_t)k*nodecount()];
+    strategy = new int[nodecount()];
     counts = new int[k];
     tmp = new int[k];
     best = new int[k];
-    dirty = new int[n_nodes];
-    unstable = new int[n_nodes];
+    dirty = new int[nodecount()];
+    unstable = new int[nodecount()];
 
     // initialize all measures to 0
-    for (int i=0; i<k*n_nodes; i++) pms[i] = 0;
+    for (int i=0; i<k*nodecount(); i++) pms[i] = 0;
 
     // initialize strategy to -1
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
     // initialize counts for each priority
     for (int i=0; i<k; i++) counts[i] = 0;
-    for (int i=0; i<n_nodes; i++) if (disabled[i] == 0) counts[priority[i]]++;
+    for (int i=0; i<nodecount(); i++) if (disabled[i] == 0) counts[priority(i)]++;
 
     // initialize all nodes as not dirty
-    for (int n=0; n<n_nodes; n++) dirty[n] = 0;
+    for (int n=0; n<nodecount(); n++) dirty[n] = 0;
 
     // set number of lifts and lift attempts to 0
     lift_count = lift_attempt = 0;
@@ -362,9 +370,12 @@ TSPMSolver::run()
      * Initialization loop.
      */
 
-    for (int n=n_nodes-1; n>=0; n--) {
+    for (int n=nodecount()-1; n>=0; n--) {
         if (!disabled[n] and lift(n, -1)) {
-            for (int from : in[n]) if (!disabled[from] and lift(from, n)) todo_push(from);
+            for (auto curedge = ins(n); *curedge != -1; curedge++) {
+                int from = *curedge;
+                if (!disabled[from] and lift(from, n)) todo_push(from);
+            }
         }
     }
     
@@ -372,12 +383,16 @@ TSPMSolver::run()
      * The main loop.
      */
 
+    logger << "main loop now" << std::endl;
     int64_t last_update = 0;
 
     while (!todo.empty()) {
         int n = todo_pop();
-        for (int from : in[n]) if (!disabled[from] and lift(from, n)) todo_push(from);
-        if (last_update + 10*n_nodes < lift_count) {
+        for (auto curedge = ins(n); *curedge != -1; curedge++) {
+            int from = *curedge;
+            if (!disabled[from] and lift(from, n)) todo_push(from);
+        }
+        if (last_update + 10*nodecount() < lift_count) {
             last_update = lift_count;
             update(0);
             update(1);
@@ -386,9 +401,9 @@ TSPMSolver::run()
 
 #ifndef NDEBUG
     if (trace >= 2) {
-        for (int n=0; n<n_nodes; n++) {
+        for (int n=0; n<nodecount(); n++) {
             if (disabled[n]) continue;
-            logger << "\033[35m**\033[m \033[1mnode " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m is";
+            logger << "\033[35m**\033[m \033[1mnode " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m is";
             pm_stream(logger, pms + k*n);
             logger << std::endl;
         }
@@ -396,12 +411,12 @@ TSPMSolver::run()
 #endif
     
     // Now set dominions and derive strategy for even.
-    for (int n=0; n<n_nodes; n++) {
+    for (int n=0; n<nodecount(); n++) {
         if (disabled[n]) continue;
         int *pm = pms + k*n;
         if ((pm[0] == -1) == (pm[1] == -1)) LOGIC_ERROR;
         const int winner = pm[0] == -1 ? 0 : 1;
-        oink->solve(n, winner, game->owner[n] == winner ? strategy[n] : -1);
+        oink->solve(n, winner, game->owner(n) == winner ? strategy[n] : -1);
     }
 
     delete[] pms;

@@ -46,12 +46,14 @@ main(int argc, const char **argv)
         inp.close();
         std::cout << "game loaded." << std::endl;
 
+        pg.build_arrays();
+
         std::ifstream inpsol(argv[2]);
         pg.parse_solution(inpsol);
         inpsol.close();
         std::cout << "solution loaded." << std::endl;
 
-        pg.reindex();
+        pg.sort();
 
         Verifier v(&pg, std::cout);
         auto begin = wctime();

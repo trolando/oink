@@ -30,9 +30,9 @@ void
 Oink::tarjan(int n, std::vector<int> &res, bool nonempty)
 {
     // initialize
-    unsigned n_nodes = game->n_nodes;
+    unsigned n_nodes = game->nodecount();
     int *low = new int[n_nodes];
-    memset(low, 0, sizeof(int[n_nodes]));
+    memset(low, 0, sizeof(int[n_nodes])); // TODO: move this array outside the method
     int pre = 0;
 
     // search stack "st"
@@ -48,7 +48,8 @@ Oink::tarjan(int n, std::vector<int> &res, bool nonempty)
         }
         int min = low[idx];
         bool pushed = false;
-        for (auto to_idx : game->out[idx]) {
+        auto curedge = game->outedges() + game->firstout(idx);
+        for (int to_idx = *curedge; to_idx != -1; to_idx = *++curedge) {
             if (disabled[to_idx]) continue;
             if (low[to_idx] == 0) {
                 // not visited
@@ -74,8 +75,7 @@ Oink::tarjan(int n, std::vector<int> &res, bool nonempty)
          */
 
         if (nonempty) {
-            auto &out_idx = game->out[idx];
-            if (res.back() == idx and std::find(out_idx.begin(), out_idx.end(), idx) == out_idx.end()) {
+            if (res.back() == idx and !game->has_edge(idx, idx)) {
                 // it has no edges!
                 res.pop_back();
                 st.pop();
@@ -98,11 +98,12 @@ Oink::tarjan(int n, std::vector<int> &res, bool nonempty)
 void
 Oink::getBottomSCC(std::vector<int> &scc, bool nonempty)
 {
-    for (int i=0; i<game->n_nodes; i++) {
-        if (disabled[i]) continue;
-        scc.clear();
-        tarjan(i, scc, nonempty);
-        return;
+    scc.clear();
+    for (int i=0; i<game->nodecount(); i++) {
+        if (!disabled[i]) {
+            tarjan(i, scc, nonempty);
+            return;
+        }
     }
 }
 

@@ -31,7 +31,7 @@ static const int BOT = 0x80000001; // bottom state for vertex
 
 #define KC "\033[36;1m"
 
-ZLKSolver::ZLKSolver(Oink *oink, Game *game) : Solver(oink, game), Q(game->n_nodes)
+ZLKSolver::ZLKSolver(Oink *oink, Game *game) : Solver(oink, game), Q(game->nodecount())
 {
 }
 
@@ -54,12 +54,12 @@ VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
     par_helper* ours = pvec[LACE_WORKER_ID];
 
     // attract to <cur>
-    const int *_in = s->ins + s->ina[cur];
-    for (int from = *_in; from != -1; from = *++_in) {
+    for (auto curedge = s->ins(cur); *curedge != -1; curedge++) {
+        int from = *curedge;
         int _r = s->region[from];
         if (_r == DIS or _r >= 0) continue; // not in subgame, or attracted
 
-        if (s->owner[from] == pl) {
+        if (s->owner(from) == pl) {
             // owned by same parity, use CAS to claim it
             while (true) {
                 if (__sync_bool_compare_and_swap(&s->region[from], _r, r)) {
@@ -82,8 +82,8 @@ VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
             if (_r == (BOT+1)) {
                 // we are the first, do add_and_fetch with the count
                 int count = 0;
-                const int *_out = s->outs + s->outa[from];
-                for (int to = *_out; to != -1; to = *++_out) {
+                for (auto curedge = s->outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (s->region[to] == DIS) continue; // do not count disabled
                     if (s->region[to] >= 0 and s->region[to] < r) continue; // do not count supgame
                     count--; // count to negative
@@ -121,7 +121,7 @@ VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
 
 TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
 {
-    const int pr = s->priority[i];
+    const int pr = s->priority(i);
     const int pl = pr & 1;
 
     // initialize pvec (set count to 0) for all workers
@@ -134,8 +134,8 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
     for (; i>=0; i--) {
         int _r = s->region[i];
         if (_r == DIS or _r >= 0) continue; // not in subgame or attracted
-        if (!s->to_inversion and s->priority[i] != pr) break;
-        if ((s->priority[i]&1) != pl) { // search until parity inversion
+        if (!s->to_inversion and s->priority(i) != pr) break;
+        if ((s->priority(i)&1) != pl) { // search until parity inversion
             // first SYNC on all children, who knows this node may be attracted
             while (spawn_count) { SYNC(attractParT); spawn_count--; }
             // after SYNC, check if node <i> is now attracted.
@@ -180,7 +180,7 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
         par_helper* x = pvec[j];
         for (int k=0; k<x->count; k++) {
 #ifndef NDEBUG
-            if (s->trace >= 2) s->logger << "attracted " << x->items[k] << " (" << s->priority[x->items[k]] << ")" << std::endl;
+            if (s->trace >= 2) s->logger << "attracted " << x->items[k] << " (" << s->priority(x->items[k]) << ")" << std::endl;
 #endif
             R->push_back(x->items[k]);
         }
@@ -193,7 +193,7 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
 int
 ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
 {
-    const int pr = priority[i];
+    const int pr = priority(i);
     const int pl = pr & 1;
 
     /**
@@ -204,8 +204,8 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
         if (region[i] == DIS or region[i] >= 0) continue; // cannot be attracted
 
         // uncomment the next line to attract until lower priority instead of until inversion
-        if (!to_inversion and priority[i] != pr) break; // until other priority
-        if ((priority[i]&1) != pl) break; // until parity inversion (Maks Verver optimization)
+        if (!to_inversion and priority(i) != pr) break; // until other priority
+        if ((priority(i)&1) != pl) break; // until parity inversion (Maks Verver optimization)
 
         region[i] = r;
         winning[i] = pl;
@@ -221,11 +221,11 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
             R->push_back(cur);
 
             // attract to <cur>
-            const int *_in = ins + ina[cur];
-            for (int from = *_in; from != -1; from = *++_in) {
+            for (auto curedge = ins(cur); *curedge != -1; curedge++) {
+                int from = *curedge;
                 if (from >= i or region[from] == DIS or region[from] >= 0) continue; // cannot be attracted
 
-                if (owner[from] == pl) {
+                if (owner(from) == pl) {
                     // owned by same parity
                     region[from] = r;
                     winning[from] = pl;
@@ -240,8 +240,8 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
                     if (count == BOT) {
                         // compute count (to negative)
                         count = 1;
-                        const int *_out = outs + outa[from];
-                        for (int to = *_out; to != -1; to = *++_out) {
+                        auto curedge = outs(from);
+                        for (int to = *curedge; to != -1; to = *++curedge) {
                             if (region[to] == DIS) continue;
                             if (region[to] >= 0 and region[to] < r) continue;
                             count--;
@@ -276,7 +276,7 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
 {
     int count = 0;
 
-    const int pr = priority[i];
+    const int pr = priority(i);
     const int pl = pr & 1;
 
     // NOTE: this algorithm could be improved using an "out counter"
@@ -294,11 +294,11 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
      */
     for (int i : *S) {
         // check if the node is attracted
-        if (owner[i] == pl) {
+        if (owner(i) == pl) {
             // "loser" attraction
             bool can_escape = false;
-            const int *_out = outs + outa[i];
-            for (int to = *_out; to != -1; to = *++_out) {
+            auto curedge = outs(i);
+            for (int to = *curedge; to != -1; to = *++curedge) {
                 if (region[to] < r) continue; // not in subgame, or -1/-2
                 if (winning[to] != pl) continue; // not an escape
                 can_escape = true;
@@ -308,20 +308,20 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
 #ifndef NDEBUG
                 if (trace >= 2) logger << KC"forced distraction\033[m " << label_vertex(i) << std::endl;
 #endif
-                // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", i, priority[i], 1-pl);
+                // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", i, priority(i), 1-pl);
                 strategy[i] = -1;
                 Q.push(i);
             }
         } else {
             // "winner" attraction
-            const int *_out = outs + outa[i];
-            for (int to = *_out; to != -1; to = *++_out) {
+            auto curedge = outs(i);
+            for (int to = *curedge; to != -1; to = *++curedge) {
                 if (region[to] < r) continue; // not in subgame, or -1/-2
                 if (winning[to] == pl) continue; // not attracting
 #ifndef NDEBUG
                 if (trace >= 2) logger << KC"attracted distraction\033[m " << label_vertex(i) << std::endl;
 #endif
-                // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", i, priority[i], 1-pl);
+                // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", i, priority(i), 1-pl);
                 strategy[i] = to;
                 Q.push(i);
                 break;
@@ -342,18 +342,18 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
         winning[cur] = 1-pl;
 
         // attract to <cur>
-        const int *_in = ins + ina[cur];
-        for (int from = *_in; from != -1; from = *++_in) {
+        auto curedge = ins(cur);
+        for (int from = *curedge; from != -1; from = *++curedge) {
             // if (region[from] == -1) LOGIC_ERROR;
             if (region[from] < r) continue; // not in subgame, or disabled
             if (winning[from] != pl) continue; // already lost
 
-            if (owner[from] != pl) {
+            if (owner(from) != pl) {
                 // owned by other
 #ifndef NDEBUG
                 if (trace >= 2) logger << KC"attracted\033[m " << label_vertex(from) << std::endl;
 #endif
-                // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", from, priority[from], 1-pl);
+                // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", from, priority(from), 1-pl);
                 region[from] = r;
                 winning[from] = 1-pl;
                 strategy[from] = cur;
@@ -361,8 +361,8 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
             } else {
                 // owned by us
                 bool can_escape = false;
-                const int *_out = outs + outa[from];
-                for (int to = *_out; to != -1; to = *++_out) {
+                auto curedge = outs(from);
+                for (int to = *curedge; to != -1; to = *++curedge) {
                     // if (region[to] == -1) LOGIC_ERROR;
                     if (region[to] < r) continue; // not in subgame, or disabled
                     if (winning[to] != pl) continue; // not an escape
@@ -373,7 +373,7 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
 #ifndef NDEBUG
                 if (trace >= 2) logger << KC"forced\033[m " << label_vertex(from) << std::endl;
 #endif
-                // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", from, priority[from], 1-pl);
+                // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", from, priority(from), 1-pl);
                 region[from] = r;
                 winning[from] = 1-pl;
                 strategy[from] = -1;
@@ -391,24 +391,24 @@ ZLKSolver::run()
     iterations = 0;
 
     // allocate and initialize data structures
-    region = new int[n_nodes];
-    winning = new int[n_nodes];
-    strategy = new int[n_nodes];
+    region = new int[nodecount()];
+    winning = new int[nodecount()];
+    strategy = new int[nodecount()];
 
     std::vector<int> history;
     std::vector<int> W0, W1;
     std::vector<std::vector<int>> levels;
 
     // initialize arrays
-    memset(winning, -1, sizeof(int[n_nodes]));
-    memset(strategy, -1, sizeof(int[n_nodes]));
+    memset(winning, -1, sizeof(int[nodecount()]));
+    memset(strategy, -1, sizeof(int[nodecount()]));
 
     // get number of nodes and create and initialize inverse array
     max_prio = -1;
-    for (int n=n_nodes-1; n>=0; n--) {
+    for (int n=nodecount()-1; n>=0; n--) {
         region[n] = disabled[n] ? DIS : BOT;
         if (disabled[n]) continue;
-        const int pr = game->priority[n];
+        const int pr = priority(n);
         if (max_prio == -1) {
             max_prio = pr;
             inverse = new int[max_prio+1];
@@ -440,7 +440,7 @@ ZLKSolver::run()
         __lace_worker = lace_get_worker();
         __lace_dq_head = lace_get_head(__lace_worker);
         pvec = (par_helper**)malloc(sizeof(par_helper*[W]));
-        for (int i=0; i<W; i++) pvec[i] = (par_helper*)malloc(sizeof(par_helper) + sizeof(int[n_nodes]));
+        for (int i=0; i<W; i++) pvec[i] = (par_helper*)malloc(sizeof(par_helper) + sizeof(int[nodecount()]));
     }
 
     // initialize first level (i, r=0, phase=0)
@@ -469,7 +469,7 @@ ZLKSolver::run()
         /**
          * Get priority and player
          */
-        const int pr = priority[i];
+        const int pr = priority(i);
         const int pl = pr&1;
 
 #ifndef NDEBUG
@@ -560,7 +560,7 @@ ZLKSolver::run()
                     /**
                      * For nodes that are won and controlled by <pl>, check if their strategy needs to be fixed.
                      */
-                    if (owner[v] != pl) continue; // not controlled by <pl>
+                    if (owner(v) != pl) continue; // not controlled by <pl>
                     if (strategy[v] != -1 && winning[strategy[v]] == pl) continue; // good strategy
 
                     /**
@@ -568,8 +568,8 @@ ZLKSolver::run()
                      * We search for a successor of <v> in the subgame won by <pl>
                      */
                     strategy[v] = -1;
-                    const int *_out = outs + outa[v];
-                    for (int to = *_out; to != -1; to = *++_out) {
+                    auto curedge = outs(v);
+                    for (int to = *curedge; to != -1; to = *++curedge) {
                         if (region[to] < r) continue; // not in subgame
                         if (winning[to] != pl) continue; // not winning
                         strategy[v] = to;
@@ -680,7 +680,7 @@ ZLKSolver::run()
     }
 
     // done
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (region[i] == DIS) continue;
 #ifndef NDEBUG
         if (winning[i] == -1) LOGIC_ERROR;

@@ -25,7 +25,6 @@
 #include <stack>
 
 #include "game.hpp"
-#include "solver.hpp" // for LOGIC_ERROR
 #include "verifier.hpp"
 
 using namespace std;
@@ -35,111 +34,98 @@ namespace pg {
 void
 Verifier::verify(bool fullgame, bool even, bool odd)
 {
-    const int n_nodes = game->n_nodes;
+    // ensure the vertices are ordered properly
+    game->ensure_sorted();
+    // ensure that the arrays are built
+    game->build_arrays();
 
-    // reindex if not yet done
-    game->reindex_once();
-
-    std::vector<int> *out = new std::vector<int>[n_nodes];
+    const int n_vertices = game->vertexcount();
 
     /**
-     * The first loop removes all edges from "won" nodes that are not the strategy.
+     * The first loop removes all edges from "won" vertices that are not the strategy.
      * This turns each dominion into a single player game.
      * Also some trivial checks are performed.
      */
-    for (int i=0; i<n_nodes; i++) {
-        // (for full solutions) check whether every node is won
+    for (int i=0; i<n_vertices; i++) {
+        // (for full solutions) check whether every vertex is won
         if (!game->solved[i]) {
-            if (fullgame) throw "not every node is won";
+            if (fullgame) throw "not every vertex is won";
             else continue;
         }
 
-        const bool dom = game->winner[i];
+        const bool winner = game->winner[i];
 
-        if (game->strategy[i] == -1) {
-            // no strategy, copy all edges
-            out[i].insert(out[i].end(), game->out[i].begin(), game->out[i].end());
-        } else {
-            // only strategy
-            out[i].push_back(game->strategy[i]);
-        }
+        if (winner == 0 and !even) continue; // whatever
+        if (winner == 1 and !odd) continue; // whatever
 
-        if (dom == game->owner[i]) {
+        if (winner == game->owner(i)) {
             // if winner, check whether the strategy stays in the dominion
-            if ((even and dom==0) or (odd and dom==1)) {
-                int s = game->strategy[i];
-                if (s == -1) {
-                    throw "winning node has no strategy";
-                } else if (!game->solved[s] or game->winner[s] != dom) {
-                    throw "strategy leaves dominion";
-                }
-                // check whether the strategy is actually a valid move
-                if (std::find(game->out[i].begin(), game->out[i].end(), s) == game->out[i].end()) {
-                    throw "strategy is not a valid move";
-                }
-                n_strategies++;
+            int str = game->strategy[i];
+            if (str == -1) {
+                throw "winning vertex has no strategy";
+            } else if (!game->has_edge(i, str)) {
+                throw "strategy is not a valid move";
+            } else if (!game->solved[str] or game->winner[str] != winner) {
+                throw "strategy leaves dominion";
             }
+            n_strategies++; // number of checked strategies
         } else {
             // if loser, check whether the loser can escape
-            for (auto to : game->out[i]) {
-                if (!game->solved[to] or game->winner[to] != dom) {
-                    printf("escape edge from %d/%d to %d/%d\n", i, game->priority[i], to, game->priority[to]);
+            for (auto curedge = game->outs(i); *curedge != -1; curedge++) {
+                int to = *curedge;
+                if (!game->solved[to] or game->winner[to] != winner) {
+                    logger << "escape edge from " << game->label_vertex(i) << " to " << game->label_vertex(to) << std::endl;
                     throw "loser can escape";
                 }
             }
-            // and of course that no strategy is set
-            if (game->strategy[i] != -1) throw "losing node has strategy";
+            // and of course check that no strategy is set
+            if (game->strategy[i] != -1) throw "losing vertex has strategy";
         }
     }
 
     // Allocate datastructures for Tarjan search
-    int *done = new int[n_nodes];
-    int64_t *low = new int64_t[n_nodes];
-    for (int i=0; i<n_nodes; i++) done[i] = -1;
-    for (int i=0; i<n_nodes; i++) low[i] = 0;
+    int *done = new int[n_vertices];
+    int64_t *low = new int64_t[n_vertices];
+    for (int i=0; i<n_vertices; i++) done[i] = -1;
+    for (int i=0; i<n_vertices; i++) low[i] = 0;
 
     std::vector<int> res;
     std::stack<int> st;
 
     int64_t pre = 0;
 
-    for (int i=n_nodes-1; i>=0; i--) {
-        /**
-         * We're going to search all SCCs reachable from node <i> with priority <p>
-         */
-        int p = game->priority[i];
+    for (int i=n_vertices-1; i>=0; i--) {
+        // only if a dominion
+        if (!game->solved[i]) continue;
 
-        /**
-         * Only search when loser would win
-         */
-        if (!game->solved[i] or game->winner[i] == (p&1)) continue;
-        if (!odd && (p&1) == 0) continue; // test odd strategies?
-        if (!even && (p&1) == 1) continue; // test even strategies?
+        int prio = game->priority(i);
+        int winner = game->winner[i];
 
-        /**
-         * But if done[i] == p then we already checked this one!
-         */
-        if (done[i] == p) continue;
+        // only compute SCC for a (probably) top vertex
+        if (winner == 0 and !even) continue; // don't check even dominions
+        if (winner == 1 and !odd) continue; // don't check odd dominions
 
-        /**
-         * Set bot to current pre.
-         */
+        // only try to find an SCC where the loser wins
+        if (winner == (prio&1)) continue;
+
+        // only run the check if not yet done at priority <prio>
+        if (done[i] == prio) continue;
+
+        // set <bot> (in tarjan search) to current pre
         int64_t bot = pre;
 
-        /**
-         * Start DFS at <i>
-         */
+        // start the tarjan search at vertex <i>
         st.push(i);
 
         while (!st.empty()) {
-            int idx = st.top();
+            int v = st.top();
 
             /**
              * When we see it for the first item, we assign the next number to it and add it to <res>.
              */
-            if (low[idx] <= bot) {
-                low[idx] = ++pre;
-                res.push_back(idx);
+            if (low[v] <= bot) {
+                low[v] = ++pre;
+                res.push_back(v);
             }
 
             /**
@@ -147,30 +133,48 @@ Verifier::verify(bool fullgame, bool even, bool odd)
              * If seen earlier, then update "min"
              * If new, then 'recurse'
              */
-            int min = low[idx];
+            int min = low[v];
             bool pushed = false;
-            for (auto to : out[idx]) {
-                // skip if to higher priority or to already found scc
-                if (to > i) continue;
-                if (done[to] == p) continue;
-                if (low[to] <= bot) {
+            if (game->strategy[v] != -1) {
+                int to = game->strategy[v];
+                if (to > i) {
+                    // skip if to higher priority
+                } else if (done[to] == prio) {
+                    // skip if already found scc (done[to] set to prio)
+                } else if (low[to] <= bot) {
                     // not visited, add to <st> and break!
                     st.push(to);
                     pushed = true;
-                    break;
                 } else {
                     // visited, update min
                     if (low[to] < min) min = low[to];
                 }
+            } else {
+                for (auto curedge = game->outs(v); *curedge != -1; curedge++) {
+                    int to = *curedge;
+                    // skip if to higher priority
+                    if (to > i) continue;
+                    // skip if already found scc (done[to] set to prio)
+                    if (done[to] == prio) continue;
+                    // check if visited in this search
+                    if (low[to] <= bot) {
+                        // not visited, add to <st> and break!
+                        st.push(to);
+                        pushed = true;
+                        break;
+                    } else {
+                        // visited, update min
+                        if (low[to] < min) min = low[to];
+                    }
+                }
             }
-            if (pushed) continue; // we pushed...
+            if (pushed) continue; // we pushed a new vertex to <st>...
 
-            /**
-             * If we're here, then there was no new edge and we check if we're the root of an SCC
-             */
-            if (min < low[idx]) {
-                // not the root
-                low[idx] = min;
+            // there was no edge to a new vertex
+            // check if we are the root of a SCC
+            if (min < low[v]) {
+                // not the root (outgoing edge to lower ranked vertex)
+                low[v] = min;
                 st.pop();
                 continue;
             }
@@ -178,30 +182,32 @@ Verifier::verify(bool fullgame, bool even, bool odd)
             /**
              * We're the root!
              * Now we need to figure out if we have cycles with p...
-             * Also, mark every node in the SCC as "done @ search p"
+             * Also, mark every vertex in the SCC as "done @ search p"
              */
-            int max_p = -1;
+            int max_prio = -1;
             int scc_size = 0;
-            auto &priority = game->priority;
             for (auto it=res.rbegin(); it!=res.rend(); it++) {
                 int n = *it;
-                if (priority[n] > max_p) max_p = priority[n];
+                if (game->priority(n) > max_prio) max_prio = game->priority(n);
                 scc_size++;
-                done[n] = p;
-                if (n == idx) break;
+                done[n] = prio; // mark as done at prio
+                if (n == v) break;
             }
-            bool cycles = scc_size > 1 or std::find(out[idx].begin(), out[idx].end(), idx) != out[idx].end();
-            if (cycles && (max_p&1) == (p&1)) {
+
+            bool cycles = scc_size > 1 or game->strategy[v] == v or
+                (game->strategy[v] == -1 and game->has_edge(v, v));
+
+            if (cycles && (max_prio&1) == (prio&1)) {
                 /**
                  * Found! Report.
                  */
-                printf("\033[1;31mscc where loser wins\033[m with priority \033[1;34m%d\033[m", max_p);
+                logger << "\033[1;31mscc where loser wins\033[m with priority \033[1;34m" << max_prio << "\033[m";
                 for (auto it=res.rbegin(); it!=res.rend(); it++) {
                     int n = *it;
-                    printf(" %d", n);
-                    if (n == idx) break;
+                    logger << " " << n;
+                    if (n == v) break;
                 }
-                printf("\n");
+                logger << std::endl;
                 delete[] done;
                 delete[] low;
 
@@ -214,7 +220,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
             for (;;) {
                 int n = res.back();
                 res.pop_back();
-                if (n == idx) break;
+                if (n == v) break;
             }
             st.pop();
         }
@@ -222,7 +228,6 @@ Verifier::verify(bool fullgame, bool even, bool odd)
 
     delete[] done;
     delete[] low;
-    delete[] out;
 }
 
 }

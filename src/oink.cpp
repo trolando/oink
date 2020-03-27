@@ -18,6 +18,7 @@
 #include <cassert>
 #include <queue>
 #include <stack>
+#include <iomanip>
 #include <iostream>
 #include <chrono>
 
@@ -28,18 +29,21 @@
 
 namespace pg {
 
-Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.n_nodes), disabled(game.solved)
+Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.vertexcount()), disabled(game.solved)
 {
-    /**
-     * If the game was not yet reindexed, do it now.
-     */
-    game.reindex_once();
+    // ensure the vertices are ordered properly
+    game.ensure_sorted();
+    // ensure arrays are built
+    game.build_arrays();
 
-    // initialize outcount (for flush/attract)
-    outcount = new int[game.n_nodes];
-    for (int i=0; i<game.n_nodes; i++) {
-        outcount[i] = std::count_if(game.out[i].begin(), game.out[i].end(),
-                [&] (const int n) { return disabled[n] == 0; });
+    // initialize outcount (for flush)
+    outcount = new int[game.vertexcount()];
+    for (int i=0; i<game.vertexcount(); i++) {
+        outcount[i] = 0;
+        const int *ptr = game.outedges() + game.firstout(i);
+        for (int to = *ptr; to != -1; to = *++ptr) {
+            if (!disabled[to]) outcount[i]++; // only count the non-disabled subgame
+        }
     }
 }
 
@@ -60,7 +64,7 @@ Oink::solveTrivialCycles()
     int count = 0;
 
     // Allocate and initialize datastructures
-    const int n_nodes = game->n_nodes;
+    const int n_nodes = game->vertexcount();
     int *done = new int[n_nodes];
     int64_t *low = new int64_t[n_nodes];
     for (int i=0; i<n_nodes; i++) done[i] = disabled[i] ? -2 : -1;
@@ -71,11 +75,6 @@ Oink::solveTrivialCycles()
     std::stack<int> st;
     std::queue<int> q;
 
-    const auto &in = game->in;
-    const auto &out = game->out;
-    const auto &owner = game->owner;
-    const auto &priority = game->priority;
-
     int64_t pre = 0;
 
     for (int i=n_nodes-1; i>=0; i--) {
@@ -85,13 +84,13 @@ Oink::solveTrivialCycles()
         /**
          * We're going to search all winner-controlled SCCs reachable from node <i>
          */
-        const int pr = game->priority[i];
+        const int pr = game->priority(i);
         const int pl = pr & 1;
 
         /**
          * Only start at unsolved winner-controlled and not yet seen for this priority
          */
-        if (owner[i] != pl) {
+        if (game->owner(i) != pl) {
             done[i] = -2; // highest priority but not winner-controlled, never check again
             continue;
         }
@@ -126,12 +125,14 @@ Oink::solveTrivialCycles()
              */
             int min = low[idx];
             bool pushed = false;
-            for (auto to : out[idx]) {
+
+            auto ptr = game->outedges() + game->firstout(idx);
+            for (int to = *ptr; to != -1; to = *++ptr) {
                 /**
                  * Only go to lower priority nodes, controlled by <pl>, that are not excluded or seen this round.
                  */
                 if (disabled[i]) continue;
-                if (to > i or done[to] == -2 or done[to] == pr or owner[to] != pl) continue;
+                if (to > i or done[to] == -2 or done[to] == pr or game->owner(to) != pl) continue;
                 if (low[to] <= bot) {
                     // not visited, add to <st> and break!
                     st.push(to);
@@ -166,7 +167,7 @@ Oink::solveTrivialCycles()
                 scc.push_back(n);
                 done[n] = pr; // dont check again this round
                 if (low[n] != min) low[n] = min; // set it [for strategy]
-                int d = priority[n];
+                int d = game->priority(n);
                 if (d > max_pr) max_pr = d;
                 if ((d&1) == pl and d > max_pr_pl) {
                     max_pr_pl = d;
@@ -179,8 +180,7 @@ Oink::solveTrivialCycles()
              * Check if a single-node SCC without a self-loop
              */
             if (scc.size() == 1) {
-                const auto &out_idx = out[idx];
-                if (std::find(out_idx.begin(), out_idx.end(), idx) == out_idx.end()) {
+                if (!game->has_edge(idx, idx)) {
                     // no self-loop
                     done[idx] = -2; // never check again
                     scc.clear();
@@ -194,7 +194,7 @@ Oink::solveTrivialCycles()
              */
 
             if ((max_pr & 1) != pl) {
-                for (auto n : scc) if (priority[n] > max_pr_pl) done[n] = -2; // never check again
+                for (auto n : scc) if (game->priority(n) > max_pr_pl) done[n] = -2; // never check again
                 scc.clear();
                 st.pop();
                 continue;
@@ -214,7 +214,8 @@ Oink::solveTrivialCycles()
             while (!q.empty()) {
                 int cur = q.front();
                 q.pop();
-                for (int from : in[cur]) {
+                auto ptr = game->inedges() + game->firstin(cur);
+                for (int from = *ptr; from != -1; from = *++ptr) {
                     if (low[from] != min or disabled[from]) continue;
                     solve(from, pl, cur); // also sets "disabled"
                     q.push(from);
@@ -241,39 +242,27 @@ int
 Oink::solveSelfloops()
 {
     int res = 0;
-    for (int n=0; n<game->n_nodes; n++) {
-        if (disabled[n]) continue;
+    for (int v=0; v<game->vertexcount(); v++) {
+        if (disabled[v]) continue; // skip vertices that are hidden
 
-        auto &out = game->out[n];
-        for (auto it = out.begin(); it != out.end(); it++) {
-            if (n != *it) continue;
-
-            // found a self-loop
-            if (game->owner[n] == (game->priority[n]&1)) {
-                // self-loop is winning
-                if (trace) logger << "winning self-loop with priority \033[1;34m" << game->priority[n] << "\033[m" << std::endl;
-                solve(n, game->owner[n], n);
+        if (game->has_edge(v, v)) {
+            if (game->owner(v) == (game->priority(v)&1)) {
+                // a winning selfloop
+                if (trace) logger << "winning self-loop with priority \033[1;34m" << game->priority(v) << "\033[m" << std::endl;
+                solve(v, game->owner(v), v);
+                res++;
             } else {
-                // self-loop is losing
-                if (out.size() == 1) {
+                // a losing selfloop
+                if (game->outcount(v) == 1) {
                     // it is a losing dominion
-                    solve(n, 1 - game->owner[n], -1);
-                } else {
-                    // remove the edge
-                    out.erase(it);
-                    auto &in = game->in[n];
-                    in.erase(std::remove(in.begin(), in.end(), n), in.end());
-                    outcount[n]--;
+                    solve(v, 1 - game->owner(v), -1);
+                    res++;
                 }
             }
-
-            res++;
-            break;
         }
     }
 
-    flush();
-
+    if (res != 0) flush();
     return res;
 }
 
@@ -281,11 +270,11 @@ bool
 Oink::solveSingleParity()
 {
     int parity = -1;
-    for (int i=0; i<game->n_nodes; i++) {
-        if (disabled[i]) continue;
+    for (int v=0; v<game->vertexcount(); v++) {
+        if (disabled[v]) continue;
         if (parity == -1) {
-            parity = game->priority[i]&1;
-        } else if (parity == (game->priority[i]&1)) {
+            parity = game->priority(v)&1;
+        } else if (parity == (game->priority(v)&1)) {
             continue;
         } else {
             return false;
@@ -294,17 +283,19 @@ Oink::solveSingleParity()
     if (parity == 0 or parity == 1) {
         // solved with random strategy
         logger << "parity game only has parity " << (parity ? "odd" : "even") << std::endl;
-        for (int i=0; i<game->n_nodes; i++) {
-            if (disabled[i]) continue;
-            if (game->owner[i] == parity) {
+        for (int v=0; v<game->vertexcount(); v++) {
+            if (disabled[v]) continue;
+            if (game->owner(v) == parity) {
                 // set random strategy for winner
-                for (int to : game->out[i]) {
-                    if (disabled[to]) continue;
-                    solve(i, parity, to);
-                    break;
+                for (auto curedge = game->outs(v); *curedge != -1; curedge++) {
+                    int to = *curedge;
+                    if (!disabled[to]) {
+                        solve(v, parity, to);
+                        break;
+                    }
                 }
             } else {
-                solve(i, parity, -1);
+                solve(v, parity, -1);
             }
         }
         flush();
@@ -318,58 +309,43 @@ Oink::solveSingleParity()
 void
 Oink::solve(int node, int win, int strategy)
 {
-    if (game->solved[node] or disabled[node]) LOGIC_ERROR;
-
-    game->solved[node] = true;
-    game->winner[node] = win;
-    game->strategy[node] = (win == game->owner[node]) ? strategy : -1;
-    disabled[node] = true; // disable
-    todo.push(node);
-
     /*
     if (trace) {
-        logger << "\033[1;32msolved " << (winner ? "(odd)" : "(even)") << "\033[m ";
-        logger << "node " << node << "/" << game->priority[node];
-        if (strategy != -1) logger << " to " << strategy << "/" << game->priority[strategy];
+        logger << "\033[1;32msolved " << (win ? "(odd)" : "(even)") << "\033[m " << game->label_vertex(node);
+        if (strategy != -1) logger << " to " << game->label_vertex(strategy);
         logger << std::endl;
     }
     // */
+
+#ifndef NDEBUG
+    if (game->solved[node] or disabled[node]) LOGIC_ERROR;
+#endif
+
+    game->solved[node] = true;
+    game->winner[node] = win;
+    game->strategy[node] = (win == game->owner(node)) ? strategy : -1;
+    disabled[node] = true; // disable
+    todo.push(node);
 }
 
 void
 Oink::flush()
 {
-    // flush the todo buffer
+    // the <todo> queue contains vertex that are marked as solved
+
     while (todo.nonempty()) {
         int v = todo.pop();
-
-        // check if we already did this node
-        if (outcount[v] == -1) return;
-        outcount[v] = -1; // mark it done
-
-#ifndef NDEBUG
-        assert(game->solved[v]);
-#endif
         bool winner = game->winner[v];
 
-        // base on ORIGINAL game in!
-        for (int in : game->in[v]) {
-            if (game->solved[in]) continue; // already done
-            if (game->owner[in] == winner) {
+        for (auto curedge = game->ins(v); *curedge != -1; curedge++) {
+            int from = *curedge;
+            if (game->solved[from] or disabled[from]) continue;
+            if (game->owner(from) == winner) {
                 // node of winner
-                game->strategy[in] = v;
-                game->solved[in] = true;
-                game->winner[in] = winner;
-                disabled[in] = true;
-                todo.push(in);
+                solve(from, winner, v);
             } else {
                 // node of loser
-                if (--outcount[in] == 0) {
-                    game->solved[in] = true;
-                    game->winner[in] = winner;
-                    disabled[in] = true;
-                    todo.push(in);
-                }
+                if (--outcount[from] == 0) solve(from, winner, -1);
             }
         }
     }
@@ -404,7 +380,6 @@ Oink::solveLoop()
      * Report chosen solver.
      */
     Solvers solvers;
-    logger << "solving using " << solvers.desc(solver) << std::endl;
 
     if (bottomSCC) {
         do {
@@ -419,7 +394,7 @@ Oink::solveLoop()
             for (int i : sel) disabled[i] = false;
 
             logger << "solving bottom SCC of " << sel.size() << " nodes (";
-            logger << game->countUnsolved() << " nodes left)" << std::endl;
+            logger << game->count_unsolved() << " nodes left)" << std::endl;
 
             // solve current subgame
             Solver *s = solvers.construct(solver, this, game);
@@ -428,7 +403,7 @@ Oink::solveLoop()
 
             // flush the todo buffer
             flush();
-        } while (!game->gameSolved());
+        } while (!game->game_solved());
     } else {
         do {
             // disable all solved vertices
@@ -447,7 +422,7 @@ Oink::solveLoop()
             } else {
                 // flush the todo buffer
                 flush();
-                auto c = game->countUnsolved();
+                auto c = game->count_unsolved();
                 logger << c << " nodes left." << std::endl;
                 if (c == 0) return;
             }
@@ -475,88 +450,67 @@ Oink::run()
         logger << "parity game renumbered (" << d << " priorities)" << std::endl;
     }
 
-    /*
-    // TODO this is for when we are provided a partial solution...
-    // in case some nodes already have a dominion but are not yet disabled
-    for (int i=0; i<game->n_nodes; i++) {
-        if (game->solved[i] and !disabled[i]) {
-            disabled[i] = true;
-            todo.push_back(i);
+    /**
+     * Deal with partial solutions
+     */
+    if (game->solved.any()) {
+        for (int v=0; v<game->vertexcount(); v++) {
+            todo.push(v);
         }
+        flush();
     }
-    flush();
-    */
 
     if (solveSingle and solveSingleParity()) {
         // already reported in solveSingleParity
         auto time_after = high_resolution_clock::now();
         double diff = duration_cast<duration<double>>(time_after - time_before).count();
-        logger << "preprocessing took " << std::fixed << diff << " sec." << std::endl;
+        logger << "preprocessing took " << std::fixed << std::setprecision(6) << diff << " sec." << std::endl;
         logger << "solved by preprocessor." << std::endl;
         return;
     }
 
     if (removeLoops) {
         int count = solveSelfloops();
-        if (count == 0) logger << "no self-loops removed" << std::endl;
-        else if (count == 1) logger << "1 self-loops removed" << std::endl;
-        else logger << count << " self-loops removed" << std::endl;
+        if (count == 0) logger << "no self-loops removed." << std::endl;
+        else if (count == 1) logger << "1 self-loops removed." << std::endl;
+        else logger << count << " self-loops removed." << std::endl;
     }
 
     if (removeWCWC) {
         int count = solveTrivialCycles();
-        if (count == 0) logger << "no trivial cycles removed" << std::endl;
-        else if (count == 1) logger << "1 trivial cycle removed" << std::endl;
-        else logger << count << " trivial cycles removed" << std::endl;
+        if (count == 0) logger << "no trivial cycles removed." << std::endl;
+        else if (count == 1) logger << "1 trivial cycle removed." << std::endl;
+        else logger << count << " trivial cycles removed." << std::endl;
     }
 
     auto time_mid = high_resolution_clock::now();
 
-    if (game->gameSolved()) {
+    if (game->game_solved()) {
         double preprocess_time = duration_cast<duration<double>>(time_mid - time_before).count();
-        logger << "preprocessing took " << std::fixed << preprocess_time << " sec." << std::endl;
+        logger << "preprocessing took " << std::fixed << std::setprecision(6) << preprocess_time << " sec." << std::endl;
         logger << "solved by preprocessor." << std::endl;
         return;
     }
         
     if (solver == -1) {
-        logger << "no solver selected" << std::endl;
+        logger << "no solver selected!" << std::endl;
         return;
-    }
-
-    /***
-     * Build arrays
-     */
-    {
-        // count number of edges
-        size_t len = game->edgecount() + game->n_nodes;
-
-        outa = new int[game->n_nodes];
-        ina = new int[game->n_nodes];
-        outs = new int[len];
-        ins = new int[len];
-
-        int outi = 0;
-        int ini = 0;
-
-        for (int i=0; i<game->n_nodes; i++) {
-            outa[i] = outi;
-            ina[i] = ini;
-            for (int to : game->out[i]) outs[outi++] = to;
-            for (int fr : game->in[i]) ins[ini++] = fr;
-            outs[outi++] = -1;
-            ins[ini++] = -1;
-        }
     }
 
     // building these arrays is not really a preprocessing step in my opinion
     time_mid = high_resolution_clock::now();
 
-    /***
+    /**
      * Start Lace if we are parallel
+     * - if parallel solver, -w [0..N] and Lace is not running, start Lace
+     * - if parallel solver, -w -1, run sequential anyway
+     * - if sequential solver, run sequantial
      */
 
-    if (Solvers().isParallel(solver)) {
+    Solvers solvers;
+    logger << "solving using " << solvers.desc(solver) << std::endl;
+
+    if (solvers.isParallel(solver)) {
         if (workers >= 0) {
             if (lace_workers() == 0) {
                 lace_init(workers, 100*1000*1000);
@@ -576,14 +530,9 @@ Oink::run()
 
     auto time_after = high_resolution_clock::now();
     double preprocess_time = duration_cast<duration<double>>(time_mid - time_before).count();
-    logger << "preprocessing took " << std::fixed << preprocess_time << " sec." << std::endl;
+    logger << "preprocessing took " << std::fixed << std::setprecision(6) << preprocess_time << " sec." << std::endl;
     double solving_time = duration_cast<duration<double>>(time_after - time_mid).count();
-    logger << "solving took " << std::fixed << solving_time << " sec." << std::endl;
-
-    delete[] outa;
-    delete[] ina;
-    delete[] outs;
-    delete[] ins;
+    logger << "solving took " << std::fixed << std::setprecision(6) << solving_time << " sec." << std::endl;
 }
 
 }

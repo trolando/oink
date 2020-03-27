@@ -49,15 +49,15 @@ PPSolver::attract(int prio, std::queue<int> queue)
         queue.pop();
 
         // (this iteration is a hot spot...)
-        const int *_in = ins + ina[cur];
-        for (int from = *_in; from != -1; from = *++_in) {
+        for (auto curedge = ins(cur); *curedge != -1; curedge++) {
+            int from = *curedge;
             if (disabled[from] or region[from] > prio) {
                 // if not in the subgame of <prio>, skip
                 continue;
             } else if (region[from] == prio) {
                 // if already in <prio>, check if escape without strategy
-                if (owner[from] == pl and strategy[from] == -1) strategy[from] = cur;
-            } else if (owner[from] == pl) {
+                if (owner(from) == pl and strategy[from] == -1) strategy[from] = cur;
+            } else if (owner(from) == pl) {
                 // if owned by same parity, attract to a-maximal region
                 rv.push_back(from);
                 region[from] = prio;
@@ -67,8 +67,8 @@ PPSolver::attract(int prio, std::queue<int> queue)
             } else {
                 // if owned by other parity, check all outgoing edges
                 bool can_escape = false;
-                const int *_out = outs + outa[from];
-                for (int to = *_out; to != -1; to = *++_out) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     // if there is an escape, then it is not attracted
                     if (!disabled[to] and region[to] < prio) {
                         can_escape = true;
@@ -128,7 +128,7 @@ PPSolver::resetRegion(int p)
         if (disabled[j]) region[j] = -2;
         // reset if currently in region p
         else if (region[j] == p) {
-            region[j] = priority[j];
+            region[j] = priority(j);
             strategy[j] = -1;
         }
     }
@@ -155,12 +155,12 @@ PPSolver::setupRegion(int i, int p, bool mustReset)
     } else {
         // No reset, but remove escapes (to be added)
         regions[p].erase(std::remove_if(regions[p].begin(), regions[p].end(),
-                [&](const int x){ return priority[x] == p; }),
+                [&](const int x){ return priority(x) == p; }),
                 regions[p].end());
     }
 
     // Add all escapes to regions vector
-    for (int j=i; j>=0 && priority[j] == p; j--) {
+    for (int j=i; j>=0 && priority(j) == p; j--) {
         if (region[j] == -2) continue;
         else if (disabled[j]) region[j] = -2;
         else if (region[j] == p) {
@@ -185,16 +185,16 @@ PPSolver::setDominion(int p)
     if (trace) logger << "\033[1;38;5;201mdominion \033[36m" << p << "\033[m";
     for (int i : regions[p]) {
         assert(region[i] == p);
-        assert(owner[i] != pl or (strategy[i] != -1 and region[strategy[i]] == p));
+        assert(owner(i) != pl or (strategy[i] != -1 and region[strategy[i]] == p));
         if (trace >= 2) logger << " " << i;
-        oink->solve(i, pl, owner[i] == pl ? strategy[i] : -1);
+        oink->solve(i, pl, owner(i) == pl ? strategy[i] : -1);
     }
     if (trace) logger << std::endl;
     oink->flush();
 
     // to recover, all regions containing a disabled node must be reset...
     /*
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (region[i] == -2) continue;
         if (!disabled[i]) continue;
         int r = region[i];
@@ -209,18 +209,19 @@ PPSolver::getRegionStatus(int i, int p)
     const int pl = p&1;
 
     // check if the region is closed in the subgame
-    for (int j=i; j>=0 && priority[j]==p; j--) {
+    for (int j=i; j>=0 && priority(j)==p; j--) {
         if (disabled[j] or region[j] > p) {
             // escape not in region
             continue;
-        } else if (owner[j] == pl) {
+        } else if (owner(j) == pl) {
             // region won by escape owner
             // it is therefore closed if it has a strategy
             if (strategy[j] == -1) return -2;
         } else {
             // region lost by escape owner
             // it is therefore closed if there are no edges to lower regions
-            for (int to : out[j]) {
+            for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                int to =*curedge;
                 if (disabled[to]) continue;
                 if (region[to] < p) return -2; // open
             }
@@ -229,9 +230,10 @@ PPSolver::getRegionStatus(int i, int p)
     // closed in the subgame, so find lowest higher region for possible promotion
     int lowest = -1;
     for (int j : regions[p]) {
-        if (owner[j] != pl) {
+        if (owner(j) != pl) {
             // losing node, find lowest higher ...
-            for (int to : out[j]) {
+            for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                int to = *curedge;
                 /** HOT SPOT of the iterator and minor hot spot of obtaining the region **/
                 if (disabled[to]) continue;
                 int r = region[to];
@@ -250,16 +252,17 @@ PPSolver::reportRegion(int p)
     logger << "\033[1;33mregion \033[36m" << p << "\033[m";
     for (int n : regions[p]) {
         if (region[n] == p) logger << " \033[37m" << label_vertex(n) << "\033[m";
-        if (owner[n] == pl) {
+        if (owner(n) == pl) {
             if (strategy[n] == -1) {
-                if (priority[n] != p) logger << "\033[31;1m--\033[m";
+                if (priority(n) != p) logger << "\033[31;1m--\033[m";
             } else {
                 if (disabled[strategy[n]] or region[strategy[n]] != p) logger << "->\033[31;1m" << label_vertex(strategy[n]) << "\033[m";
                 else logger << "->" << label_vertex(strategy[n]);
             }
         } else {
             bool got = false;
-            for (int to : out[n]) {
+            for (auto curedge = outs(n); *curedge != -1; curedge++) {
+                int to = *curedge;
                 if (disabled[to]) continue;
                 if (region[to] == -2) continue;
                 if (region[to] == p) continue;
@@ -267,7 +270,7 @@ PPSolver::reportRegion(int p)
                 else logger << ",";
                 got = true;
                 if (region[to] < p) {
-                    if (priority[n] != p) logger << "\033[31;1mesc\033[m";
+                    if (priority(n) != p) logger << "\033[31;1mesc\033[m";
                     else logger << "\033[36m" << region[to] << "\033[m";
                 } else logger << "\033[36m" << region[to] << "\033[m";
             }
@@ -281,18 +284,18 @@ void
 PPSolver::run()
 {
     // obtain highest priority and allocate arrays
-    max_prio = priority[n_nodes-1];
+    max_prio = priority(nodecount()-1);
     regions = new std::vector<int>[max_prio+1];
-    region = new int[n_nodes];
-    strategy = new int[n_nodes];
+    region = new int[nodecount()];
+    strategy = new int[nodecount()];
     inverse = new int[max_prio+1];
 
     // initialize arrays
-    for (int i=0; i<n_nodes; i++) region[i] = disabled[i] ? -2 : priority[i];
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<nodecount(); i++) region[i] = disabled[i] ? -2 : priority(i);
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
     // start loop at last node (highest priority)
-    int i = n_nodes - 1;
+    int i = nodecount() - 1;
 
     // reset statistics
     promotions = 0;
@@ -305,12 +308,12 @@ PPSolver::run()
 
     while (i >= 0) {
         // get current priority and skip all disabled/attracted nodes
-        int p = priority[i];
-        while (i >= 0 and priority[i] == p and (disabled[i] or region[i] > p)) i--;
+        int p = priority(i);
+        while (i >= 0 and priority(i) == p and (disabled[i] or region[i] > p)) i--;
         if (i < 0) break;
 
         // if empty, possibly reset and continue with next
-        if (priority[i] != p) {
+        if (priority(i) != p) {
             if (!regions[p].empty()) resetRegion(p);
             continue;
         }
@@ -325,13 +328,13 @@ PPSolver::run()
                 int res = getRegionStatus(i, p);
                 if (res == -2) {
                     // not closed, skip to next priority and break inner loop
-                    while (i >= 0 and priority[i] == p) i--;
+                    while (i >= 0 and priority(i) == p) i--;
                     break;
                 } else if (res == -1) {
                     // found dominion
                     setDominion(p);
                     // restart algorithm and break inner loop
-                    i = n_nodes - 1;
+                    i = nodecount() - 1;
                     break;
                 } else {
                     // found promotion, promote
@@ -343,7 +346,7 @@ PPSolver::run()
             }
         } else {
             // skip to next priority
-            while (i >= 0 and priority[i] == p) i--;
+            while (i >= 0 and priority(i) == p) i--;
         }
     }
 
@@ -358,19 +361,20 @@ PPSolver::run()
 void
 PPSolver::printState()
 {
-    for (int i = n_nodes-1; i>=0; i--) {
+    for (int i = nodecount()-1; i>=0; i--) {
         if (region[i] == -2) continue;
-        int p = priority[i];
+        int p = priority(i);
         if (region[i] != p) continue;
 
         logger << "\033[1;34m|| \033[1;37m" << p << "\033[m (";
 
         std::vector<int> exits;
         for (int j : regions[p]) {
-            logger << "\033[1m" << priority[j] << "\033[m ";
-            if (owner[j] == (p&1)) {
+            logger << "\033[1m" << priority(j) << "\033[m ";
+            if (owner(j) == (p&1)) {
                 bool escapes = true;
-                for (int to : out[j]) {
+                for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (region[to] == -2) continue;
                     if (region[to] == p) {
                         escapes = false;
@@ -378,14 +382,16 @@ PPSolver::printState()
                     }
                 }
                 if (escapes) {
-                    for (int to : out[j]) {
+                    for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                        int to = *curedge;
                         if (region[to] == -2) continue;
                         logger << "\033[m" << region[to] << "\033[m ";
                         if (region[to] != p) exits.push_back(region[to]);
                     }
                 }
             } else {
-                for (int to : out[j]) {
+                for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (region[to] == -2) continue;
                     logger << "\033[m" << region[to] << "\033[m ";
                     if (region[to] != p) exits.push_back(region[to]);
@@ -412,11 +418,12 @@ PPSolver::printState()
         bool empty = true;
         for (int j : regions[p]) {
             empty = false;
-            if (owner[j] == p%2) {
+            if (owner(j) == p%2) {
                 // node won by escape owner
                 // it is therefore closed if it has an edge to itself
                 bool nodeclosed = false;
-                for (int to : out[j]) {
+                for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (region[to] == p) nodeclosed = true;
                     if (nodeclosed) break;
                 }
@@ -424,7 +431,8 @@ PPSolver::printState()
             } else {
                 // region lost by escape owner
                 // it is therefore closed if there are no edges to lower regions
-                for (int to : out[j]) {
+                for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (region[to] == -2) continue;
                     if (region[to] != p) {
                         fullclosed = false;

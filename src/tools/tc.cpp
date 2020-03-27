@@ -15,8 +15,11 @@
  */
 
 #include <iostream>
+#include <memory>
 
 #include "game.hpp"
+
+#define DOUBLEDISTRACTION 0
 
 using namespace std;
 using namespace pg;
@@ -49,37 +52,46 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
 
     const char *plch = pl ? "Odd-" : "Even-";
 
-    game.initNode(c,   hipr,   pl,   string_format("%s%d-H", plch, i));  // high
-    game.initNode(c+1, lopr,   1-pl, string_format("%s%d-T", plch, i));  // low (tangle)
-    game.initNode(c+2, inpr,   1-pl, string_format("%s%d-L", plch, i));  // gate (distraction/input)
+    game.init_vertex(c,   hipr,   pl,   string_format("%s%d-H", plch, i));  // high
+    game.init_vertex(c+1, lopr,   1-pl, string_format("%s%d-T", plch, i));  // low (tangle)
+    game.init_vertex(c+2, inpr,   1-pl, string_format("%s%d-L", plch, i));  // gate (distraction/input)
+#if DOUBLEDISTRACTION
+    game.init_vertex(c+3, inpr,   1-pl, string_format("%s%d-LL", plch, i));  // gate (distraction/input)
+#endif
 
-    game.addEdge(c+1, c);   // from tangle to top
-    game.addEdge(c+2, c+1); // from input/distraction to tangle
-    game.addEdge(c+1, c+3); // from tangle to first connector
+    game.add_edge(c+1, c);   // from tangle to top
+#if DOUBLEDISTRACTION
+    game.add_edge(c+2, c+3); // from input/distraction to tangle
+    game.add_edge(c+3, c+1); // from input/distraction to tangle
+    game.add_edge(c+1, c+4); // from tangle to first connector
+#else
+    game.add_edge(c+2, c+1); // from input/distraction to tangle
+    game.add_edge(c+1, c+3); // from tangle to first connector
+#endif
 
     /**
      * Create connectors (to higher bits)
      */
 
     for (int j=0; j<i; j++) {
-        const int d = c + 3 + 3*j;
+        const int d = c + 3 + DOUBLEDISTRACTION + 3*j;
 
-        game.initNode(d  , lopr-1, pl,   string_format("%s%d-S-%d", plch, i, j)); // selector
-        game.initNode(d+1, lopr-1, 1-pl, string_format("%s%d-A-%d", plch, i, j)); // exit one (even)
-        game.initNode(d+2, lopr-1, 1-pl, string_format("%s%d-B-%d", plch, i, j)); // exit two (odd)
+        game.init_vertex(d  , lopr-1, pl,   string_format("%s%d-S-%d", plch, i, j)); // selector
+        game.init_vertex(d+1, lopr-1, 1-pl, string_format("%s%d-A-%d", plch, i, j)); // exit one (even)
+        game.init_vertex(d+2, lopr-1, 1-pl, string_format("%s%d-B-%d", plch, i, j)); // exit two (odd)
 
-        game.addEdge(d, d+1);  // s to one
-        game.addEdge(d, d+2);  // s to two
+        game.add_edge(d, d+1);  // s to one
+        game.add_edge(d, d+2);  // s to two
 
-        game.addEdge(d+1, d+3); // one to next selector
-        game.addEdge(d+2, d+3); // two to next selector
+        game.add_edge(d+1, d+3); // one to next selector
+        game.add_edge(d+2, d+3); // two to next selector
 
         int *ina = pl ? in1 : in0;
         int *inb = pl ? in0 : in1;
-        game.addEdge(d+1, ina[j]); // one to even input of bit <j>
-        game.addEdge(d+2, inb[j]); // two to odd input of bit <j>
+        game.add_edge(d+1, ina[j]); // one to even input of bit <j>
+        game.add_edge(d+2, inb[j]); // two to odd input of bit <j>
 
-        // for (int j = i+pl; j<n; j++) game.addEdge(d, _in[j]);
+        // for (int j = i+pl; j<n; j++) game.add_edge(d, _in[j]);
     }
 
     /**
@@ -87,16 +99,17 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
      */
 
 #if 0
-    game.addEdge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]-1);
+    game.add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]-1);
 #else
-    game.addEdge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]);
+    game.add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]);
 #endif
 
     // even (lower or same bit)
     // odd (only to lower bits)
-    game.initNode(c+3+3*i, lopr-1, pl,   string_format("%s%d-Z", plch, i));  // Z (distracted)
-    game.addEdge(c+3+3*i, c+1); // from Z to tangle
-    for (int j = i+1-pl; j<n; j++) game.addEdge(c+3+3*i, _in[j]);
+    int x = c+3+DOUBLEDISTRACTION+3*i;
+    game.init_vertex(x, lopr-1, pl, string_format("%s%d-Z", plch, i));  // Z (distracted)
+    game.add_edge(x, c+1); // from Z to tangle
+    for (int j = i+1-pl; j<n; j++) game.add_edge(x, _in[j]);
 }
 
 int
@@ -129,10 +142,10 @@ main(int argc, char** argv)
     for (int i=0; i<n; i++) {
         hi0[i] = size;
         in0[i] = size + 2; // set even gate / distraction
-        size += 4+3*i;
+        size += 4+3*i+DOUBLEDISTRACTION;
         hi1[i] = size;
         in1[i] = size + 2; // set odd gate / distraction
-        size += 4+3*i;
+        size += 4+3*i+DOUBLEDISTRACTION;
     }
 
     /**
@@ -166,10 +179,13 @@ main(int argc, char** argv)
     }
 #endif
 
-    game.reindex();
+    game.sort();
     game.renumber();
+    game.build_arrays();
     game.write_pgsolver(std::cout);
 
     delete[] in0;
     delete[] in1;
+    delete[] hi0;
+    delete[] hi1;
 }

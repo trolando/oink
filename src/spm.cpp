@@ -134,11 +134,12 @@ SPMSolver::canlift(int node, int pl)
     // check if already Top
     if (pm[pl] == -1) return false;
 
-    const int d = priority[node];
+    const int d = priority(node);
 
-    if (owner[node] == pl) {
+    if (owner(node) == pl) {
         // do max
-        for (int to : out[node]) {
+        for (auto curedge = outs(node); *curedge != -1; curedge++) {
+            int to = *curedge;
             if (disabled[to]) continue;
             Prog(tmp, pms + k*to, d, pl);
             if (pm_less(pm, tmp, d, pl)) return true;
@@ -147,7 +148,8 @@ SPMSolver::canlift(int node, int pl)
     } else {
         // do min
         int best_to = -1;
-        for (int to : out[node]) {
+        for (auto curedge = outs(node); *curedge != -1; curedge++) {
+            int to = *curedge;
             if (disabled[to]) continue;
             Prog(tmp, pms + k*to, d, pl);
             if (best_to == -1 or pm_less(tmp, best, d, pl)) {
@@ -172,13 +174,13 @@ SPMSolver::lift(int node, int target)
     lift_attempt++;
 
     // initialize stuff
-    const int pl_max = owner[node];
+    const int pl_max = owner(node);
     const int pl_min = 1 - pl_max;
-    const int d = priority[node];
+    const int d = priority(node);
 
 #ifndef NDEBUG
     if (trace >= 2) {
-        logger << "\033[1mupdating node " << node << "/" << d << (owner[node]?" (odd)":" (even)") << "\033[m with current progress measure";
+        logger << "\033[1mupdating node " << node << "/" << d << (owner(node)?" (odd)":" (even)") << "\033[m with current progress measure";
         pm_stream(logger, pm);
         logger << std::endl;
     }
@@ -199,7 +201,7 @@ SPMSolver::lift(int node, int target)
             Prog(tmp, pms + k*target, d, pl_max);
 #ifndef NDEBUG
             if (trace >= 2) {
-                logger << "successor node " << target << "/" << priority[target] << " results in";
+                logger << "successor node " << target << "/" << priority(target) << " results in";
                 pm_stream(logger, tmp);
                 logger << std::endl;
             }
@@ -209,20 +211,23 @@ SPMSolver::lift(int node, int target)
                 if (pl_max) best_ch1 = target;
                 else best_ch0 = target;
             }
-        } else for (int to : out[node]) {
-            if (disabled[to]) continue;
-            Prog(tmp, pms + k*to, d, pl_max);
+        } else {
+            for (auto curedge = outs(node); *curedge != -1; curedge++) {
+                int to = *curedge;
+                if (disabled[to]) continue;
+                Prog(tmp, pms + k*to, d, pl_max);
 #ifndef NDEBUG
-            if (trace >= 2) {
-                logger << "successor node " << to << "/" << priority[to] << " results in";
-                pm_stream(logger, tmp);
-                logger << std::endl;
-            }
+                if (trace >= 2) {
+                    logger << "successor node " << to << "/" << priority(to) << " results in";
+                    pm_stream(logger, tmp);
+                    logger << std::endl;
+                }
 #endif
-            if (pm_less(pm, tmp, d, pl_max)) {
-                pm_copy(pm, tmp, pl_max);
-                if (pl_max) best_ch1 = to;
-                else best_ch0 = to;
+                if (pm_less(pm, tmp, d, pl_max)) {
+                    pm_copy(pm, tmp, pl_max);
+                    if (pl_max) best_ch1 = to;
+                    else best_ch0 = to;
+                }
             }
         }
     }
@@ -234,12 +239,13 @@ SPMSolver::lift(int node, int target)
         if (trace >= 2) pm_copy(tmp, pm, 1-pl_min);
 #endif
         int best_to = -1;
-        for (int to : out[node]) {
+        for (auto curedge = outs(node); *curedge != -1; curedge++) {
+            int to = *curedge;
             if (disabled[to]) continue;
             Prog(tmp, pms + k*to, d, pl_min);
 #ifndef NDEBUG
             if (trace >= 2) {
-                logger << "successor node " << to << "/" << priority[to] << " results in";
+                logger << "successor node " << to << "/" << priority(to) << " results in";
                 pm_stream(logger, tmp);
                 logger << std::endl;
             }
@@ -262,7 +268,7 @@ SPMSolver::lift(int node, int target)
 
     if (best_ch0 != -1 or best_ch1 != -1) {
         if (trace) {
-            logger << "\033[1;32mupdated node " << node << "/" << d << (owner[node]?" (odd)":" (even)") << "\033[m to";
+            logger << "\033[1;32mupdated node " << node << "/" << d << (owner(node)?" (odd)":" (even)") << "\033[m to";
             pm_stream(logger, pm);
             logger << std::endl;
         }
@@ -280,7 +286,7 @@ SPMSolver::update(int pl)
     std::queue<int> q;
 
     // find unstable nodes (for measure <pl>)
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (disabled[i]) continue;
         unstable[i] = 0; // first mark as stable
         if (pms[k*i + pl] == -1 or canlift(i, pl) or pm_cycles(pms+k*i, pl) != -1) {
@@ -292,12 +298,14 @@ SPMSolver::update(int pl)
     while (!q.empty()) {
         int n = q.front();
         q.pop();
-        for (int m : in[n]) {
+        for (auto curedge = ins(n); *curedge != -1; curedge++) {
+            int m = *curedge;
             if (disabled[m] or unstable[m]) continue;
-            if (owner[m] != pl) {
+            if (owner(m) != pl) {
                 int best_to = -1;
-                const int d = priority[m];
-                for (int to : out[m]) {
+                const int d = priority(m);
+                for (auto curedge = outs(m); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (disabled[to]) continue;
                     if (unstable[to]) continue;
                     Prog(tmp, pms + k*to, d, pl);
@@ -313,15 +321,15 @@ SPMSolver::update(int pl)
         }
     }
 
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (disabled[i]) continue;
         if (unstable[i] == 0 and pms[k*i + 1-pl] != -1) {
-            if ((priority[i]&1) != pl) counts[priority[i]]--;
+            if ((priority(i)&1) != pl) counts[priority(i)]--;
             pms[k*i + 1-pl] = -1;
             todo_push(i);
 
             if (trace) {
-                logger << "\033[1;33mupdated node " << i << "/" << priority[i] << (owner[i]?" (odd)":" (even)") << "\033[m to";
+                logger << "\033[1;33mupdated node " << i << "/" << priority(i) << (owner(i)?" (odd)":" (even)") << "\033[m to";
                 pm_stream(logger, pms + i*k);
                 logger << std::endl;
             }
@@ -333,29 +341,29 @@ void
 SPMSolver::run()
 {
     // determine k = highest priority + 1
-    k = priority[n_nodes-1]+1;
+    k = priority(nodecount()-1)+1;
     if (k < 2) k = 2;
 
     // now create the data structure, for each node
-    pms = new int[(size_t)k*n_nodes];
-    strategy = new int[n_nodes];
+    pms = new int[(size_t)k*nodecount()];
+    strategy = new int[nodecount()];
     counts = new int[k];
     tmp = new int[k];
     best = new int[k];
-    dirty = new int[n_nodes];
-    unstable = new int[n_nodes];
+    dirty = new int[nodecount()];
+    unstable = new int[nodecount()];
 
     int max0 = -1, max1 = -1;
 
     // initialize all measures to 0
-    for (int i=0; i<k*n_nodes; i++) pms[i] = 0;
+    for (int i=0; i<k*nodecount(); i++) pms[i] = 0;
 
     // initialize strategy to -1
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
     // initialize counts for each priority
     for (int i=0; i<k; i++) counts[i] = 0;
-    for (int i=0; i<n_nodes; i++) if (disabled[i] == 0) counts[priority[i]]++;
+    for (int i=0; i<nodecount(); i++) if (disabled[i] == 0) counts[priority(i)]++;
     for (int i=k-1; i>=0; i--) {
         if (counts[i] == 0) continue;
         if (i&1) { if (max1 == -1) max1 = i; }
@@ -364,11 +372,11 @@ SPMSolver::run()
     }
 
     // initialize all nodes as not dirty
-    for (int n=0; n<n_nodes; n++) dirty[n] = 0;
+    for (int n=0; n<nodecount(); n++) dirty[n] = 0;
 
     // allocate and initialize additional array for cycle measures
-    int *cm = new int[n_nodes];
-    for (int n=0; n<n_nodes; n++) cm[n] = 0;
+    int *cm = new int[nodecount()];
+    for (int n=0; n<nodecount(); n++) cm[n] = 0;
 
     // a queue and a vector for cycle measure analysis
     std::queue<int> cm_queue;
@@ -386,9 +394,12 @@ SPMSolver::run()
      * Initialization loop.
      */
 
-    for (int n=n_nodes-1; n>=0; n--) {
+    for (int n=nodecount()-1; n>=0; n--) {
         if (!disabled[n] and lift(n, -1)) {
-            for (int from : in[n]) if (!disabled[from] and lift(from, n)) todo_push(from);
+            for (auto curedge = ins(n); *curedge != -1; curedge++) {
+                int from = *curedge;
+                if (!disabled[from] and lift(from, n)) todo_push(from);
+            }
         }
     }
     
@@ -401,8 +412,11 @@ SPMSolver::run()
     while (true) {
         while (!todo.empty()) {
             int n = todo_pop();
-            for (int from : in[n]) if (!disabled[from] and lift(from, n)) todo_push(from);
-            if (last_update + 10*n_nodes < lift_count) {
+            for (auto curedge = ins(n); *curedge != -1; curedge++) {
+                int from = *curedge;
+                if (!disabled[from] and lift(from, n)) todo_push(from);
+            }
+            if (last_update + 10*nodecount() < lift_count) {
                 last_update = lift_count;
                 update(0);
                 update(1);
@@ -411,9 +425,9 @@ SPMSolver::run()
 
 #ifndef NDEBUG
         if (trace >= 2) {
-            for (int n=0; n<n_nodes; n++) {
+            for (int n=0; n<nodecount(); n++) {
                 if (disabled[n]) continue;
-                logger << "\033[35m**\033[m \033[1mnode " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m is";
+                logger << "\033[35m**\033[m \033[1mnode " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m is";
                 pm_stream(logger, pms + k*n);
                 logger << std::endl;
             }
@@ -436,7 +450,7 @@ SPMSolver::run()
 
             int max = pl == 0 ? max0 : max1;
 
-            for (int n=0; n<n_nodes; n++) {
+            for (int n=0; n<nodecount(); n++) {
                 if (disabled[n]) continue;
                 int *pm = pms + k*n;
                 if (pm[pl] == -1) continue; // already won
@@ -444,8 +458,8 @@ SPMSolver::run()
                 if (c == -1) continue; // not a cycle measure
 #ifndef NDEBUG
                 if (trace >= 2) {
-                    logger << "\033[31;1m" << (pl ? "odd" : "even") << (pl == owner[n] ? " winner " : " loser ");
-                    logger << "loops\033[m: " << n << "/" << priority[n] << " (cm = " << pm_cycles(pm, pl) << ")";
+                    logger << "\033[31;1m" << (pl ? "odd" : "even") << (pl == owner(n) ? " winner " : " loser ");
+                    logger << "loops\033[m: " << n << "/" << priority(n) << " (cm = " << pm_cycles(pm, pl) << ")";
                     pm_stream(logger, pm);
                     logger << std::endl;
                 }
@@ -454,11 +468,11 @@ SPMSolver::run()
                     pms[n*k + pl] = -1;
                     todo_push(n);
 
-                    const int d = priority[n];
+                    const int d = priority(n);
                     if ((d&1) == pl) counts[d]--;
 
                     if (trace) {
-                        logger << "\033[1;36mupdated node " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m to";
+                        logger << "\033[1;36mupdated node " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m to";
                         pm_stream(logger, pms + n*k);
                         logger << std::endl;
                     }
@@ -467,9 +481,10 @@ SPMSolver::run()
                 }
 
                 cycles.push_back(n);
-                if (owner[n] != pl) {
-                    const int d = priority[n];
-                    for (int to : out[n]) {
+                if (owner(n) != pl) {
+                    const int d = priority(n);
+                    for (auto curedge = outs(n); *curedge != -1; curedge++) {
+                        int to = *curedge;
                         if (disabled[to]) continue;
                         int *pm_to = pms + k*to;
                         if (pm_to[pl] == -1) continue; // already won
@@ -493,7 +508,7 @@ SPMSolver::run()
                 todo_push(best_from);
 
                 if (trace) {
-                    logger << "\033[1;36mupdated node " << best_from << "/" << priority[best_from] << (owner[best_from]?" (odd)":" (even)") << "\033[m to";
+                    logger << "\033[1;36mupdated node " << best_from << "/" << priority(best_from) << (owner(best_from)?" (odd)":" (even)") << "\033[m to";
                     pm_stream(logger, pms + best_from*k);
                     logger << std::endl;
                 }
@@ -507,10 +522,11 @@ SPMSolver::run()
 
                 for (int n : cycles) {
                     bool escapes;
-                    if (owner[n] == pl) {
+                    if (owner(n) == pl) {
                         // check if it can stay in cm
                         escapes = true;
-                        for (int m : out[n]) {
+                        for (auto curedge = outs(n); *curedge != -1; curedge++) {
+                            int m = *curedge;
                             if (disabled[m] == 0 and cm[m]) {
                                 escapes = false;
                                 break;
@@ -519,7 +535,8 @@ SPMSolver::run()
                     } else {
                         // check if it can move out of cm
                         escapes = false;
-                        for (int m : out[n]) {
+                        for (auto curedge = outs(n); *curedge != -1; curedge++) {
+                            int m = *curedge;
                             if (disabled[m] == 0 and pms[k*m+pl] != -1 and cm[m] == 0) {
                                 escapes = true;
                                 break;
@@ -539,11 +556,13 @@ SPMSolver::run()
                 while (!cm_queue.empty()) {
                     int n = cm_queue.front();
                     cm_queue.pop();
-                    for (int m : in[n]) {
+                    for (auto curedge = ins(n); *curedge != -1; curedge++) {
+                        int m = *curedge;
                         if (disabled[m] != 0 or cm[m] == 0) continue;
-                        if (owner[m] == pl) {
+                        if (owner(m) == pl) {
                             bool escapes = false;
-                            for (int to : out[m]) {
+                            for (auto curedge = outs(m); *curedge != -1; curedge++) {
+                                int to = *curedge;
                                 if (disabled[to] == 0 and cm[to]) {
                                     escapes = true;
                                     break;
@@ -566,11 +585,11 @@ SPMSolver::run()
                         pms[n*k + pl] = -1;
                         todo_push(n);
 
-                        const int d = priority[n];
+                        const int d = priority(n);
                         if ((d&1) == pl) counts[d]--;
 
                         if (trace) {
-                            logger << "\033[1;36mupdated node " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m to";
+                            logger << "\033[1;36mupdated node " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m to";
                             pm_stream(logger, pms + n*k);
                             logger << std::endl;
                         }
@@ -592,9 +611,9 @@ SPMSolver::run()
 
 #ifndef NDEBUG
     if (trace >= 2) {
-        for (int n=0; n<n_nodes; n++) {
+        for (int n=0; n<nodecount(); n++) {
             if (disabled[n]) continue;
-            logger << "\033[35m**\033[m \033[1mnode " << n << "/" << priority[n] << (owner[n]?" (odd)":" (even)") << "\033[m is";
+            logger << "\033[35m**\033[m \033[1mnode " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m is";
             pm_stream(logger, pms + k*n);
             logger << std::endl;
         }
@@ -602,12 +621,12 @@ SPMSolver::run()
 #endif
 
     // Now set dominions and derive strategy for even.
-    for (int n=0; n<n_nodes; n++) {
+    for (int n=0; n<nodecount(); n++) {
         if (disabled[n]) continue;
         int *pm = pms + k*n;
         if ((pm[0] == -1) == (pm[1] == -1)) LOGIC_ERROR;
         const int winner = pm[0] == -1 ? 0 : 1;
-        oink->solve(n, winner, game->owner[n] == winner ? strategy[n] : -1);
+        oink->solve(n, winner, game->owner(n) == winner ? strategy[n] : -1);
     }
 
     delete[] pms;

@@ -19,9 +19,7 @@
 
 #include "game.hpp"
 #include "oink.hpp"
-#include <signal.h>
-
-#define LOGIC_ERROR { printf("\033[1;7mlogic error %s:%d!\033[m\n", __FILE__, __LINE__); raise(SIGABRT); }
+#include "error.hpp"
 
 namespace pg {
 
@@ -30,13 +28,11 @@ class Solver
 public:
     Solver(Oink *oink, Game *game) :
             oink(oink), game(game), logger(oink->logger), trace(oink->trace),
-            n_nodes(game->n_nodes), priority(game->priority), owner(game->owner),
-            out(game->out), in(game->in), disabled(oink->disabled),
-            outa(oink->outa), ina(oink->ina), outs(oink->outs), ins(oink->ins)
+            disabled(oink->disabled)
     {
 #ifndef NDEBUG
         // sanity check if the game is properly sorted
-        for (int i=1; i<n_nodes; i++) assert(priority[i-1] <= priority[i]);
+        for (int i=1; i<nodecount(); i++) assert(priority(i-1) <= priority(i));
 #endif
     }
 
@@ -59,19 +55,16 @@ protected:
     std::ostream &logger;
     int trace = 0;
 
-    const int n_nodes;
-    const int * const priority;
-    const bitset &owner;
-    const std::vector<int> * const out;
-    const std::vector<int> * const in;
-    const bitset &disabled;
+    const bitset &disabled; // TODO make function...
 
-    int* const outa;
-    int* const ina;
-    int* const outs;
-    int* const ins;
+    inline long nodecount() { return game->nodecount(); }
+    inline long edgecount() { return game->edgecount(); }
 
-    Game::_label_vertex label_vertex(int v) { return game->label_vertex(v); }
+    inline int priority(const int vertex) { return game->priority(vertex); }
+    inline int owner(const int vertex) { return game->owner(vertex); }
+    inline const int* outs(const int vertex) { return game->outedges() + game->firstout(vertex); }
+    inline const int* ins(const int vertex) { return game->inedges() + game->firstin(vertex); }
+    inline Game::_label_vertex label_vertex(int v) { return game->label_vertex(v); }
 };
 
 }

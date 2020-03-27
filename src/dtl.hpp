@@ -17,8 +17,6 @@
 #ifndef DTL_HPP
 #define DTL_HPP
 
-#include <boost/dynamic_bitset.hpp>
-
 #include "oink.hpp"
 #include "solver.hpp"
 
@@ -32,9 +30,9 @@ public:
 
     virtual void run();
 
-    typedef boost::dynamic_bitset<unsigned long long> bitset;
-
 protected:
+    bool interleaved = false;
+
     int iterations = 0;
     int dominions = 0;
     int tangles = 0;
@@ -48,9 +46,14 @@ protected:
     uintqueue Q; // main queue when attracting vertices
     uintqueue SQ; // auxiliary queue for solved vertices (in dominions)
 
+    std::vector<int> dom_vector; // stores the solved vertices (in dominions)
+
     uintqueue Zvec; // stores current region when using trace level 2 or higher
     int *str; // stores currently assigned strategy of each vertex
     int *Candidates; // list of current distraction candidates
+
+    int *dvalue; // for trace
+    int dvalue_idx;
 
     int *reg; // for trace
     int regidx;
@@ -70,6 +73,11 @@ protected:
     bitset Z; // current region (in sptl)
     bitset G; // the unsolved game
     bitset S; // solved vertices (in queue Q)
+    bitset W; // already did tangle this iteration
+
+    bitset Player; // vertices of player 0/1
+
+    int cur_depth; // set before extractTangles
 
     inline bool attracts(const int pl, const int v, bitset &Z, bitset &R);
     inline void attractVertices(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
@@ -77,11 +85,20 @@ protected:
     inline void attractTangles(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
 
     bool search(const int player);
-    void search_rec(bitset &R, const int player);
-    bool sptl(bitset &V, bitset &R, const int player);
+    void search_rec(bitset &R, const int player, const int depth);
+    bool sptl(bitset &V, bitset &W, bitset &R, const int player);
     bool extractTangles(int i, bitset &R, int *str);
-    void computeValues(int* val, const int player);
+    bool computeDistanceValues(bitset &V, bitset &R, bitset &G, int* val, const int player);
+    int best_vertices(bitset &V, bitset &G, const int player);
 };
+
+class IDTLSolver : public DTLSolver
+{
+public:
+    IDTLSolver(Oink *oink, Game *game) : DTLSolver(oink, game) { interleaved = true; }
+    virtual ~IDTLSolver() { }
+};
+
 
 }
 

@@ -18,6 +18,8 @@
 
 #include "qpt.hpp"
 
+#define ODDFIRST 0
+
 namespace pg {
 
 QPTSolver::QPTSolver(Oink *oink, Game *game) : Solver(oink, game)
@@ -82,7 +84,11 @@ static void
 pm_stream(std::ostream &out, int *pm, int k)
 {
     for (int i=0; i<k; i++) {
-        if (pm[i] != -1) out << " " << std::setfill('0') << std::setw(2) << pm[i];
+        if (pm[i] != -1) {
+            if (i == 0) out << "\033[33;1m";
+            out << " " << std::setfill('0') << std::setw(2) << pm[i];
+            if (i == 0) out << "\033[m";
+        }
         else out << " __";
     }
 }
@@ -225,12 +231,14 @@ QPTSolver::lift(int v, int target)
     int * const pm = pm_nodes + k*v; // obtain ptr to current progress measure
     if (pm[0] != -1 and (pm[0]&1) == pl) return false;
 
-    const int pr = priority[v];
+    const int pr = priority(v);
     int tmp[k], res[k];
 
 #ifndef NDEBUG
+    int old_strategy = strategy[v];
+
     if (trace >= 2) {
-        logger << "\033[1mupdating vertex " << label_vertex(v) << (owner[v]?" (odd)":" (even)") << "\033[m with current measure";
+        logger << "\033[37;1mupdating vertex " << label_vertex(v) << (owner(v)?" (odd)":" (even)") << "\033[m with current measure";
         pm_stream(logger, pm, k);
         logger << std::endl;
     }
@@ -239,18 +247,39 @@ QPTSolver::lift(int v, int target)
     // First special cases if we are lifting triggered by a given <target>.
 
     if (1 and target != -1) {
-        if (owner[v] == pl) {
+        if (owner(v) == pl) {
             // if owned by <pl>, just check if target is better.
             au(tmp, pm_nodes + k*target, pr, k, max, maxo, pl);
             if (pm_val(tmp, k, pl) > goal) tmp[0] = max; // lol
+#ifndef NDEBUG
+            if (trace >= 2) {
+                logger << "to successor " << label_vertex(target) << ":";
+                pm_stream(logger, pm_nodes + k*target, k);
+                logger << " => ";
+                pm_stream(logger, tmp, k);
+                logger << std::endl;
+            }
+#endif
             if (pm_less(pm, tmp, k, pl)) {
                 // target is better, update, report, return
                 for (int i=0; i<k; i++) pm[i] = tmp[i];
 #ifndef NDEBUG
+                if (trace and target != strategy[v]) {
+                    if (strategy[v] == -1) {
+                        logger << "\033[1;38;5;208m";
+                        logger << "set strategy\033[m of \033[36;1m" << label_vertex(v) << "\033[m to \033[36;1m" << label_vertex(target) << "\033[m\n";
+                    } else {
+                        logger << "\033[1;38;5;208m";
+                        logger << "changed strategy\033[m of \033[36;1m" << label_vertex(v) << "\033[m from \033[36;1m" << label_vertex(strategy[v]) << "\033[m to \033[36;1m" << label_vertex(target) << "\033[m\n";
+                    }
+                }
+                strategy[v] = target; // does not matter for algorithm, only for output here
+#endif
+#ifndef NDEBUG
                 if (trace) {
-                    logger << "\033[1;32mnew measure\033[m of " << label_vertex(v) << ":";
+                    logger << "\033[1;32mnew measure\033[m of \033[36;1m" << label_vertex(v) << "\033[m:";
                     pm_stream(logger, pm, k);
-                    logger << std::endl;
+                    logger << " (to " << label_vertex(target) << ")\n";
                 }
 #endif
                 return true;
@@ -269,13 +298,34 @@ QPTSolver::lift(int v, int target)
     // Compute best measure by going over all successors
 
     bool first = true;
-    for (int to : out[v]) {
+    int s_cur = strategy[v];
+    if (s_cur != -1) {
+        // first set to current...
+        au(tmp, pm_nodes + k*s_cur, pr, k, max, maxo, pl);
+        if (pm_val(tmp, k, pl) > goal) tmp[0] = max; // goal reached, lift to Top
+#ifndef NDEBUG
+        if (trace >= 2) {
+            logger << "to successor " << label_vertex(s_cur) << ":";
+            pm_stream(logger, pm_nodes + k*s_cur, k);
+            logger << " => ";
+            pm_stream(logger, tmp, k);
+            logger << std::endl;
+        }
+#endif
+        for (int i=0; i<k; i++) res[i] = tmp[i];
+        first = false;
+    }
+    for (auto curedge = outs(v); *curedge != -1; curedge++) {
+        int to = *curedge;
         if (disabled[to]) continue;
+        if (to == s_cur) continue;
         au(tmp, pm_nodes + k*to, pr, k, max, maxo, pl);
         if (pm_val(tmp, k, pl) > goal) tmp[0] = max; // goal reached, lift to Top
 #ifndef NDEBUG
         if (trace >= 2) {
             logger << "to successor " << label_vertex(to) << ":";
+            pm_stream(logger, pm_nodes + k*to, k);
+            logger << " => ";
             pm_stream(logger, tmp, k);
             logger << std::endl;
         }
@@ -284,7 +334,7 @@ QPTSolver::lift(int v, int target)
             first = false;
             for (int i=0; i<k; i++) res[i] = tmp[i];
             strategy[v] = to;
-        } else if (owner[v] == pl) {
+        } else if (owner(v) == pl) {
             // we want the max
             if (pm_less(res, tmp, k, pl)) {
                 for (int i=0; i<k; i++) res[i] = tmp[i];
@@ -304,14 +354,34 @@ QPTSolver::lift(int v, int target)
         // ok, it's an update
         for (int i=0; i<k; i++) pm[i] = res[i];
 #ifndef NDEBUG
+        if (trace and old_strategy != strategy[v]) {
+            if (owner(v) == pl) logger << "\033[1;38;5;208m";
+            else logger << "\033[1;31m";
+            if (old_strategy == -1) {
+                logger << "set strategy\033[m of \033[36;1m" << label_vertex(v) << "\033[m to \033[36;1m" << label_vertex(strategy[v]) << "\033[m\n";
+            } else {
+                logger << "changed strategy\033[m of \033[36;1m" << label_vertex(v) << "\033[m from \033[36;1m" << label_vertex(old_strategy) << "\033[m to \033[36;1m" << label_vertex(strategy[v]) << "\033[m\n";
+            }
+        }
         if (trace) {
-            logger << "\033[1;32mnew measure\033[m of " << label_vertex(v) << ":";
+            logger << "\033[1;32mnew measure\033[m of \033[36;1m" << label_vertex(v) << "\033[m:";
             pm_stream(logger, pm, k);
-            logger << std::endl;
+            logger << " (to " << label_vertex(strategy[v]) << ")\n";
         }
 #endif
         return true;
-    } else{
+    } else {
+#ifndef NDEBUG
+        if (trace and old_strategy != strategy[v]) {
+            if (owner(v) == pl) logger << "\033[1;38;5;208m";
+            else logger << "\033[1;31m";
+            if (old_strategy == -1) {
+                logger << "set strategy\033[m of \033[36;1m" << label_vertex(v) << "\033[m to \033[36;1m" << label_vertex(strategy[v]) << "\033[m\n";
+            } else {
+                logger << "changed strategy\033[m of \033[36;1m" << label_vertex(v) << "\033[m from \033[36;1m" << label_vertex(old_strategy) << "\033[m to \033[36;1m" << label_vertex(strategy[v]) << "\033[m\n";
+            }
+        }
+#endif
         return false;
     }
 }
@@ -323,17 +393,18 @@ QPTSolver::liftloop()
     /**
      * Initialize/reset progress measures / strategy
      */
-    for (int i=0; i<k*n_nodes; i++) pm_nodes[i] = -1; // initialize all to _
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<k*nodecount(); i++) pm_nodes[i] = -1; // initialize all to _
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
     /**
      * Run first lifting loop
      */
-    for (int n=n_nodes-1; n>=0; n--) {
+    for (int n=nodecount()-1; n>=0; n--) {
         if (disabled[n]) continue;
         lift_attempt++;
         if (lift(n, -1)) {
             lift_count++;
+#if 0
             for (int from : in[n]) {
                 if (disabled[from]) continue;
                 lift_attempt++;
@@ -342,6 +413,9 @@ QPTSolver::liftloop()
                     todo_push(from);
                 }
             }
+#else
+            todo_push(n);
+#endif
         }
     }
 
@@ -350,7 +424,8 @@ QPTSolver::liftloop()
      */
     while (!todo.empty()) {
         int n = todo_pop();
-        for (int from : in[n]) {
+        for (auto curedge = ins(n); *curedge != -1; curedge++) {
+            int from = *curedge;
             if (disabled[from]) continue;
             lift_attempt++;
             if (lift(from, n)) {
@@ -364,15 +439,15 @@ QPTSolver::liftloop()
      * Report final state.
      */
     if (trace) {
-        for (int v=0; v<n_nodes; v++) {
+        for (int v=0; v<nodecount(); v++) {
             if (disabled[v]) continue;
             int *pm = pm_nodes + v*k;
 
-            logger << "\033[1m" << label_vertex(v) << (owner[v]?" (odd)":" (even)") << "\033[m:";
+            logger << "\033[1m" << label_vertex(v) << (owner(v)?" (odd)":" (even)") << "\033[m:";
             pm_stream(logger, pm, k);
 
             if (pm[0] == -1 or (pm[0]&1) != pl) {
-                if (owner[v] != pl) {
+                if (owner(v) != pl) {
                     if (strategy[v] == -1) logger << " no strategy!";
                     else logger << " => " << label_vertex(strategy[v]);
                 }
@@ -385,13 +460,13 @@ QPTSolver::liftloop()
     /**
      * Derive strategies, mark as solved (only for opponent).
      */
-    for (int v=0; v<n_nodes; v++) {
+    for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         int *pm = pm_nodes + v*k;
 
         if (pm[0] == -1 or (pm[0]&1) != pl) {
-            if (owner[v] != pl and strategy[v] == -1) LOGIC_ERROR;
-            oink->solve(v, 1-pl, owner[v] != pl ? strategy[v] : -1);
+            if (owner(v) != pl and strategy[v] == -1) LOGIC_ERROR;
+            oink->solve(v, 1-pl, owner(v) != pl ? strategy[v] : -1);
         }
     }
 
@@ -435,9 +510,9 @@ QPTSolver::updateState(unsigned long &_n0, unsigned long &_n1, int &_max0, int &
     int max0 = -1;
     int max1 = -1;
 
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (disabled[i]) continue;
-        const int pr = priority[i];
+        const int pr = priority(i);
         if ((pr&1) == 0) {
             if (pr > max0) max0 = pr;
             n0++;
@@ -472,12 +547,12 @@ QPTSolver::run()
     int big_k = k0 > k1 ? k0 : k1;
 
     // now create the data structure, for each vertex a PM
-    pm_nodes = new int[big_k * n_nodes];
-    strategy = new int[n_nodes];
+    pm_nodes = new int[big_k * nodecount()];
+    strategy = new int[nodecount()];
 
     // initialize todo/dirty queues
-    todo.resize(n_nodes);
-    dirty.resize(n_nodes);
+    todo.resize(nodecount());
+    dirty.resize(nodecount());
 
     lift_count = 0;
     lift_attempt = 0;
@@ -486,10 +561,10 @@ QPTSolver::run()
         int i;
         for (i=1; i<=big_k; i++) {
             long _l = lift_count, _a = lift_attempt;
-            uint64_t _c = game->countUnsolved();
+            uint64_t _c = game->count_unsolved();
             uint64_t c = _c;
 
-            if (i <= k0) {
+            /*if (i <= k0)*/ {
                 pl = 0;
                 k = i;
                 max = max0;
@@ -497,7 +572,7 @@ QPTSolver::run()
                 goal = goal0;
                 liftloop();
 
-                c = game->countUnsolved();
+                c = game->count_unsolved();
                 logger << "after even with k=" << k << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
                 if (c == 0) break;
 
@@ -505,7 +580,7 @@ QPTSolver::run()
                 _l = lift_count;
                 _a = lift_attempt;
             }
-            if (i <= k1) {
+            /*if (i <= k1)*/ {
                 pl = 1;
                 k = i;
                 max = max1;
@@ -513,7 +588,7 @@ QPTSolver::run()
                 goal = goal1;
                 liftloop();
 
-                c = game->countUnsolved();
+                c = game->count_unsolved();
                 logger << "after odd  with k=" << k << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
                 if (c == 0) break;
 
@@ -523,6 +598,29 @@ QPTSolver::run()
         } 
 
         logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts, max k " << i << "." << std::endl;
+    } else if (ODDFIRST) {
+        pl = 1;
+        k = k1;
+        max = max1;
+        maxo = max0 != -1 ? max0 : 1; // used in bump
+        goal = goal1;
+        liftloop();
+
+        uint64_t c = game->count_unsolved();
+        logger << "after odd, " << lift_count << " lifts, " << lift_attempt << " lift attempts, " << c << " unsolved left." << std::endl;
+
+        if (c != 0) {
+            updateState(goal0, goal1, max0, max1, k0, k1);
+
+            pl = 0;
+            k = k0;
+            max = max0;
+            maxo = max1 != -1 ? max1 : 0; // used in bump
+            goal = goal0;
+            liftloop();
+        }
+
+        logger << "solved with " << lift_count << " lifts, " << lift_attempt << " lift attempts." << std::endl;
     } else {
         pl = 0;
         k = k0;
@@ -531,7 +629,7 @@ QPTSolver::run()
         goal = goal0;
         liftloop();
 
-        uint64_t c = game->countUnsolved();
+        uint64_t c = game->count_unsolved();
         logger << "after even, " << lift_count << " lifts, " << lift_attempt << " lift attempts, " << c << " unsolved left." << std::endl;
 
         if (c != 0) {

@@ -22,21 +22,21 @@ namespace pg {
 NPPSolver::NPPSolver(Oink * oink, Game * game) :
     Solver(oink, game),
     totqueries(0), totpromos(0), maxqueries(0), maxpromos(0), queries(0), promos(0), doms(0),
-    maxprio(priority[n_nodes - 1]), strategy(game->strategy), inverse(new int[maxprio + 1]),
+    maxprio(priority(nodecount() - 1)), strategy(game->strategy), inverse(new int[maxprio + 1]),
     Top(0), End(0), Pivot(0)
 {
     uint resprio = maxprio / 20;
     resprio = (resprio >= 500) ? resprio : 500;
-    outgame.resize(n_nodes);
-    winzero.resize(n_nodes);
+    outgame.resize(nodecount());
+    winzero.resize(nodecount());
     Phase.reserve(resprio);
     Supgame.reserve(resprio);
     Heads.reserve(resprio);
     Exits.reserve(resprio);
     Entries.reserve(resprio);
-    R.resize(n_nodes);
-    T.resize(n_nodes);
-    E.resize(n_nodes);
+    R.resize(nodecount());
+    T.resize(nodecount());
+    E.resize(nodecount());
 }
 
 NPPSolver::~NPPSolver()
@@ -56,9 +56,8 @@ NPPSolver::~NPPSolver()
 
 _INLINE_ bool NPPSolver::isplayerclosed(uint pos)
 {
-    const int * _out = outs + outa[pos];
-    for (int to = *_out; to != -1; to = *++_out)
-    {
+    for (auto curedge = outs(pos); *curedge != -1; curedge++) {
+        int to = *curedge;
         if (R[to])
         {
             strategy[pos] = (!R[pos] || strategy[pos] == -1) ? to : strategy[pos];
@@ -70,9 +69,9 @@ _INLINE_ bool NPPSolver::isplayerclosed(uint pos)
 
 _INLINE_ bool NPPSolver::isplayerclosedpromo(uint pos)
 {
-    const int * _out = outs + outa[pos];
-    for (int to = *_out; to != -1; to = *++_out)
+    for (auto curedge = outs(pos); *curedge != -1; curedge++)
     {
+        int to = *curedge;
         if (R[to])
         {
             strategy[pos] = to;
@@ -84,9 +83,9 @@ _INLINE_ bool NPPSolver::isplayerclosedpromo(uint pos)
 
 _INLINE_ bool NPPSolver::isopponentclosedongame(uint pos)
 {
-    const int * _out = outs + outa[pos];
-    for (int to = *_out; to != -1; to = *++_out)
+    for (auto curedge = outs(pos); *curedge != -1; curedge++)
     {
+        int to = *curedge;
         if (outgame[to] || R[to])
         {
             continue;
@@ -103,9 +102,9 @@ _INLINE_ bool NPPSolver::isopponentclosedongame(uint pos)
 _INLINE_ bool NPPSolver::isopponentclosedonsubgame(uint pos)
 {
     auto & supgame = *(Supgame[Top]);
-    const int * _out = outs + outa[pos];
-    for (int to = *_out; to != -1; to = *++_out)
+    for (auto curedge = outs(pos); *curedge != -1; curedge++)
     {
+        int to = *curedge;
         if (outgame[to] || R[to])
         {
             continue;
@@ -131,7 +130,7 @@ _INLINE_ bool NPPSolver::isopponentclosedonsubgame(uint pos)
 
 _INLINE_ bool NPPSolver::isclosedongame(uint pos)
 {
-    if ((uint) owner[pos] == alpha)
+    if ((uint) owner(pos) == alpha)
     {
         return (isplayerclosed(pos));
     }
@@ -143,7 +142,7 @@ _INLINE_ bool NPPSolver::isclosedongame(uint pos)
 
 _INLINE_ bool NPPSolver::isclosedonsubgame(uint pos)
 {
-    if ((uint) owner[pos] == alpha)
+    if ((uint) owner(pos) == alpha)
     {
         return (isplayerclosed(pos));
     }
@@ -155,7 +154,7 @@ _INLINE_ bool NPPSolver::isclosedonsubgame(uint pos)
 
 _INLINE_ bool NPPSolver::isclosedonsubgamepromo(uint pos)
 {
-    if ((uint) owner[pos] == alpha)
+    if ((uint) owner(pos) == alpha)
     {
         return (isplayerclosedpromo(pos));
     }
@@ -167,14 +166,14 @@ _INLINE_ bool NPPSolver::isclosedonsubgamepromo(uint pos)
 
 _INLINE_ void NPPSolver::pushinqueueongame(uint pos)
 {
-    const int * _in = ins + ina[pos];
-    for (int from = *_in; from != -1; from = *++_in)
+    for (auto curedge = ins(pos); *curedge != -1; curedge++)
     {
+        int from = *curedge;
         if (outgame[from] || R[from])
         {
             continue;
         }
-        else if ((uint) owner[from] == alpha)
+        else if ((uint) owner(from) == alpha)
         {
             R[from] = true;
             strategy[from] = pos;
@@ -228,9 +227,9 @@ _INLINE_ void NPPSolver::pushinqueueonsubgamedw(uint pos)
 {
     auto & supgame = *(Supgame[Top]);
     auto & entries = *(Entries[Top]->begin());
-    const int * _in = ins + ina[pos];
-    for (int from = *_in; from != -1; from = *++_in)
+    for (auto curedge = ins(pos); *curedge != -1; curedge++)
     {
+        int from = *curedge;
         if (outgame[from])
         {
             continue;
@@ -240,7 +239,7 @@ _INLINE_ void NPPSolver::pushinqueueonsubgamedw(uint pos)
             entries.push_back(from);
             continue;
         }
-        else if ((uint) owner[from] == alpha)
+        else if ((uint) owner(from) == alpha)
         {
             if (!R[from])
             {
@@ -290,9 +289,9 @@ _INLINE_ void NPPSolver::pushinqueueonsubgameup(uint pos)
 {
     auto & supgame = *(Supgame[Top]);
     auto & entries = *(Entries[Pivot]->begin());
-    const int * _in = ins + ina[pos];
-    for (int from = *_in; from != -1; from = *++_in)
+    for (auto curedge = ins(pos); *curedge != -1; curedge++)
     {
+        int from = *curedge;
         if (outgame[from] || R[from])
         {
             continue;
@@ -302,7 +301,7 @@ _INLINE_ void NPPSolver::pushinqueueonsubgameup(uint pos)
             entries.push_back(from);
             continue;
         }
-        else if ((uint) owner[from] == alpha)
+        else if ((uint) owner(from) == alpha)
         {
             R[from] = true;
             strategy[from] = pos;
@@ -356,7 +355,7 @@ bool NPPSolver::atronsubgameup()
 _INLINE_ void NPPSolver::goup()
 {
     D = *(Supgame[Top]) - *(Supgame[Top - 1]);
-    p = priority[Heads[--Top]->front()];
+    p = priority(Heads[--Top]->front());
     beta = p & 1;
 }
 
@@ -366,7 +365,7 @@ _INLINE_ void NPPSolver::newstackslot()
     Supgame.push_back(new bitset(R | *(Supgame[Top])));
     Pivot = End = ++Top;
     Heads.push_back(new uideque());
-    Exits.push_back(new bitset(n_nodes));
+    Exits.push_back(new bitset(nodecount()));
     Entries.push_back(new uidlist());
     Entries[Top]->push_front(uideque());
 }
@@ -390,7 +389,7 @@ _INLINE_ void NPPSolver::nextpriopos()
     for (pstar = p - 1; inverse[pstar] == -1; --pstar)
     {
     }
-    for (p = pstar, pos = inverse[p]; supgame[pos]; p = priority[--pos])
+    for (p = pstar, pos = inverse[p]; supgame[pos]; p = priority(--pos))
     {
     }
     alpha = p & 1;
@@ -438,7 +437,7 @@ _INLINE_ void NPPSolver::search()
             /* vv Search of region heads vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv */
             auto & supgame = *(Supgame[Top]);
             auto & heads = *(Heads[Top]);
-            for (; pos >= 0 && (uint) priority[pos] == p; --pos) // Collect heads of the region
+            for (; pos >= 0 && (uint) priority(pos) == p; --pos) // Collect heads of the region
             {
                 if (!supgame[pos])
                 {
@@ -570,13 +569,13 @@ void NPPSolver::run()
     Phase.push_back(true);
     Supgame.push_back(&outgame);
     Heads.push_back(new uideque());
-    Exits.push_back(new bitset(n_nodes));
+    Exits.push_back(new bitset(nodecount()));
     Entries.push_back(new uidlist());
     Entries[0]->push_front(std::move(uideque()));
     /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 
     /* vv Initialization of pos and maxprio vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv */
-    for (pos = n_nodes - 1;; --pos)
+    for (pos = nodecount() - 1;; --pos)
     {
         if (disabled[pos])
         {
@@ -584,7 +583,7 @@ void NPPSolver::run()
         }
         else
         {
-            maxprio = priority[pos];
+            maxprio = priority(pos);
             break;
         }
     }
@@ -603,7 +602,7 @@ void NPPSolver::run()
         }
         else
         {
-            inverse[priority[sop]] = sop;
+            inverse[priority(sop)] = sop;
             strategy[sop] = -1;
         }
     }
@@ -635,7 +634,7 @@ void NPPSolver::run()
         for (pos = inverse[maxprio]; pos >= 0 && outgame[pos]; --pos)
         {
         }
-        if (pos >= 0) maxprio = priority[pos];
+        if (pos >= 0) maxprio = priority(pos);
         /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 
         /* vv Stack and current region cleaning vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv */
@@ -652,7 +651,7 @@ void NPPSolver::run()
     /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 
     /* vv Setting of the final solution vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv */
-    for (pos = 0; pos < n_nodes; ++pos)
+    for (pos = 0; pos < nodecount(); ++pos)
     {
         if (disabled[pos]) continue;
         oink->solve(pos, !winzero[pos], strategy[pos]);

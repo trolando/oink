@@ -44,26 +44,27 @@ RRSolver::checkRegion(int p)
         [&](const int n) {return region[n] > p;}), Rp.end());
 
     for (auto j : Rp) {
-        // assert(priority[j] <= p && region[j] == p);
+        // assert(priority(j) <= p && region[j] == p);
         if (disabled[j]) {
             // now disabled, requires a reset...
             return false;
-        } else if (priority[j] == p) {
+        } else if (priority(j) == p) {
             // an escape node; if its strategy leaves the region, reset it
             if (strategy[j] != -1 && region[strategy[j]] != p) {
                 strategy[j] = -1;
             }
-        } else if (owner[j] == (p&1)) {
+        } else if (owner(j) == (p&1)) {
             // not-top winner
             // check if the strategy stays in the region
             // in very rare cases, strategy[j] == -1 (when fields are reset)
             if (strategy[j] == -1) return false;
             // requires a reset...
             if (region[strategy[j]] != p) return false;
-        } else /*if (priority[j] != p)*/ {
+        } else /*if (priority(j) != p)*/ {
             // not-top loser
             // check if it can escape in the subgame
-            for (auto to : out[j]) {
+            for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                int to = *curedge;
                 // it may be able to escape to a lower region if there have been resets
                 if (region[to] != -2 && region[to] < p) return false;
             }
@@ -77,18 +78,18 @@ void
 RRSolver::run()
 {
     // obtain highest priority and allocate arrays
-    int max_prio = priority[n_nodes-1];
+    int max_prio = priority(nodecount()-1);
     regions = new std::vector<int>[max_prio+1];
-    region = new int[n_nodes];
-    strategy = new int[n_nodes];
+    region = new int[nodecount()];
+    strategy = new int[nodecount()];
     inverse = new int[max_prio+1];
 
     // initialize arrays
-    for (int i=0; i<n_nodes; i++) region[i] = disabled[i] ? -2 : priority[i];
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<nodecount(); i++) region[i] = disabled[i] ? -2 : priority(i);
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
     // start loop at last node (highest priority)
-    int i = n_nodes - 1;
+    int i = nodecount() - 1;
 
     // reset statistics
     promotions = 0;
@@ -101,12 +102,12 @@ RRSolver::run()
 
     while (i >= 0) {
         // get current priority and skip all disabled/attracted nodes
-        int p = priority[i];
-        while (i >= 0 and priority[i] == p and (disabled[i] or region[i] > p)) i--;
+        int p = priority(i);
+        while (i >= 0 and priority(i) == p and (disabled[i] or region[i] > p)) i--;
         if (i < 0) break;
 
         // if empty, possibly reset and continue with next
-        if (priority[i] != p) {
+        if (priority(i) != p) {
             if (!regions[p].empty()) resetRegion(p);
             continue;
         }
@@ -125,13 +126,13 @@ RRSolver::run()
                 int res = getRegionStatus(i, p);
                 if (res == -2) {
                     // not closed, skip to next priority and break inner loop
-                    while (i >= 0 and priority[i] == p) i--;
+                    while (i >= 0 and priority(i) == p) i--;
                     break;
                 } else if (res == -1) {
                     // found dominion, return
                     setDominion(p);
                     // restart algorithm and break inner loop
-                    i = n_nodes - 1;
+                    i = nodecount() - 1;
                     break;
                 } else {
                     // found promotion, promote
@@ -145,7 +146,7 @@ RRSolver::run()
             }
         } else {
             // skip to next priority
-            while (i >= 0 and priority[i] == p) i--;
+            while (i >= 0 and priority(i) == p) i--;
         }
     }
 

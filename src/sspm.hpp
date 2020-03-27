@@ -17,8 +17,6 @@
 #ifndef SSPM_HPP
 #define SSPM_HPP
 
-#include <boost/dynamic_bitset.hpp>
-
 #include "oink.hpp"
 #include "solver.hpp"
 #include "uintqueue.hpp"
@@ -44,23 +42,26 @@ protected:
      * - for each bit the depth: log n * log h 
      */
     int l, h;
-    boost::dynamic_bitset<unsigned long long> pm_b;
+    bitset pm_b;
     int *pm_d;
 
-    boost::dynamic_bitset<unsigned long long> tmp_b;
+    bitset tmp_b;
     int *tmp_d;
 
-    boost::dynamic_bitset<unsigned long long> best_b;
+    bitset best_b;
     int *best_d;
 
-    boost::dynamic_bitset<unsigned long long> test_b;
+    bitset test_b;
     int *test_d;
 
     uintqueue Q;
-    boost::dynamic_bitset<unsigned long long> dirty;
-    boost::dynamic_bitset<unsigned long long> unstable;
+    bitset dirty;
+    bitset unstable;
 
     bool bounded = false;
+
+    int *cap; // caps!
+    uint64_t *lift_counters;
 
     // Copy pm[idx] into tmp
     void to_tmp(int idx);
@@ -90,6 +91,7 @@ protected:
     // Bump tmp given priority p
     void trunc_tmp(int pindex);
     void prog_tmp(int pindex, int h);
+    void prog_cap_tmp(int pindex);
 
     // Lift node, triggered by change to target
     bool lift(int node, int target, int &str, int pl);

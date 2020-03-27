@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef PSI_HPSI
-#define PSI_HPSI
+#ifndef PSI_HPP
+#define PSI_HPP
 
 #include <queue>
 

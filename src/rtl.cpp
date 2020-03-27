@@ -45,18 +45,18 @@ void
 RTLSolver::attractVertices(const int pr, const int pl, int v, bitset &R, int *str, bitset &Z)
 {
     // attract vertices
-    const int *_in = ins + ina[v];
-    for (int from = *_in; from != -1; from = *++_in) {
+    for (auto curedge = ins(v); *curedge != -1; curedge++) {
+        int from = *curedge;
         if (Z[from]) {
             // already in Z, maybe set strategy
-            if (owner[from] == pl and str[from] == -1) str[from] = v;
+            if (owner(from) == pl and str[from] == -1) str[from] = v;
         } else if (R[from]) {
             // in subgame but not (yet) in Z
-            if (owner[from] != pl) {
+            if (owner(from) != pl) {
                 // check each exit
                 bool escapes = false;
-                const int *_out = outs + outa[from];
-                for (int to = *_out; to != -1; to = *++_out) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (R[to] and !Z[to]) {
                         escapes = true;
                         break;
@@ -66,13 +66,13 @@ RTLSolver::attractVertices(const int pr, const int pl, int v, bitset &R, int *st
             }
             // attract
             Z[from] = true;
-            str[from] = owner[from] == pl ? v : -1;
+            str[from] = owner(from) == pl ? v : -1;
             Q.push(from);
 #ifndef NDEBUG
             // maybe report event
             if (trace >= 3) {
                 logger << "\033[1;37mattracted \033[36m" << label_vertex(from) << "\033[m to \033[1;36m" << pr << "\033[m";
-                if (owner[from] == pl) logger << " (via " << label_vertex(v) << ")" << std::endl;
+                if (owner(from) == pl) logger << " (via " << label_vertex(v) << ")" << std::endl;
                 else logger << " (forced)" << std::endl;
             }
 #endif
@@ -222,7 +222,7 @@ RTLSolver::attractTangles(const int pr, const int pl, bitset &R, int *str, bitse
 void
 RTLSolver::search(bitset &R, int top, int only_player, int depth)
 {
-    bitset Z(n_nodes); // current region // TODO use the stack thing to only alloc once...
+    bitset Z(nodecount()); // current region // TODO use the stack thing to only alloc once...
 
 #ifndef NDEBUG
     assert(only_player == -1);
@@ -236,7 +236,7 @@ RTLSolver::search(bitset &R, int top, int only_player, int depth)
         if (top == -1) return;
 
         // get top priority and player
-        const int pr = priority[top];
+        const int pr = priority(top);
         const int pl = pr&1;
 
         /**
@@ -246,10 +246,10 @@ RTLSolver::search(bitset &R, int top, int only_player, int depth)
 
         // We are doing on-the-fly compression (MV trick)
 
-        while (top >= 0 and (priority[top]&1) == (pr&1)) {
+        while (top >= 0 and (priority(top)&1) == (pr&1)) {
             if (R[top] /* and !Z[top]*/) { 
-                // if (priority[top] != pr) logger << "DOING IT" << std::endl;
-                if (priority[top] != pr) break; // TODO remove this line of course
+                // if (priority(top) != pr) logger << "DOING IT" << std::endl;
+                if (priority(top) != pr) break; // TODO remove this line of course
                 heads.push(top); // add to <heads>
                 Z[top] = true; // add to <Z> (removed from <R> below)
                 str[top] = -1;
@@ -304,12 +304,12 @@ RTLSolver::search(bitset &R, int top, int only_player, int depth)
             int h = heads[i];
             if (!Z[h]) continue; // already removed from Z, ignore
             // check if head is open
-            if (owner[h] == pl) {
+            if (owner(h) == pl) {
                 if (str[h] != -1) continue; // not open
             } else {
                 bool open = false;
-                const int *_out = outs + outa[h];
-                for (int to = *_out; to != -1; to = *++_out) {
+                for (auto curedge = outs(h); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (R[to]) { // note: R := R-Z
                         open = true;
                         break;
@@ -380,7 +380,7 @@ RTLSolver::search(bitset &R, int top, int only_player, int depth)
             // extract tangles from each head
             // (because bottom SCC must contain head vertex)
 
-            memset(tarj, 0, sizeof(int[n_nodes]));
+            memset(tarj, 0, sizeof(int[nodecount()]));
             pre = 0;
 
             while (heads.nonempty()) {
@@ -411,7 +411,7 @@ RTLSolver::search(bitset &R, int top, int only_player, int depth)
 void
 RTLSolver::extractTangles(int i, bitset &R, int *str)
 {
-    const int pr = priority[i];
+    const int pr = priority(i);
     const int pl = pr&1;
 
     std::vector<int> tangle; // stores the vertices of the tangle
@@ -435,9 +435,9 @@ tarjan_again:
          * Perform the search step of Tarjan.
          */
 
-        if (owner[n] != pl) {
-            const int *_out = outs + outa[n];
-            for (int to = *_out; to != -1; to = *++_out) {
+        if (owner(n) != pl) {
+            for (auto curedge = outs(n); *curedge != -1; curedge++) {
+                int to = *curedge;
                 if (!R[to]) continue; // not in the tangle
                 if (tarj[to] == 0) {
                     // not visited, add to search stack and go again
@@ -495,7 +495,7 @@ tarjan_again:
 
         bool is_tangle = (tangle.size() > 1) or
             ((unsigned int)str[n] == n) or
-            (std::find(out[n].begin(), out[n].end(), n) != out[n].end());
+            (str[n] == -1 and game->has_edge(n, n));
         if (!is_tangle) {
             tangle.clear();
             continue;
@@ -505,15 +505,17 @@ tarjan_again:
          * We have a tangle. Compute the outgoing edges (into <tangleto>) and the next highest region.
          */
 
+#ifndef NDEBUG
         int esc = -1; // escape node (-1 for none, -2 for more)
         int best_esc = -1; // best escape
+#endif
         bool bottom_scc = true;
         const auto tangle_end = tangle.end();
         for (auto titer = tangle.begin(); titer != tangle_end;) {
             int v = *titer++;
             if (str[v] != -1) continue; // not losing!
-            const int *_out = outs + outa[v];
-            for (int to = *_out; to != -1; to = *++_out) {
+            for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                int to = *curedge;
                 if (disabled[to]) continue; // disabled for solver
                 if (tarj[to] == min) continue; // in the tangle
                 if (bs_exits[to]) continue; // already added
@@ -673,7 +675,7 @@ tarjan_again:
 void
 RTLSolver::loop(int player)
 {
-    bitset R(n_nodes);
+    bitset R(nodecount());
 
     while (G.any()) {
         iterations++;
@@ -685,7 +687,7 @@ RTLSolver::loop(int player)
         // we do not have any progress yet
         if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "\033[m" << " " << tangles << std::endl;
         R = G;
-        search(R, n_nodes-1, player, 0);
+        search(R, nodecount()-1, player, 0);
 
         if (D == dominions and T == tangles) {
             // if no dominions or tangles found, return
@@ -698,32 +700,32 @@ void
 RTLSolver::run()
 {
     // get number of nodes and create and initialize inverse array
-    max_prio = game->priority[n_nodes-1];
+    max_prio = game->priority(nodecount()-1);
 
     iterations = 0;
     dominions = 0;
     tangles = 0;
 
-    tin = new std::vector<int>[n_nodes];
-    tarj = new int[n_nodes];
-    str = new int[n_nodes];
-    val = new int[n_nodes]; // for cascader
+    tin = new std::vector<int>[nodecount()];
+    tarj = new int[nodecount()];
+    str = new int[nodecount()];
+    val = new int[nodecount()]; // for cascader
 
     // for rec2
-    region = new int[n_nodes];
-    H.resize(n_nodes);
-    S.resize(n_nodes);
+    region = new int[nodecount()];
+    H.resize(nodecount());
+    S.resize(nodecount());
     G = disabled;
     G.flip();
-    open_heads.resize(n_nodes);
+    open_heads.resize(nodecount());
 
-    Q.resize(n_nodes);
-    Qtar.resize(n_nodes);
-    Zvec.resize(n_nodes);
-    heads.resize(n_nodes);
-    tarres.resize(n_nodes);
-    tangleto.resize(n_nodes);
-    bs_exits.resize(n_nodes);
+    Q.resize(nodecount());
+    Qtar.resize(nodecount());
+    Zvec.resize(nodecount());
+    heads.resize(nodecount());
+    tarres.resize(nodecount());
+    tangleto.resize(nodecount());
+    bs_exits.resize(nodecount());
 
     if (onesided) {
         loop(0);
@@ -740,7 +742,7 @@ RTLSolver::run()
         tout.clear();
         tpr.clear();
         delete[] tin;
-        tin = new std::vector<int>[n_nodes];
+        tin = new std::vector<int>[nodecount()];
 
         loop(1);
         logger << "after odd: " << dominions << " dominions and " << tangles << " tangles and " << iterations << " iterations." << std::endl;
@@ -758,7 +760,7 @@ RTLSolver::run()
 
     // check if actually all solved
 #ifndef NDEBUG
-    for (int i=0; i<n_nodes; i++) {
+    for (int i=0; i<nodecount(); i++) {
         if (!disabled[i]) { logger << "incomplete" << std::endl; exit(-1); }
     }
 #endif

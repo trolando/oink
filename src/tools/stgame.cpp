@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <iostream>
 #include <random>
+#include <cstring>
 
 #include "game.hpp"
 
@@ -97,6 +98,12 @@ main(int argc, char** argv)
     int src_count = n, tgt_count = n;
     int intodo = n, outtodo = n;
 
+    int *outcounts = new int[n];
+    int *incounts = new int[n];
+
+    memset(outcounts, 0, sizeof(int[n]));
+    memset(incounts, 0, sizeof(int[n]));
+
     // array for temporarily removing unwanted target nodes
     int **ptrs = new int*[maxD+1];
 
@@ -104,7 +111,7 @@ main(int argc, char** argv)
     pg::Game game(n);
 
     // initialize <n> nodes
-    for (int i=0; i<n; i++) game.initNode(i, i, rng(0, 1));
+    for (int i=0; i<n; i++) game.init_vertex(i, i, rng(0, 1));
 
     while ((outtodo > 0 and tgt_count > 0) or (intodo > 0 and src_count > 0)) {
         // obtain source node
@@ -113,11 +120,17 @@ main(int argc, char** argv)
         // (temporarily) remove target nodes and <from> from tgt array
         int removed = 0;
         ptrs[0] = find(tgt, tgt_count, from);
-        const int of_size = game.out[from].size();
-        for (int i=0; i<of_size; i++) ptrs[i+1] = find(tgt, tgt_count, game.out[from][i]);
-        std::sort(ptrs, ptrs+of_size+1, [] (int* a, int* b) { return a > b; });
 
-        for (int i=0; i<=of_size and ptrs[i] != NULL; i++) {
+        int out_len = 0;
+        auto edges = game.outedges() + game.firstout(from);
+        while (edges[out_len] != -1) {
+            ptrs[out_len+1] = find(tgt, tgt_count, edges[out_len]);
+            out_len++;
+        }
+
+        std::sort(ptrs, ptrs+out_len+1, [] (int* a, int* b) { return a > b; });
+
+        for (int i=0; i<=out_len and ptrs[i] != NULL; i++) {
             std::swap(*ptrs[i], tgt[tgt_count-1]);
             if (tgt_count <= 1) { cerr << "out of bounds\n"; return -1; }
             tgt_count--;
@@ -135,10 +148,13 @@ main(int argc, char** argv)
         }
 
         // add the edge
-        game.addEdge(from, to);
+        if (game.add_edge(from, to)) {
+            outcounts[from]++;
+            incounts[to]++;
+        }
 
         // update source node counts
-        const int from_count = game.out[from].size();
+        const int from_count = outcounts[from];
         if (from_count == minD) outtodo--;
         if (from_count >= maxD) {
             // remove from src
@@ -148,7 +164,7 @@ main(int argc, char** argv)
         }
 
         // update target node counts
-        const int to_count = game.in[to].size();
+        const int to_count = incounts[to];
         if (to_count == minI) intodo--;
         if (to_count >= maxI) {
             // remove from tgt
@@ -159,11 +175,14 @@ main(int argc, char** argv)
     }
 
     // write game
+    game.build_arrays();
     game.write_pgsolver(cout);
    
     // free arrays
     delete[] src;
     delete[] tgt;
+    delete[] outcounts;
+    delete[] incounts;
 
     return 0;
 }

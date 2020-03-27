@@ -32,7 +32,7 @@ main(int argc, char** argv)
     cout << "parity " << 2*n << ";" << endl;
     for (int i=1; i<=2*n; i++) {
         // node i-1 has priority i, owned by 1
-        cout << i-1 << " " << i << " " << 1 << " ";
+        cout << i-1 << " " << i << " " << 0 << " ";
         // if even, can go to 1
         if ((i&1) == 0) {
             cout << "0";

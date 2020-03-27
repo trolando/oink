@@ -21,7 +21,6 @@
 #include <set>
 #include <map>
 #include <tuple>
-#include <boost/dynamic_bitset.hpp>
 
 #include "oink.hpp"
 #include "solver.hpp"
@@ -76,7 +75,7 @@ protected:
     uintqueue Q; // queue (used by attractor)
     uintqueue tarres; // helper structure for tarjan bottom SCC algorithm
     uintqueue tangleto; // helper structure to record tangle exits
-    boost::dynamic_bitset<unsigned long long> bs_exits; // helper structure
+    bitset bs_exits; // helper structure
 
     /**
      * Attract to vertex <v> as player <pl> for a region of priority <pr>.

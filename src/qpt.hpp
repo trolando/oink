@@ -17,8 +17,6 @@
 #ifndef QPT_HPP
 #define QPT_HPP
 
-#include <boost/dynamic_bitset.hpp>
-
 #include "solver.hpp"
 #include "uintqueue.hpp"
 
@@ -45,7 +43,7 @@ protected:
     long lift_attempt;
 
     uintqueue todo;
-    boost::dynamic_bitset<unsigned long long> dirty;
+    bitset dirty;
 
     bool bounded = false;
 
@@ -58,7 +56,7 @@ protected:
         todo.push(node);
         dirty[node] = 1;
 #ifndef NDEBUG
-        if (trace >= 2) logger << "push(" << node << ")" << std::endl;
+        if (trace >= 3) logger << "push(" << node << ")" << std::endl;
 #endif
     }
 
@@ -66,7 +64,7 @@ protected:
         int node = todo.pop();
         dirty[node] = 0;
 #ifndef NDEBUG
-        if (trace >= 2) logger << "pop() => " << node << std::endl;
+        if (trace >= 3) logger << "pop() => " << node << std::endl;
 #endif
         return node;
     }

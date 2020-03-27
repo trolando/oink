@@ -32,30 +32,31 @@ main(int argc, char** argv)
 
     Game game(3+6*n);
 
-    game.initNode(0, 5, 0);
-    game.initNode(1, 0, 0);
-    game.initNode(2, 0, 1);
-    game.addEdge(2, 2);
-    game.addEdge(1, 2);
-    game.addEdge(2, 1);
-    game.addEdge(0, 1);
+    game.init_vertex(0, 5, 0);
+    game.init_vertex(1, 0, 0);
+    game.init_vertex(2, 0, 1);
+    game.add_edge(2, 2);
+    game.add_edge(1, 2);
+    game.add_edge(2, 1);
+    game.add_edge(0, 1);
 
     /* create 2n+1 pieces */
     for (int i=0; i<=2*n; i++) {
-        game.initNode(3*i+0, 2*n+1+i, (i&1));
-        game.initNode(3*i+1, i, (i&1));
-        game.initNode(3*i+2, i, 1-(i&1));
-        game.addEdge(3*i+0, 3*i+1);
-        game.addEdge(3*i+1, 3*i+2);
-        game.addEdge(3*i+2, 3*i+1);
-        game.addEdge(3*i+2, 3*i+2);
+        game.init_vertex(3*i+0, 2*n+1+i, (i&1));
+        game.init_vertex(3*i+1, i, (i&1));
+        game.init_vertex(3*i+2, i, 1-(i&1));
+        game.add_edge(3*i+0, 3*i+1);
+        game.add_edge(3*i+1, 3*i+2);
+        game.add_edge(3*i+2, 3*i+1);
+        game.add_edge(3*i+2, 3*i+2);
     }
     
     /* connect the pieces */
     for (int i=0; i<2*n; i++) {
-        game.addEdge(3*i+2, 3*i+3);
-        game.addEdge(3*i+4, 3*i+0);
+        game.add_edge(3*i+2, 3*i+3);
+        game.add_edge(3*i+4, 3*i+0);
     }
 
+    game.build_arrays();
     game.write_pgsolver(std::cout);
 }

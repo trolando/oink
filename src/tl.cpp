@@ -47,21 +47,21 @@ TLSolver::attractTo(const int pr, const int pl, int cur)
 {
     auto &R = regions[pr];
     // first attract normal vertices
-    const int *_in = ins + ina[cur];
-    for (int from = *_in; from != -1; from = *++_in) {
+    for (auto curedge = ins(cur); *curedge != -1; curedge++) {
+        int from = *curedge;
         int r = region[from];
         if (r == DIS or r > pr) {
             // disabled or in a higher region
             continue; 
         } else if (r == pr) {
             // if already in <pr>, check if escape without strategy
-            if (owner[from] == pl and strategy[from] == -1) {
+            if (owner(from) == pl and strategy[from] == -1) {
 #ifndef NDEBUG
                 LOG2("\033[1;37mattracted \033[36m" << label_vertex(from) << "\033[m to \033[1;36m" << pr << "\033[m (via " << label_vertex(cur) << ")")
 #endif
                 strategy[from] = cur;
             }
-        } else if (owner[from] == pl) {
+        } else if (owner(from) == pl) {
             // it is same parity, lower priority, attract it
 #ifndef NDEBUG
             LOG2("\033[1;37mattracted \033[36m" << label_vertex(from) << " \033[mto \033[1;36m" << pr << "\033[m (via " << label_vertex(cur) << ")");
@@ -77,8 +77,8 @@ TLSolver::attractTo(const int pr, const int pl, int cur)
                 // if lower region without outcount, recompute outcount
                 // count number of escapes, including our own priority
                 r = 0;
-                const int *_out = outs + outa[from];
-                for (int to = *_out; to != -1; to = *++_out) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (region[to] != DIS and region[to] <= pr) r--; // include our prio!!
                 }
             }
@@ -110,12 +110,12 @@ TLSolver::attractTo(const int pr, const int pl, int cur)
             // higher priority tangle
             continue;
         } else if ((tangle_prio&1) != pl) {
-            // i.e., owner[from] == pl
+            // i.e., owner(from) == pl
             // we "attract" it (so opponent doesn't attract it by mistake)
             vr[from] = pr;
             vregions[pr].push_back(from);
         } else {
-            // i.e., owner[from] != pl, try to force it
+            // i.e., owner(from) != pl, try to force it
             // interpret r as counter (using the negative numbers)
             if (r == BOT or r >= 0) {
                 r = 0;
@@ -175,11 +175,11 @@ TLSolver::attract(const int pr)
 bool
 TLSolver::computeRegion(int i)
 {
-    const int pr = priority[i];
+    const int pr = priority(i);
     std::vector<int> &R = regions[pr];
     bool empty_region = true;
 
-    for (int j=i; j>=0 and priority[j]==pr; j--) {
+    for (int j=i; j>=0 and priority(j)==pr; j--) {
         if (region[j] != DIS and region[j] < pr) {
             region[j] = pr;
             strategy[j] = -1;
@@ -219,7 +219,7 @@ TLSolver::computeRegion(int i)
 int
 TLSolver::extractTangles(int i, bool isHighest)
 {
-    const int pr = priority[i];
+    const int pr = priority(i);
     const int pl = pr&1;
 
     /**
@@ -238,14 +238,14 @@ TLSolver::extractTangles(int i, bool isHighest)
 
     auto &R = regions[pr];
     for (auto j : R) {
-        if (priority[j] != pr) {
+        if (priority(j) != pr) {
             // only look at the heads
             break;
-        } else if (owner[j] == pl) {
+        } else if (owner(j) == pl) {
             if (strategy[j] == -1) goto current_vertex_leaks;
         } else {
-            const int *_out = outs + outa[j];
-            for (int to = *_out; to != -1; to = *++_out) {
+            for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                int to = *curedge;
                 if (region[to] != DIS and region[to] < pr) goto current_vertex_leaks;
             }
         }
@@ -273,8 +273,8 @@ current_vertex_leaks:
     // Compute the greatest fixed point with a backward search
     while (Q.nonempty()) {
         unsigned int n = Q.pop();
-        const int *_in = ins + ina[n];
-        for (int from = *_in; from != -1; from = *++_in) {
+        for (auto curedge = ins(n); *curedge != -1; curedge++) {
+            int from = *curedge;
             if (region[from] != pr) continue;
             if (strategy[from] != -1 and (uint) strategy[from] != n) continue;
             region[from] = LEAK;
@@ -289,7 +289,7 @@ current_vertex_leaks:
             if (non_empty) {
                 if (region[v] == pr) oink->solve(v, pl, strategy[v]);
             } else {
-                if (priority[v] != pr) break;
+                if (priority(v) != pr) break;
                 if (region[v] != pr) continue;
                 oink->solve(v, pl, strategy[v]);
                 non_empty = true;
@@ -321,7 +321,7 @@ current_vertex_leaks:
 
     int pre = TANG;               // tarjan counting variable
 
-    for (int j=i; j>=0 and priority[j]==pr; j--) {
+    for (int j=i; j>=0 and priority(j)==pr; j--) {
         if (region[j] != pr) continue; // either DIS or LEAK or already visited in the search
 
         // start the tarjan search
@@ -343,9 +343,9 @@ tarjan_again:
              * Perform the search step of Tarjan.
              */
 
-            if (owner[n] != pl) {
-                const int *_out = outs + outa[n];
-                for (int to = *_out; to != -1; to = *++_out) {
+            if (owner(n) != pl) {
+                for (auto curedge = outs(n); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     if (region[to] == DIS or region[to] > pr) continue; // not in the tangle
                     // by definition, region[to] cannot be BOT or DIS
                     if (region[to] == pr) {
@@ -406,7 +406,7 @@ tarjan_again:
 
             bool is_tangle = (tangle.size() > 2) or
                              ((unsigned int)strategy[n] == n) or
-                             (std::find(out[n].begin(), out[n].end(), n) != out[n].end());
+                             (strategy[n] == -1 and game->has_edge(n, n));
             if (!is_tangle) {
                 tangle.clear();
                 continue;
@@ -424,8 +424,8 @@ tarjan_again:
                 int v = *titer++;
                 int s = *titer++;
                 if (s != -1) continue; // not losing
-                const int *_out = outs + outa[v];
-                for (int to = *_out; to != -1; to = *++_out) {
+                for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                    int to = *curedge;
                     const int rto = region[to];
                     if (rto == DIS) {
                         // disabled
@@ -514,6 +514,7 @@ tarjan_again:
                 logger << std::endl;
             }
 #endif
+            esc = -1; // just in case
             // add back links to all normal vertices in our [out]
             const int tidx = vp.size();
             for (unsigned int x = 0; x < tangleto.size(); x++) vin[tangleto[x]].push_back(tidx);
@@ -530,7 +531,6 @@ tarjan_again:
             // and set p to pr and current region to BOT
             vp.push_back(pr);
             vr.push_back(BOT);
-            esc = -2;
 
             tangles++;
             has_tangle = true;
@@ -581,25 +581,26 @@ void
 TLSolver::run()
 {
     // get number of nodes and create and initialize inverse array
-    int max_prio = game->priority[n_nodes-1];
+    int max_prio = game->priority(nodecount()-1);
     inverse = new int[max_prio+1];
     for (int i=0; i<=max_prio; i++) inverse[i] = DIS; // for skipped priorities
-    for (int i=0; i<n_nodes; i++) if (!disabled[i]) inverse[priority[i]] = i;
+    for (int i=0; i<nodecount(); i++) if (!disabled[i]) inverse[priority(i)] = i;
 
     // allocate arrays
-    region = new int[n_nodes];
-    strategy = new int[n_nodes];
-    vin = new std::vector<int>[n_nodes];
+    region = new int[nodecount()];
+    strategy = new int[nodecount()];
+    vin = new std::vector<int>[nodecount()];
     regions = new std::vector<int>[max_prio+1];
     vregions = new std::vector<int>[max_prio+1];
-    Q.resize(n_nodes);
-    tarres.resize(n_nodes+1);
-    tangleto.resize(n_nodes);
-    bs_exits.resize(n_nodes > (max_prio+1) ? n_nodes : max_prio+1);
+    Q.resize(nodecount());
+    tarres.resize(nodecount()+1);
+    tangleto.resize(nodecount());
+    bs_exits.resize(nodecount() > (max_prio+1) ? nodecount() : max_prio+1);
 
     // initialize arrays
-    for (int i=0; i<n_nodes; i++) region[i] = disabled[i] ? DIS : BOT;
-    for (int i=0; i<n_nodes; i++) strategy[i] = -1;
+    for (int i=0; i<nodecount(); i++) region[i] = disabled[i] ? DIS : BOT;
+    for (int i=0; i<nodecount(); i++) strategy[i] = -1;
+
 
     tangles = 0;
     iterations = 0;
@@ -610,7 +611,7 @@ TLSolver::run()
      * Find highest vertex...
      */
 
-    int top = n_nodes-1;
+    int top = nodecount()-1;
     while (top >= 0 and region[top] == DIS) top--;
     if (top == -1) return; // empty game?
 
@@ -852,11 +853,11 @@ TLSolver::run()
             delete[] vregions;
             delete[] inverse;
             if (alternating) {
-                logger << "found " << dominions << " dominions." << std::endl;
-                logger << "solved with " << tangles << " tangles and " << turns << " turns." << std::endl;
+                logger << "found " << dominions << " dominions and " << tangles << " tangles." << std::endl;
+                logger << "solved in " << turns << " turns." << std::endl;
             } else {
-                logger << "found " << dominions << " dominions." << std::endl;
-                logger << "solved with " << tangles << " tangles and " << iterations+1 << " iterations." << std::endl;
+                logger << "found " << dominions << " dominions and " << tangles << " tangles." << std::endl;
+                logger << "solved in " << iterations+1 << " iterations." << std::endl;
             }
             return;
         }
@@ -870,7 +871,7 @@ TLSolver::run()
             while (true) {
                 if (region[n] != DIS) {
                     break; // good!
-                } else if (n == 0 or priority[n-1] != p) {
+                } else if (n == 0 or priority(n-1) != p) {
                     n = DIS; // bad!
                     break;
                 } else {

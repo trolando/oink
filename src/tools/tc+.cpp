@@ -15,8 +15,11 @@
  */
 
 #include <iostream>
+#include <memory>
 
 #include "game.hpp"
+
+#define DOUBLEDISTRACTION 1
 
 using namespace std;
 using namespace pg;
@@ -51,49 +54,56 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
     string bitid_str = string_format(pl?"Odd-%d":"Even-%d", i);
     const char *bitid = bitid_str.c_str();
 
-    game.initNode(c,   hipr, pl,   string_format("%s-H", bitid));  // high
-    game.initNode(c+1, inpr, 1-pl, string_format("%s-I", bitid));  // gate (distraction/input)
-    game.initNode(c+2, lopr, 1-pl, string_format("%s-T", bitid));  // low (tangle)
-    game.addEdge(c+1, c+2); // connect I -> T
-    game.addEdge(c+2, c);   // connect T -> H
-    game.addEdge(c+2, c+3); // connect T -> first S
-    game.addEdge(c, inmy[i == 0 ? n-1 : i-1]); // connect H -> I{(j-1) mod n}
+    game.init_vertex(c,   hipr, pl,   string_format("%s-H", bitid));  // high
+    game.init_vertex(c+1, inpr, 1-pl, string_format("%s-I", bitid));  // gate (distraction/input)
+    game.init_vertex(c+2, lopr, 1-pl, string_format("%s-T", bitid));  // low (tangle)
+#if DOUBLEDISTRACTION
+    game.init_vertex(c+3, inpr, 1-pl, string_format("%s-II", bitid));  // gate (distraction/input)
+    game.add_edge(c+1, c+3); // connect I -> T
+    game.add_edge(c+3, c+2); // connect I -> T
+    game.add_edge(c+2, c+4); // connect T -> first S
+#else
+    game.add_edge(c+1, c+2); // connect I -> T
+    game.add_edge(c+2, c+2); // connect T -> first S
+#endif
+    game.add_edge(c+2, c);   // connect T -> H
+    game.add_edge(c, inmy[i == 0 ? n-1 : i-1]); // connect H -> I{(j-1) mod n}
 
     /**
      * Create connectors (to higher bits)
      */
 
     for (int j=0; j<i; j++) {
-        const int d = c + 3 + 3*j;
+        const int d = c + 3 + DOUBLEDISTRACTION + 3*j;
 
-        game.initNode(d  , lopr-1, pl,   string_format("%s-S-%d", bitid, j)); // selector
-        game.initNode(d+1, lopr-1, 1-pl, string_format("%s-A-%d", bitid, j)); // exit one (even)
-        game.initNode(d+2, lopr-1, 1-pl, string_format("%s-B-%d", bitid, j)); // exit two (odd)
+        game.init_vertex(d  , lopr-1, pl,   string_format("%s-S-%d", bitid, j)); // selector
+        game.init_vertex(d+1, lopr-1, 1-pl, string_format("%s-A-%d", bitid, j)); // exit one (even)
+        game.init_vertex(d+2, lopr-1, 1-pl, string_format("%s-B-%d", bitid, j)); // exit two (odd)
 
         const int next_s = (j+1 == i) ? c+2 : d+3;
 
-        game.addEdge(d, d+1);       // connect Sj -> Aj
-        game.addEdge(d, d+2);       // connect Sj -> Bj
-        game.addEdge(d+1, next_s);  // connect Aj -> S{j+1}
-        game.addEdge(d+2, next_s);  // connect Bj -> S{j+1}
-        game.addEdge(d+1, inmy[j]); // connect Aj -> <my> Ij
-        game.addEdge(d+2, inop[j]); // connect Bj -> <their> Ij
+        game.add_edge(d, d+1);       // connect Sj -> Aj
+        game.add_edge(d, d+2);       // connect Sj -> Bj
+        game.add_edge(d+1, next_s);  // connect Aj -> S{j+1}
+        game.add_edge(d+2, next_s);  // connect Bj -> S{j+1}
+        game.add_edge(d+1, inmy[j]); // connect Aj -> <my> Ij
+        game.add_edge(d+2, inop[j]); // connect Bj -> <their> Ij
     }
 
 #if 0
 #if 1
-    game.initNode(c+3+3*i, lopr+2, pl, string_format("%s-D-%d", bitid, i));
-    game.addEdge(c+3+3*i, c+2);
+    game.init_vertex(c+3+3*i, lopr+2, pl, string_format("%s-D-%d", bitid, i));
+    game.add_edge(c+3+3*i, c+2);
 #else
     if (pl == 0) {
-        game.initNode(c+3+3*i, lopr+2, pl, string_format("d(%d,%d,%d)",pl,i,i));
-        game.addEdge(c+3+3*i, c+2);
+        game.init_vertex(c+3+3*i, lopr+2, pl, string_format("d(%d,%d,%d)",pl,i,i));
+        game.add_edge(c+3+3*i, c+2);
         // we want Odd to play first for DP,
         // but this breaks symmetry for RTL
-        game.addEdge(c+3+3*i, inop[i]);
+        game.add_edge(c+3+3*i, inop[i]);
     } else {
-        game.initNode(c+3+3*i, lopr+2, pl, string_format("d(%d,%d,%d)",pl,i,i));
-        game.addEdge(c+3+3*i, c+2);
+        game.init_vertex(c+3+3*i, lopr+2, pl, string_format("d(%d,%d,%d)",pl,i,i));
+        game.add_edge(c+3+3*i, c+2);
     }
 #endif
 #endif
@@ -104,12 +114,12 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
 
     int x = i+1;
     for (int j = x; j<n; j++) {
-        const int dv = c + 3 + 3*i + (j-x);
+        const int dv = c + 3 + DOUBLEDISTRACTION + 3*i + (j-x);
         const int pr = lopr + 2*(j-i+1);
-        game.initNode(dv, pr, pl, string_format("%s-D-%d", bitid, j)); // todo fix priority
-        game.addEdge(dv, c+2); // dv -> T
-        game.addEdge(c+2, dv); // T -> dv
-        game.addEdge(dv, inop[j]); // dv -> ...-I
+        game.init_vertex(dv, pr, pl, string_format("%s-D-%d", bitid, j)); // todo fix priority
+        game.add_edge(dv, c+2); // dv -> T
+        game.add_edge(c+2, dv); // T -> dv
+        game.add_edge(dv, inop[j]); // dv -> ...-I
     }
 }
 
@@ -143,10 +153,10 @@ main(int argc, char** argv)
     for (int i=0; i<n; i++) {
         hi0[i] = size;
         in0[i] = size + 1; // set even gate // distraction
-        size += 3 + 3*i + n-i-1;
+        size += DOUBLEDISTRACTION + 3 + 3*i + n-i-1;
         hi1[i] = size;
         in1[i] = size + 1; // set odd gate // distraction
-        size += 3 + 3*i + n-i-1;
+        size += DOUBLEDISTRACTION + 3 + 3*i + n-i-1;
     }
 
     /**
@@ -169,10 +179,11 @@ main(int argc, char** argv)
         toppo -= 2;
     }
 
-    int mapping[game.n_nodes];
-    game.reindex(mapping);
+    int mapping[game.nodecount()];
+    game.sort(mapping);
     game.renumber();
     game.permute(mapping);
+    game.build_arrays();
     game.write_pgsolver(std::cout);
 
     delete[] in0;

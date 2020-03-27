@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019 Tom van Dijk, Johannes Kepler University Linz
+ * Copyright 2017-2018 Tom van Dijk, Johannes Kepler University Linz
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 #include "fpi.hpp"
+#include "uintqueue.hpp"
 
 #define ANTIFREEZE 0
 
@@ -35,8 +36,10 @@ FPISolver::~FPISolver()
 TASK_3(int, update_block_rec, FPISolver*, solver, int, i, int, n)
 {
     if (n>128) {
-        SPAWN(update_block_rec, solver, i+(n/2), n-(n/2));
-        int a = CALL(update_block_rec, solver, i, n/2);
+        // because dynamic bitset is not thread safe, work in blocks of 64...
+        int N = (n/128)*64;
+        SPAWN(update_block_rec, solver, i+N, n-N);
+        int a = CALL(update_block_rec, solver, i, N);
         int b = SYNC(update_block_rec);
         return a+b;
     } else {
@@ -47,8 +50,10 @@ TASK_3(int, update_block_rec, FPISolver*, solver, int, i, int, n)
 VOID_TASK_4(freeze_reset_rec, FPISolver*, solver, int, i, int, n, int, p)
 {
     if (n>128) {
-        SPAWN(freeze_reset_rec, solver, i+(n/2), n-(n/2), p);
-        CALL(freeze_reset_rec, solver, i, n/2, p);
+        // because dynamic bitset is not thread safe, work in blocks of 64...
+        int N = (n/128)*64;
+        SPAWN(freeze_reset_rec, solver, i+N, n-N, p);
+        CALL(freeze_reset_rec, solver, i, N, p);
         SYNC(freeze_reset_rec);
     } else {
         solver->freezeOrReset(i, n, p);
@@ -58,8 +63,10 @@ VOID_TASK_4(freeze_reset_rec, FPISolver*, solver, int, i, int, n, int, p)
 VOID_TASK_4(thaw_rec, FPISolver*, solver, int, i, int, n, int, p)
 {
     if (n>128) {
-        SPAWN(thaw_rec, solver, i+(n/2), n-(n/2), p);
-        CALL(thaw_rec, solver, i, n/2, p);
+        // because dynamic bitset is not thread safe, work in blocks of 64...
+        int N = (n/128)*64;
+        SPAWN(thaw_rec, solver, i+N, n-N, p);
+        CALL(thaw_rec, solver, i, N, p);
         SYNC(thaw_rec);
     } else {
         solver->thaw(i, n, p);
@@ -77,11 +84,11 @@ FPISolver::updateBlock(int i, int n)
 
         // update whether current vertex <i> is a distraction by computing the one step winner
         int onestep_winner;
-        if (owner[i] == 0) {
+        if (owner(i) == 0) {
             // see if player Even can go to a vertex currently good for Even
             onestep_winner = 1;
-            const int *_out = outs + outa[i];
-            for (int to = *_out; to != -1; to = *++_out) {
+            for (auto curedge = outs(i); *curedge != -1; curedge++) {
+                int to = *curedge;
                 if (disabled[to]) continue;
                 const int winner_to = parity[to] ^ distraction[to];
                 if (winner_to == 0) {
@@ -95,8 +102,8 @@ FPISolver::updateBlock(int i, int n)
         } else {
             // see if player Odd can go to a vertex currently good for Odd
             onestep_winner = 0;
-            const int *_out = outs + outa[i];
-            for (int to = *_out; to != -1; to = *++_out) {
+            for (auto curedge = outs(i); *curedge != -1; curedge++) {
+                int to = *curedge;
                 if (disabled[to]) continue;
                 const int winner_to = parity[to] ^ distraction[to];
                 if (winner_to == 1) {
@@ -177,16 +184,16 @@ FPISolver::runPar()
      * Allocate and initialize data structures
      */
 
-    parity.resize(n_nodes);
-    distraction.resize(n_nodes);
+    parity.resize(nodecount());
+    distraction.resize(nodecount());
     parity.reset();
     distraction.reset();
-    strategy = new int[n_nodes]; // the current strategy for winning the game
-    frozen = new int[n_nodes]; // records for every vertex at which level it is frozen (or 0 if not frozen)
+    strategy = new int[nodecount()]; // the current strategy for winning the game
+    frozen = new int[nodecount()]; // records for every vertex at which level it is frozen (or 0 if not frozen)
 
-    memset(frozen, 0, sizeof(int[n_nodes])); // initially no vertex is frozen (we don't freeze at level 0)
+    memset(frozen, 0, sizeof(int[nodecount()])); // initially no vertex is frozen (we don't freeze at level 0)
 
-    int d = priority[n_nodes-1];
+    int d = priority(nodecount()-1);
     int *p_start = new int[d+1];
     int *p_len = new int[d+1];
 
@@ -194,9 +201,9 @@ FPISolver::runPar()
     {
         int v=0;
         for (int p=0; p<=d; p++) {
-            if (priority[v] == p) {
+            if (priority(v) == p) {
                 p_start[p] = v;
-                while (v < n_nodes and priority[v] == p) {
+                while (v < nodecount() and priority(v) == p) {
                     parity[v] = p&1;
                     v++;
                 }
@@ -233,10 +240,10 @@ FPISolver::runPar()
     }
 
     // done
-    for (int v=0; v<n_nodes; v++) {
+    for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        oink->solve(v, winner, winner == owner[v] ? strategy[v] : -1);
+        oink->solve(v, winner, winner == owner(v) ? strategy[v] : -1);
     }
 
     // free allocated data structures
@@ -254,18 +261,18 @@ FPISolver::runSeq2()
     /**
      * Allocate and initialize data structures
      */
-    distraction.resize(n_nodes);
-    strategy = new int[n_nodes]; // the current strategy for winning the game
-    frozen = new int[n_nodes]; // records for every vertex at which level it is frozen (or 0 if not frozen)
-    memset(frozen, 0, sizeof(int[n_nodes])); // initially no vertex is frozen (we don't freeze at level 0)
+    distraction.resize(nodecount());
+    strategy = new int[nodecount()]; // the current strategy for winning the game
+    frozen = new int[nodecount()]; // records for every vertex at which level it is frozen (or 0 if not frozen)
+    memset(frozen, 0, sizeof(int[nodecount()])); // initially no vertex is frozen (we don't freeze at level 0)
 
-    int d = priority[n_nodes-1];
+    int d = priority(nodecount()-1);
     int *p_start = new int[d+1];
     int *p_len = new int[d+1];
-    parity.resize(n_nodes);
+    parity.resize(nodecount());
 
 #ifndef NDEBUG
-    bitset ever(n_nodes);
+    bitset ever(nodecount());
 #endif
 
     /**
@@ -273,9 +280,9 @@ FPISolver::runSeq2()
      */
     int v=0;
     for (int p=0; p<=d; p++) {
-        if (priority[v] == p) {
+        if (priority(v) == p) {
             p_start[p] = v;
-            while (v < n_nodes and priority[v] == p) {
+            while (v < nodecount() and priority(v) == p) {
                 parity[v] = p&1;
                 v++;
             }
@@ -316,10 +323,10 @@ FPISolver::runSeq2()
     /**
      * Done, now tell Oink the solution
      */
-    for (int v=0; v<n_nodes; v++) {
+    for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        oink->solve(v, winner, winner == owner[v] ? strategy[v] : -1);
+        oink->solve(v, winner, winner == owner(v) ? strategy[v] : -1);
     }
 
     /**
@@ -333,13 +340,15 @@ FPISolver::runSeq2()
     logger << "solved with " << iterations << " iterations." << std::endl;
 
 #ifndef NDEBUG
-    logger << "Distractions:\n";
-    for (int v=0; v<n_nodes; v++) {
-        if (ever[v]) {
-            if (distraction[v]) logger << "\033[1;38:5:124m" << label_vertex(v) << "\033[m";
-            else logger << "\033[1;38:5:208m" << label_vertex(v) << "\033[m";
-        } else logger << "\033[1;38:5:34m" << label_vertex(v) << "\033[m";
-        logger << std::endl;
+    if (trace) {
+        logger << "Distractions:\n";
+        for (int v=0; v<nodecount(); v++) {
+            if (ever[v]) {
+                if (distraction[v]) logger << "\033[1;38:5:124m" << label_vertex(v) << "\033[m";
+                else logger << "\033[1;38:5:208m" << label_vertex(v) << "\033[m";
+            } else logger << "\033[1;38:5:34m" << label_vertex(v) << "\033[m";
+            logger << std::endl;
+        }
     }
 #endif
 }
@@ -351,16 +360,16 @@ FPISolver::runSeq()
      * Allocate and initialize data structures
      */
 
-    bitset distraction(n_nodes); // the main data structure: is a vertex a distraction or not?
+    bitset distraction(nodecount()); // the main data structure: is a vertex a distraction or not?
 
-    int *strategy = new int[n_nodes]; // the current strategy for winning the game
-    memset(strategy, -1, sizeof(int[n_nodes])); // initially set no strategy
+    int *strategy = new int[nodecount()]; // the current strategy for winning the game
+    memset(strategy, -1, sizeof(int[nodecount()])); // initially set no strategy
 
-    int *frozen = new int[n_nodes]; // records for every vertex at which level it is frozen (or 0 if not frozen)
-    memset(frozen, 0, sizeof(int[n_nodes])); // initially no vertex is frozen (we don't freeze at level 0)
+    int *frozen = new int[nodecount()]; // records for every vertex at which level it is frozen (or 0 if not frozen)
+    memset(frozen, 0, sizeof(int[nodecount()])); // initially no vertex is frozen (we don't freeze at level 0)
 
-    bitset parity(n_nodes); // optimization: precompute the parity of every vertex's priority
-    for (int v=0; v<n_nodes; v++) parity[v] = priority[v]&1;
+    bitset parity(nodecount()); // optimization: precompute the parity of every vertex's priority
+    for (int v=0; v<nodecount(); v++) parity[v] = priority(v)&1;
 
     unsigned int iterations = 0; // record the number of iterations that we needed
     for (;;) {
@@ -379,13 +388,13 @@ FPISolver::runSeq()
          * no player escapes in one step.
          */
         bool changed = false; // did the current block change (new distractions)
-        int cur_pr = priority[0]; // priority of the current block
+        int cur_pr = priority(0); // priority of the current block
         int cur_pl = cur_pr & 1;
         int i;
 
-        for (i=0; i<n_nodes;i++) {
+        for (i=0; i<nodecount();i++) {
             if (disabled[i]) continue;
-            // if (priority[i] != cur_pr) { // no on-the-fly compression
+            // if (priority(i) != cur_pr) { // no on-the-fly compression
             if (parity[i] != cur_pl) { // on-the-fly compression ((like Verver's Zielonka trick))
                 // new block!
                 if (changed) {
@@ -393,7 +402,7 @@ FPISolver::runSeq()
                     break;
                 } else {
                     // the previous block did not change, continue with new block
-                    cur_pr = priority[i];
+                    cur_pr = priority(i);
                     cur_pl = cur_pr & 1;
                     // also thaw all vertices below the new <cur_pr>
                     if (cur_pr > 1) {
@@ -411,11 +420,11 @@ FPISolver::runSeq()
             if (!frozen[i] and !distraction[i]) {
                 // update whether current vertex <i> is a distraction by computing the one step winner
                 int onestep_winner;
-                if (owner[i] == 0) {
+                if (owner(i) == 0) {
                     // see if player Even can go to a vertex currently good for Even
                     onestep_winner = 1;
-                    const int *_out = outs + outa[i];
-                    for (int to = *_out; to != -1; to = *++_out) {
+                    for (auto curedge = outs(i); *curedge != -1; curedge++) {
+                        int to = *curedge;
                         if (disabled[to]) continue;
                         const int winner_to = parity[to] ^ distraction[to];
                         if (winner_to == 0) {
@@ -429,8 +438,8 @@ FPISolver::runSeq()
                 } else {
                     // see if player Odd can go to a vertex currently good for Odd
                     onestep_winner = 0;
-                    const int *_out = outs + outa[i];
-                    for (int to = *_out; to != -1; to = *++_out) {
+                    for (auto curedge = outs(i); *curedge != -1; curedge++) {
+                        int to = *curedge;
                         if (disabled[to]) continue;
                         const int winner_to = parity[to] ^ distraction[to];
                         if (winner_to == 1) {
@@ -486,10 +495,10 @@ FPISolver::runSeq()
     }
 
     // done
-    for (int v=0; v<n_nodes; v++) {
+    for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        oink->solve(v, winner, winner == owner[v] ? strategy[v] : -1);
+        oink->solve(v, winner, winner == owner(v) ? strategy[v] : -1);
     }
 
     // free allocated data structures
