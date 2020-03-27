@@ -31,6 +31,7 @@
 #include "oink.hpp"
 #include "solvers.hpp"
 #include "verifier.hpp"
+#include "tools/getrss.h"
 
 using namespace pg;
 
@@ -165,6 +166,18 @@ setsighandlers(void)
     sig_abrt_handler = signal(SIGABRT, catchsig);
     sig_term_handler = signal(SIGTERM, catchsig);
     sig_alrm_handler = signal(SIGALRM, catchsig);
+}
+
+/*------------------------------------------------------------------------*/
+
+static char*
+to_h(double size, char *buf)
+{
+    const char* units[] = {"B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
+    int i = 0;
+    for (;size>1024;size/=1024) i++;
+    sprintf(buf, "%.*f %s", i, size, units[i]);
+    return buf;
 }
 
 /*------------------------------------------------------------------------*/
@@ -350,6 +363,12 @@ int main(int argc, char **argv)
             return -1;
         }
     }
+
+    char buf[32];
+    to_h(getCurrentRSS(), buf);
+    out << "current memory usage: " << buf << std::endl;
+    to_h(getPeakRSS(), buf);
+    out << "peak memory usage: " << buf << std::endl;
 
     /**
      * STEP 8

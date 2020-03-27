@@ -29,6 +29,8 @@ option(BUILD_SHARED_LIBS "Enable/disable creation of shared libraries" OFF)
 option(BUILD_STATIC_LIBS "Enable/disable creation of static libraries" ON)
 option(BUILD_EXTRA_TOOLS "Enable/disable building of extra tools" OFF)
 
+find_package(Boost REQUIRED filesystem iostreams regex system)
+
 add_library(oink
     # Core files
     src/game.cpp
@@ -58,13 +60,11 @@ add_library(oink
     src/ptl.cpp
     src/dtl.cpp
 )
-find_package(Boost COMPONENTS iostreams)
-target_link_libraries(oink pthread ${Boost_LIBRARIES})
-target_include_directories(oink PUBLIC ${Boost_INCLUDE_DIRS})
+target_link_libraries(oink pthread)
 
-add_executable(solve src/tools/solve.cpp)
+add_executable(solve src/tools/solve.cpp src/tools/getrss.c)
 set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
-target_link_libraries(solve oink)
+target_link_libraries(solve oink ${Boost_LIBRARIES})
 
 if(BUILD_EXTRA_TOOLS)
     add_executable(nudge src/tools/nudge.cpp)
