@@ -23,12 +23,9 @@
 #include <map>
 #include <random>
 
-//#include <bitset.hpp>
-#include <boost/dynamic_bitset.hpp>
+#include <bitset.hpp>
 
 namespace pg {
-
-typedef boost::dynamic_bitset<unsigned long long> bitset;
 
 /**
  * The main class holding a Parity game.
