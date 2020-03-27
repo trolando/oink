@@ -40,9 +40,9 @@ namespace pg {
 
 Solvers::Solvers()
 {
-    add("zlkq", "QPT Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKQSolver(oink, game); });
+    add("zlkq", "qpt Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKQSolver(oink, game); });
     add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKSolver(oink, game); });
-    add("uzlk", "unoptimized Zielonka", 1, [] (Oink* oink, Game* game) { return new UnoptimizedZLKSolver(oink, game); });
+    add("uzlk", "unoptimized Zielonka", 0, [] (Oink* oink, Game* game) { return new UnoptimizedZLKSolver(oink, game); });
     add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game) { return new NPPSolver(oink, game); });
     add("pp", "priority promotion PP", 0, [] (Oink* oink, Game* game) { return new PPSolver(oink, game); });
     add("ppp", "priority promotion PP+", 0, [] (Oink* oink, Game* game) { return new PPPSolver(oink, game); });
@@ -53,7 +53,7 @@ Solvers::Solvers()
     add("psi", "parallel strategy improvement", 1, [] (Oink* oink, Game* game) { return new PSISolver(oink, game); });
     add("spm", "accelerated small progress measures", 0, [] (Oink* oink, Game* game) { return new SPMSolver(oink, game); });
     add("tspm", "traditional small progress measures", 0, [] (Oink* oink, Game* game) { return new TSPMSolver(oink, game); });
-    add("mspm", "Maciej' modified small progress measures", 0, [] (Oink* oink, Game* game) { return new MSPMSolver(oink, game); });
+    //add("mspm", "Maciej' modified small progress measures", 0, [] (Oink* oink, Game* game) { return new MSPMSolver(oink, game); });
     add("sspm", "succinct small progress measures", 0, [] (Oink* oink, Game* game) { return new SSPMSolver(oink, game); });
     add("bsspm", "bounded succinct small progress measures", 0, [] (Oink* oink, Game* game) { return new BoundedSSPMSolver(oink, game); });
     add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game) { return new QPTSolver(oink, game); });
@@ -61,8 +61,9 @@ Solvers::Solvers()
     add("ptl", "progressive tangle learning", 0, [] (Oink* oink, Game* game) { return new PTLSolver(oink, game); });
     add("spptl", "single-player progressive tangle learning", 0, [] (Oink* oink, Game* game) { return new SPPTLSolver(oink, game); });
     add("dtl", "distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new DTLSolver(oink, game); });
+    add("idtl", "interleaved distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new IDTLSolver(oink, game); });
     add("rtl", "recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new RTLSolver(oink, game); });
-    add("ortl", "one-sided recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new ORTLSolver(oink, game); });
+    //add("ortl", "one-sided recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new ORTLSolver(oink, game); });
     add("tl", "tangle learning", 0, [] (Oink* oink, Game* game) { return new TLSolver(oink, game); });
     add("atl", "alternating tangle learning", 0, [] (Oink* oink, Game* game) { return new ATLSolver(oink, game); });
     add("otftl", "on-the-fly tangle learning", 0, [] (Oink* oink, Game* game) { return new OTFTLSolver(oink, game); });
