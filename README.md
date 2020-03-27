@@ -44,6 +44,8 @@ SSPM | Quasi-polynomial time succinct progress measures
 QPT  | Quasi-polynomial time ordered progress measures
 ZLKQ | Quasi-polynomial time recursive algorithm
 FPI  | Distraction-based Fixpoint Iteration
+FPJ  | Distraction-based Fixpoint Iteration using Justifications
+FPJG | Distraction-based Fixpoint Iteration using Greedy Justifications
 TL   | Tangle learning (basic)
 ATL  | Tangle learning (alternating)
 PTL  | Progressive tangle learning
@@ -55,6 +57,7 @@ See the TACAS 2018 paper for more details on most of the implemented algorithms.
 * The SSPM succinct progress measures algorithm is by Jurdzinski and Lazic, 2017.
 * The QPT recursive algorithm is based on work by Pawel Parys and the follow-up work by Karoliina Lehtinen, Sven Schewe, Dominik Wojtczak.
 * FPI is the distraction-based fixpoint algorithm by Tom van Dijk and Bob Rubbens.
+* FPJ and FPJG are adaptations of FPI and the Justifications algorithm by Ruben Lapauw et al.
 * All tangle learning algorithms are proposed by Tom van Dijk (me).
 
 The parallel algorithms use the work-stealing framework Lace.

@@ -49,6 +49,7 @@ add_library(oink
     src/dp.cpp
     src/rrdp.cpp
     src/fpi.cpp
+    src/fpj.cpp
     src/psi.cpp
     src/spm.cpp
     src/mspm.cpp
@@ -94,6 +95,8 @@ add_test(NAME TestSolverSPM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tes
 add_test(NAME TestSolverZLKQs COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkq -w -1)
 add_test(NAME TestSolverZLKQp COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkq -w 0)
 add_test(NAME TestSolverFPI COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi)
+add_test(NAME TestSolverFPJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpj)
+add_test(NAME TestSolverFPJG COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjg)
 add_test(NAME TestSolverTSPM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tspm)
 #add_test(NAME TestSolverMSPM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --mspm)
 add_test(NAME TestSolverSSPM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --sspm)
