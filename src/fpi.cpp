@@ -47,29 +47,16 @@ TASK_3(int, update_block_rec, FPISolver*, solver, int, i, int, n)
     }
 }
 
-VOID_TASK_4(freeze_reset_rec, FPISolver*, solver, int, i, int, n, int, p)
+VOID_TASK_4(freeze_thaw_reset_rec, FPISolver*, solver, int, i, int, n, int, p)
 {
     if (n>128) {
         // because dynamic bitset is not thread safe, work in blocks of 64...
         int N = (n/128)*64;
-        SPAWN(freeze_reset_rec, solver, i+N, n-N, p);
-        CALL(freeze_reset_rec, solver, i, N, p);
-        SYNC(freeze_reset_rec);
+        SPAWN(freeze_thaw_reset_rec, solver, i+N, n-N, p);
+        CALL(freeze_thaw_reset_rec, solver, i, N, p);
+        SYNC(freeze_thaw_reset_rec);
     } else {
-        solver->freezeOrReset(i, n, p);
-    }
-}
-
-VOID_TASK_4(thaw_rec, FPISolver*, solver, int, i, int, n, int, p)
-{
-    if (n>128) {
-        // because dynamic bitset is not thread safe, work in blocks of 64...
-        int N = (n/128)*64;
-        SPAWN(thaw_rec, solver, i+N, n-N, p);
-        CALL(thaw_rec, solver, i, N, p);
-        SYNC(thaw_rec);
-    } else {
-        solver->thaw(i, n, p);
+        solver->freezeThawReset(i, n, p);
     }
 }
 
@@ -126,16 +113,29 @@ FPISolver::updateBlock(int i, int n)
     return res;
 }
 
+/**
+ * Called after a vertex of priority p is flipped
+ * Check for vertex i until (i+n) to update.
+ */
 void
-FPISolver::freezeOrReset(int i, int n, int p)
+FPISolver::freezeThawReset(int i, int n, int p)
 {
     const int pl = p&1;
     for (; n != 0; i++, n--) {
         if (disabled[i]) continue; // not in the subgame
-        if (ANTIFREEZE==0 and frozen[i]) continue; // already frozen
- 
-        int winner_i = parity[i] ^ distraction[i];
-        if (winner_i != pl) {
+        if (ANTIFREEZE==0 and frozen[i] >= p) continue; // already frozen
+
+        if (frozen[i]) {
+            if ((frozen[i]&1) == pl) {
+                frozen[i] = p;
+            } else {
+                frozen[i] = 0;
+                distraction[i] = 0;
+#ifndef NDEBUG
+                if (trace >= 2) logger << "\033[38;5;202;1mthaw\033[m " << label_vertex(i) << std::endl;
+#endif
+            }
+        } else if ((parity[i] ^ distraction[i]) != pl) {
             frozen[i] = p;
 #ifndef NDEBUG
             if (trace >= 2) logger << "\033[38;5;51;1mfreeze\033[m " << label_vertex(i) << " at priority " << p << std::endl;
@@ -144,34 +144,6 @@ FPISolver::freezeOrReset(int i, int n, int p)
             distraction[i] = 0;
 #ifndef NDEBUG
             if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(i) << std::endl;
-#endif
-        }
-    }
-}
-
-void
-FPISolver::justReset(int i, int n, int p)
-{
-    const int pl = p&1;
-    for (; n != 0; i++, n--) {
-        if (disabled[i]) continue; // not in the subgame
-        
-        if (parity[i] != pl and distraction[i]) {
-            distraction[i] = 0;
-#ifndef NDEBUG
-            if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(i) << std::endl;
-#endif
-        }
-    }
-}
-void
-FPISolver::thaw(int i, int n, int p)
-{
-    for (; n != 0; i++, n--) {
-        if (frozen[i] and frozen[i] <= p) {
-            frozen[i] = 0;
-#ifndef NDEBUG
-            if (trace >= 2) logger << "\033[38;5;202;1mthaw\033[m " << label_vertex(i) << std::endl;
 #endif
         }
     }
@@ -225,7 +197,7 @@ FPISolver::runPar()
         } else if (CALL(update_block_rec, this, p_start[p], p_len[p])) {
             // something changed, freeze and reset
             if (p != 0) {
-                CALL(freeze_reset_rec, this, 0, p_start[p], p);
+                CALL(freeze_thaw_reset_rec, this, 0, p_start[p], p);
                 p = 0;
             }
             iterations++;
@@ -233,8 +205,7 @@ FPISolver::runPar()
             if (trace >= 2) logger << "restarting after finding distractions" << std::endl;
 #endif
         } else {
-            // nothing changed, thaw and continue
-            if (p != 0) CALL(thaw_rec, this, 0, p_start[p], p);
+            // nothing changed
             p++;
         }
     }
@@ -271,10 +242,6 @@ FPISolver::runSeq2()
     int *p_len = new int[d+1];
     parity.resize(nodecount());
 
-#ifndef NDEBUG
-    bitset ever(nodecount());
-#endif
-
     /**
      * Initialize p_start, p_len, parity
      */
@@ -299,25 +266,21 @@ FPISolver::runSeq2()
     iterations = 1;
     int p = 0;
     while (p <= d) {
-        if (p_len[p] == 0) {
+        if (p_len[p] == 0 or updateBlock(p_start[p], p_len[p]) == 0) {
             p++;
-        } else if (updateBlock(p_start[p], p_len[p])) { // update Z_p
-            if (p != 0) {
-                freezeOrReset(0, p_start[p]/*+p_len[p]*/, p);
-                p = 0;
-            }
-            iterations++;
-#ifndef NDEBUG
-            if (trace >= 2) logger << "restarting after finding distractions" << std::endl;
-#endif
-        } else {
-#ifndef NDEBUG
-            ever |= distraction;
-#endif
-            // nothing changed, thaw and continue
-            if (p != 0) thaw(0, p_start[p]/*+p_len[p]*/, p);
-            p++;
+            continue;
+        } 
+
+        if (p != 0) {
+            // actually we don't freeze at priority 0 :-)
+            freezeThawReset(0, p_start[p] /* +p_len[p] */, p);
+            p = 0;
         }
+
+        iterations++;
+#ifndef NDEBUG
+        if (trace >= 2) logger << "restarting after finding distractions" << std::endl;
+#endif
     }
 
     /**
@@ -343,10 +306,8 @@ FPISolver::runSeq2()
     if (trace) {
         logger << "Distractions:\n";
         for (int v=0; v<nodecount(); v++) {
-            if (ever[v]) {
-                if (distraction[v]) logger << "\033[1;38:5:124m" << label_vertex(v) << "\033[m";
-                else logger << "\033[1;38:5:208m" << label_vertex(v) << "\033[m";
-            } else logger << "\033[1;38:5:34m" << label_vertex(v) << "\033[m";
+            if (distraction[v]) logger << "\033[1;38:5:124m" << label_vertex(v) << "\033[m";
+            else logger << "\033[1;38:5:34m" << label_vertex(v) << "\033[m";
             logger << std::endl;
         }
     }

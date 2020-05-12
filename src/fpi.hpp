@@ -31,9 +31,7 @@ public:
     virtual ~FPISolver();
 
     int updateBlock(int i, int n);
-    void freezeOrReset(int i, int n, int p);
-    void justReset(int i, int n, int p);
-    void thaw(int i, int n, int p);
+    void freezeThawReset(int i, int n, int p);
     void runPar(void);
     void runSeq(void);
     void runSeq2(void);
@@ -46,8 +44,7 @@ public:
     bitset ever;
 
     friend int update_block_rec_WORK(_WorkerP*, _Task*, int, FPISolver*, int, int);
-    friend void freeze_reset_rec_WORK(_WorkerP*, _Task*, int, FPISolver*, int, int, int);
-    friend void thaw_rec_WORK(_WorkerP*, _Task*, int, FPISolver*, int, int, int);
+    friend void freeze_thaw_reset_rec_WORK(_WorkerP*, _Task*, int, FPISolver*, int, int, int);
 
     virtual void run();
 };
