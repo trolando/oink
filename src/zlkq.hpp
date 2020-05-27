@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Tom van Dijk, University of Twente
+ * Copyright 2019-2020 Tom van Dijk, University of Twente
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,11 +25,11 @@
 namespace pg {
 
 /**
- * This is an implementation of Pawel Parys's Zielonka variant
- * as presented by himself on his website.
- * https://www.mimuw.edu.pl/~parys/publications/2018-parity-algorithm.pdf
- *
+ * This is an implementation of the universal recursive algorithm run on a quasi-polynomial tree
+ * The original version was based on https://www.mimuw.edu.pl/~parys/publications/2018-parity-algorithm.pdf
  * I modified the algorithm to produce a strategy as well.
+ * I changed it with the optimizations from Lehtinen et al (arXiv)
+ * Furthermore I added some optimizations, i.e., shortcuts in the tree
  */
 
 class ZLKQSolver : public Solver
@@ -44,16 +44,12 @@ protected:
     unsigned long long iterations = 0;
 
     uintqueue Q;
-    uintqueue Hs;
     int *str;
 
     bitset W0, W1; // current approximation of winning areas
 
     inline void attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y);
     void solve(bitset &Subgame, int vtop, int pr, int pe, int po);
-
-    // version of the Liverpools
-    void solve2(bitset &Subgame, int vtop, int pr, int pl, int pe, int po);
 };
 
 }
