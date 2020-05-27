@@ -22,6 +22,13 @@ ENDIF(NOT CMAKE_BUILD_TYPE)
 message(STATUS "OS: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID}")
 
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    # require at least gcc 4.9
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
+        message(FATAL_ERROR "GCC version must be at least 4.9!  " ${CMAKE_CXX_COMPILER_VERSION})
+    endif()
+endif()
+
 include_directories(src)
 include(GNUInstallDirs)
 
