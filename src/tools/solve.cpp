@@ -204,7 +204,6 @@ int main(int argc, char **argv)
         ("compress", "Compress game")
         ("no-single", "Do not solve single-parity games during preprocessing")
         ("no-loops", "Do not remove self-loops during preprocessing (default behavior)")
-        ("loops", "Remove self-loops during preprocessing")
         ("no-wcwc", "Do not solve winner-controlled winning cycles during preprocessing")
         /* Solving */
         ("scc", "Iteratively solve bottom SCCs")
@@ -255,11 +254,11 @@ int main(int argc, char **argv)
             if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
             std::ifstream file(filename, std::ios_base::binary);
             in.push(file);
-            pg.parse_pgsolver(in, options.count("loops") != 0);
+            pg.parse_pgsolver(in, options.count("no-loops") == 0);
             pg.build_arrays();
             file.close();
         } else {
-            pg.parse_pgsolver(std::cin, options.count("loops") != 0);
+            pg.parse_pgsolver(std::cin, options.count("no-loops") == 0);
             pg.build_arrays();
         }
         out << "parity game with " << pg.nodecount() << " nodes and " << pg.edgecount() << " edges." << std::endl;
@@ -320,7 +319,6 @@ int main(int argc, char **argv)
     else if (options.count("compress")) en.setCompress();
     else en.setRenumber();
     if (options.count("no-single")) en.setSolveSingle(false);
-    if (options.count("loops")) en.setRemoveLoops(true);
     if (options.count("no-loops")) en.setRemoveLoops(false);
     if (options.count("no-wcwc")) en.setRemoveWCWC(false);
 
