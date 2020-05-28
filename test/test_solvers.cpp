@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <csignal>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -55,6 +56,30 @@ wctime()
 }
 
 
+/*------------------------------------------------------------------------*/
+
+volatile bool quit = false;
+
+static void (*sig_int_handler)(int);
+
+static void
+catchsig(int sig)
+{
+    if (sig == SIGINT) {
+        (void)signal(SIGINT, sig_int_handler);
+        quit = true;
+    }
+}
+
+static void
+setsighandlers(void)
+{
+    sig_int_handler = signal(SIGINT, catchsig);
+}
+
+/*------------------------------------------------------------------------*/
+
+
 int
 test_solver(Game &game, int solverid, double &time, std::ostream &log)
 {
@@ -64,7 +89,7 @@ test_solver(Game &game, int solverid, double &time, std::ostream &log)
 
     // solve a copy
     Game copy(game);
-    Oink solver(copy, opt_trace == -1 ? log : std::cout);
+    Oink solver(copy, log);
     solver.setRenumber(); // default
     if (opt_inflate) solver.setInflate();
     if (opt_compress) solver.setCompress();
@@ -80,7 +105,7 @@ test_solver(Game &game, int solverid, double &time, std::ostream &log)
     try {
         solver.run();
     } catch (pg::Error &err) {
-        log << std::endl << "solver error: " << err.what() << std::endl;
+        log << "solver error: " << err.what() << std::endl;
         return 1;
     }
     time = wctime() - begin;
@@ -91,7 +116,7 @@ test_solver(Game &game, int solverid, double &time, std::ostream &log)
         Verifier v(&game, log);
         v.verify(true, true, true);
     } catch (const char *err) {
-        log << std::endl << "verification error: " << err << std::endl;
+        log << "verification error: " << err << std::endl;
         return 2;
     }
 
@@ -188,6 +213,8 @@ main(int argc, char **argv)
         std::cout << std::endl;
     }
 
+    setsighandlers();
+
     int final_res = 0;
     std::stringstream log;
     double time;
@@ -220,10 +247,11 @@ main(int argc, char **argv)
             io::filtering_istream in;
             if (boost::algorithm::ends_with(filename, ".bz2")) in.push(io::bzip2_decompressor());
             if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
-            std::ifstream inp(filename, std::ios_base::binary);
+            std::ifstream inp(cp.c_str(), std::ios_base::binary);
             in.push(inp);
             try {
-                Game game(in);
+                Game game;
+                game.parse_pgsolver(in, opt_loops);
                 game.build_arrays();
                 inp.close();
                 total++;
@@ -231,7 +259,7 @@ main(int argc, char **argv)
                     if (options.count("all") or options.count(solvers.label(id))) {
                         std::cout << std::flush;
                         log.str("");
-                        int res = test_solver(game, id, time, log);
+                        int res = test_solver(game, id, time, opt_trace == -1 ? log : std::cout);
                         if (res == 0) {
                             sgood[id]++;
                             good++;
@@ -246,6 +274,7 @@ main(int argc, char **argv)
                 }
                 std::cout << std::endl;
             } catch (const char *s) {
+                std::cout << s << std::endl;
                 std::cout << "not a parity game input?!" << std::endl;
             }
         }
@@ -272,7 +301,7 @@ main(int argc, char **argv)
         std::mt19937 generator(seriesseed);
         Game g;
 
-        for (int i=0; i<n; i++) {
+        for (int i=0; i<n && !quit; i++) {
             unsigned int seed;
             if (n == 1 and options.count("seed")) seed = options["seed"].as<unsigned int>();
             else seed = generator();
@@ -286,7 +315,7 @@ main(int argc, char **argv)
                 if (options.count("all") or options.count(solvers.label(id))) {
                     std::cout << std::flush;
                     log.str("");
-                    int res = test_solver(g, id, time, log);
+                    int res = test_solver(g, id, time, opt_trace == -1 ? log : std::cout);
                     if (res == 0) {
                         sgood[id]++;
                         good++;
