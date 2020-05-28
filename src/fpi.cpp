@@ -21,8 +21,6 @@
 #include "fpi.hpp"
 #include "uintqueue.hpp"
 
-#define ANTIFREEZE 0
-
 namespace pg {
 
 FPISolver::FPISolver(Oink *oink, Game *game) : Solver(oink, game)
@@ -66,7 +64,7 @@ FPISolver::updateBlock(int i, int n)
     int res = 0;
     for (; n != 0; i++, n--) {
         if (disabled[i]) continue;
-        if (ANTIFREEZE == 0 and frozen[i]) continue;
+        if (frozen[i]) continue;
         if (distraction[i]) continue;
 
         // update whether current vertex <i> is a distraction by computing the one step winner
@@ -82,7 +80,7 @@ FPISolver::updateBlock(int i, int n)
                     // good for player Even
                     onestep_winner = 0;
                     // and set the strategy
-                    if (!frozen[i]) strategy[i] = to;
+                    strategy[i] = to;
                     break;
                 }
             }
@@ -97,7 +95,7 @@ FPISolver::updateBlock(int i, int n)
                     // good for player Odd
                     onestep_winner = 1;
                     // and set the strategy
-                    if (!frozen[i]) strategy[i] = to;
+                    strategy[i] = to;
                     break;
                 }
             }
@@ -123,7 +121,7 @@ FPISolver::freezeThawReset(int i, int n, int p)
     const int pl = p&1;
     for (; n != 0; i++, n--) {
         if (disabled[i]) continue; // not in the subgame
-        if (ANTIFREEZE==0 and frozen[i] >= p) continue; // already frozen
+        if (frozen[i] >= p) continue; // already frozen
 
         if (frozen[i]) {
             if ((frozen[i]&1) == pl) {
@@ -135,15 +133,22 @@ FPISolver::freezeThawReset(int i, int n, int p)
                 if (trace >= 2) logger << "\033[38;5;202;1mthaw\033[m " << label_vertex(i) << std::endl;
 #endif
             }
-        } else if ((parity[i] ^ distraction[i]) != pl) {
+        } else if (distraction[i]) {
+            if (parity[i] == pl) {
+                frozen[i] = p;
+#ifndef NDEBUG
+                if (trace >= 2) logger << "\033[38;5;51;1mfreeze\033[m " << label_vertex(i) << " at priority " << p << std::endl;
+#endif
+            } else {
+                distraction[i] = 0;
+#ifndef NDEBUG
+                if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(i) << std::endl;
+#endif
+            }
+        } else if (parity[i] != pl) {
             frozen[i] = p;
 #ifndef NDEBUG
             if (trace >= 2) logger << "\033[38;5;51;1mfreeze\033[m " << label_vertex(i) << " at priority " << p << std::endl;
-#endif
-        } else if (distraction[i]) {
-            distraction[i] = 0;
-#ifndef NDEBUG
-            if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(i) << std::endl;
 #endif
         }
     }
@@ -227,7 +232,7 @@ FPISolver::runPar()
 }
 
 void
-FPISolver::runSeq2()
+FPISolver::runSeq()
 {
     /**
      * Allocate and initialize data structures
@@ -315,168 +320,12 @@ FPISolver::runSeq2()
 }
 
 void
-FPISolver::runSeq()
-{
-    /**
-     * Allocate and initialize data structures
-     */
-
-    bitset distraction(nodecount()); // the main data structure: is a vertex a distraction or not?
-
-    int *strategy = new int[nodecount()]; // the current strategy for winning the game
-    memset(strategy, -1, sizeof(int[nodecount()])); // initially set no strategy
-
-    int *frozen = new int[nodecount()]; // records for every vertex at which level it is frozen (or 0 if not frozen)
-    memset(frozen, 0, sizeof(int[nodecount()])); // initially no vertex is frozen (we don't freeze at level 0)
-
-    bitset parity(nodecount()); // optimization: precompute the parity of every vertex's priority
-    for (int v=0; v<nodecount(); v++) parity[v] = priority(v)&1;
-
-    unsigned int iterations = 0; // record the number of iterations that we needed
-    for (;;) {
-        iterations++;
-
-        /**
-         * We update distractions from low to high.
-         * We process per block of priorities.
-         * When a block changes, this means we found more distractions.
-         * We then freeze all (lower) vertices that the opponent (who wins the distraction) wins
-         *   and reset all (lower) vertices that the current player <cur_pl> wins
-         * When the block no longer changes, we thaw the frozen vertices of the current block
-         *
-         * The algorithm refines a partition into two winning regions.
-         * FPI terminates when the winning regions are inductive, i.e.,
-         * no player escapes in one step.
-         */
-        bool changed = false; // did the current block change (new distractions)
-        int cur_pr = priority(0); // priority of the current block
-        int cur_pl = cur_pr & 1;
-        int i;
-
-        for (i=0; i<nodecount();i++) {
-            if (disabled[i]) continue;
-            // if (priority(i) != cur_pr) { // no on-the-fly compression
-            if (parity[i] != cur_pl) { // on-the-fly compression ((like Verver's Zielonka trick))
-                // new block!
-                if (changed) {
-                    // break the loop to handle the end of a block
-                    break;
-                } else {
-                    // the previous block did not change, continue with new block
-                    cur_pr = priority(i);
-                    cur_pl = cur_pr & 1;
-                    // also thaw all vertices below the new <cur_pr>
-                    if (cur_pr > 1) {
-                        for (int v=0; v<i; v++) {
-                            if (frozen[v] and frozen[v] < cur_pr) {
-                                frozen[v] = 0;
-#ifndef NDEBUG
-                                if (trace >= 2) logger << "\033[38;5;202;1mthaw\033[m " << label_vertex(v) << std::endl;
-#endif
-                            }
-                        }
-                    }
-                }
-            }
-            if (!frozen[i] and !distraction[i]) {
-                // update whether current vertex <i> is a distraction by computing the one step winner
-                int onestep_winner;
-                if (owner(i) == 0) {
-                    // see if player Even can go to a vertex currently good for Even
-                    onestep_winner = 1;
-                    for (auto curedge = outs(i); *curedge != -1; curedge++) {
-                        int to = *curedge;
-                        if (disabled[to]) continue;
-                        const int winner_to = parity[to] ^ distraction[to];
-                        if (winner_to == 0) {
-                            // good for player Even
-                            onestep_winner = 0;
-                            // and set the strategy
-                            strategy[i] = to;
-                            break;
-                        }
-                    }
-                } else {
-                    // see if player Odd can go to a vertex currently good for Odd
-                    onestep_winner = 0;
-                    for (auto curedge = outs(i); *curedge != -1; curedge++) {
-                        int to = *curedge;
-                        if (disabled[to]) continue;
-                        const int winner_to = parity[to] ^ distraction[to];
-                        if (winner_to == 1) {
-                            // good for player Odd
-                            onestep_winner = 1;
-                            // and set the strategy
-                            strategy[i] = to;
-                            break;
-                        }
-                    }
-                }
-                if (cur_pl != onestep_winner) {
-                    distraction[i] = true;
-                    changed = true;
-#ifndef NDEBUG
-                    if (trace >= 2) logger << "vertex " << label_vertex(i) << " is now a distraction (won by " << onestep_winner << ")" << std::endl;
-#endif
-                }
-            }
-        }
-
-        /**
-         * If we are here, either we are at the end of a changed block
-         * or we are at the end of the entire game (highest block, possibly unchanged)
-         */
-
-        if (!changed) break; // nothing changed, we're done
-
-        // we found distractions, so we freeze or reset the lower game
-        // (we can safely freeze also the vertices of the block)
-        for (int v=0; v<i; v++) {
-            if (disabled[v]) continue; // not in the subgame
-            if (frozen[v]) continue; // already frozen
-            int winner_v = parity[v] ^ distraction[v];
-            if (winner_v != cur_pl) {
-                // freeze (monotonically increases, btw)
-                frozen[v] = cur_pr;
-#ifndef NDEBUG
-                if (trace >= 2) logger << "\033[38;5;51;1mfreeze\033[m " << label_vertex(v) << " at priority " << cur_pr << std::endl;
-#endif
-            } else {
-                // reset
-#ifndef NDEBUG
-                if (trace >= 2 and distraction[v]) logger << "\033[31;1mresetting\033[m " << label_vertex(v) << std::endl;
-#endif
-                if (distraction[v]) distraction[v] = 0;
-            }
-        }
-
-#ifndef NDEBUG
-        if (trace) logger << "restarting after finding distractions of prio " << cur_pr << std::endl;
-#endif
-    }
-
-    // done
-    for (int v=0; v<nodecount(); v++) {
-        if (disabled[v]) continue;
-        const int winner = parity[v] ^ distraction[v];
-        oink->solve(v, winner, winner == owner(v) ? strategy[v] : -1);
-    }
-
-    // free allocated data structures
-    delete[] strategy;
-    delete[] frozen;
-
-    logger << "solved with " << iterations << " iterations." << std::endl;
-}
-
-
-void
 FPISolver::run()
 {
     if (lace_workers() != 0) {
         runPar();
     } else {
-        runSeq2();
+        runSeq();
     }
 }
 

@@ -34,14 +34,12 @@ public:
     void freezeThawReset(int i, int n, int p);
     void runPar(void);
     void runSeq(void);
-    void runSeq2(void);
 
     unsigned long long iterations = 0;
     int *frozen;
     int *strategy;
     bitset parity;
     bitset distraction;
-    bitset ever;
 
     friend int update_block_rec_WORK(_WorkerP*, _Task*, int, FPISolver*, int, int);
     friend void freeze_thaw_reset_rec_WORK(_WorkerP*, _Task*, int, FPISolver*, int, int, int);
