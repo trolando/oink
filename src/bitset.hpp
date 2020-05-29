@@ -69,7 +69,7 @@ public:
         _size = newsize;
         _bitssize = (_size+63)/64;
         _bits = new uint64_t[_bitssize];
-        std::fill(_bits, _bits+_bitssize, uint64_t(0));
+        std::fill(_bits, _bits+_bitssize, '\0');
     }
 
     bitset(const bitset &other)
@@ -116,7 +116,7 @@ private:
 public:
     __attribute__((always_inline)) bitset& reset(void)
     {
-        std::fill(_bits, _bits+num_blocks(), uint64_t(0));
+        std::fill(_bits, _bits+num_blocks(), '\0');
         return *this;
     }
 
