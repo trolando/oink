@@ -33,8 +33,6 @@ main(int argc, char **argv)
         game.parse_pgsolver(std::cin);
     }
 
-    game.build_arrays();
-
     if (argc >= 3) {
         std::ofstream file(argv[2]);
         game.write_dot(file);

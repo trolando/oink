@@ -37,7 +37,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
     // ensure the vertices are ordered properly
     game->ensure_sorted();
     // ensure that the arrays are built
-    game->build_arrays();
+    game->build_in_array(false);
 
     const int n_vertices = game->vertexcount();
 

@@ -31,6 +31,7 @@ main(int argc, char** argv)
     int n = std::stoi(argv[1]);
 
     Game game(4*n);
+    game.vec_init();
 
     // generate the Nth game
     for (int i=0; i<n; i++) {
@@ -39,22 +40,22 @@ main(int argc, char** argv)
         game.init_vertex(4*i+2, n+1+i, (n+i)&1);
         game.init_vertex(4*i+3, n+1+i, (n+i)&1);
         // add edges within the group
-        game.add_edge(4*i,   4*i+1);
-        game.add_edge(4*i+1, 4*i);
-        game.add_edge(4*i+2, 4*i+3);
-        game.add_edge(4*i+3, 4*i+2);
-        game.add_edge(4*i,   4*i+2);
-        game.add_edge(4*i+1, 4*i+3);
+        game.vec_add_edge(4*i,   4*i+1);
+        game.vec_add_edge(4*i+1, 4*i);
+        game.vec_add_edge(4*i+2, 4*i+3);
+        game.vec_add_edge(4*i+3, 4*i+2);
+        game.vec_add_edge(4*i,   4*i+2);
+        game.vec_add_edge(4*i+1, 4*i+3);
         // add edges to the next group
         if (i == (n-1)) {
-            game.add_edge(4*i+2, 0);
-            game.add_edge(4*i+3, 1);
+            game.vec_add_edge(4*i+2, 0);
+            game.vec_add_edge(4*i+3, 1);
         } else {
-            game.add_edge(4*i+2, 4*i+4);
-            game.add_edge(4*i+3, 4*i+5);
+            game.vec_add_edge(4*i+2, 4*i+4);
+            game.vec_add_edge(4*i+3, 4*i+5);
         }
     }
 
-    game.build_arrays();
+    game.vec_finish();
     game.write_pgsolver(std::cout);
 }

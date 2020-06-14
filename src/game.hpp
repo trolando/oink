@@ -30,25 +30,33 @@ namespace pg {
 /**
  * The main class holding a Parity game.
  *
- * Internally, two ways exist to represent the edges.
- * - as vector: each vertex has a std::vector of integers.
- * - as array: we store all edges in the game in a single array, seperated by a -1 value.
+ * Internally, the implementation leverages virtual memory vs real memory.
+ * We overallocate virtual memory, but use less actual memory.
  *
- * All methods use the array form, except add_edge and remove_edge.
+ * Edges are stored consecutively in a single array, ending with th evalue -1.
+ * For game solving, the build_in_array method creates the reverse array.
  *
- * Usage scenario for making a game:
+ * There is a special vector representation of edges to allow for "random-order" modification
+ * or game-building:
+ * - vec_init() initializes the vectors with the current edges
+ * - vec_add_edge, vec_remove_edge, vec_has_edge to manipulate the edges
+ * - vec_finish() rebuilds the array representation
+ *
+ * Usage scenario for making a game (random order):
  * - initialize with constructor Game(count) or using init_game(count)
- * - now only the vector representation is available
- * - use init_vertex, add_edge to make the game
- * - then use build_arrays() to convert vector to array representation
+ * - use vec_init
+ * - use init_vertex, vec_add_edge to make the game
+ * - use vec_finish
+ * - use sort, renumber, write_pgsolver, et
  *
- * Usage scenario for changing a game:
- * - use build_vectors() to convert array to vector representation
- * - use add_edge and remove_edge to change the edges
- * - use rebuild_arrays() to convert vector to array representation
- *
- * Notice that build_arrays() only converts vector to array representation if none exists yet.
- * So use rebuild_arrays() to update the array representation after a change.
+ * Usage scenario for making a game (streaming):
+ * - initialize with some number of vertices (e.g. 1000)
+ * - use init_vertex to initialize the vertex
+ * - use e_start to start adding successors of the vertex
+ * - use e_add to add each successor
+ * - use e_finish to finish adding successors of the vertex
+ * - use v_sizeup (or v_resize) to increase the number of vertices if needed
+ * - use v_resize to set the final number of vertices
  */
 
 class Game
@@ -62,22 +70,14 @@ public:
     /**
      * Construct a new parity game for <count> vertices.
      */
-    Game(int count);
+    Game(int count, int ecount = -1);
 
     /**
-     * Construct a copy of an existing parity game.
+     * Construct a deep clone of an existing parity game.
+     * Does not clone the vector representation.
+     * Does not clone the <in> array.
      */
     Game(const Game& other);
-
-    /**
-     * Construct a subgame of a game.
-     */
-    Game(const Game& other, bitset mask);
-
-    /**
-     * Parse a pgsolver game.
-     */
-    Game(std::istream &inp, bool removeBadLoops=true);
 
     /**
      * Deconstructor.
@@ -123,27 +123,13 @@ public:
     void set_label(int vertex, std::string label);
 
     /**
-     * Add an edge from <from> to <to>.
-     * Returns true if the edge was added or false if it already existed.
-     *
-     * Important: this manipulates the vector representation only.
-     * After adding/removing edges, call rebuild_arrays().
+     * For vector-based (random order) manipulation of edges
      */
-    bool add_edge(int from, int to);
-
-    /**
-     * Remove an edge from <from> to <to>.
-     * Returns true if the edge was removed or false if it did not exist.
-     *
-     * Important: this manipulates the vector representation only.
-     * After adding/removing edges, call rebuild_arrays().
-     */
-    bool remove_edge(int from, int to);
-
-    /**
-     * Check if the edge from <from> to <to> exists, using the vector representation.
-     */
-    bool has_edge_vec(int from, int to);
+    void vec_init(void); // initialize for manipulating vertices using the vectors
+    void vec_finish(void); // finalize
+    bool vec_add_edge(int from, int to); // return true if changed
+    bool vec_remove_edge(int from, int to); // return true if changed
+    bool vec_has_edge(int from, int to); // return true if exists
 
     /**
      * Check if a certain edge exists.
@@ -234,13 +220,23 @@ public:
     void minmax(void);
 
     /**
-     * Fix the game, no more changes.
+     * (re)build the <in> array for PG solving.
      */
-    void build_arrays(void); // build the out/in arrays that are not build
-    void build_vectors(void); // if we never built the vector, do it now
-    void rebuild_arrays(void); // force rebuilding from vectors
-    void rebuild_vectors(void); // force rebuilding from arrays
-    bool test_consistency(void); // test if the two representations agree
+    void build_in_array(bool rebuild=false);
+
+    /**
+     * Dynamic size methods.
+     */
+    void e_sizeup(void);
+    void v_sizeup(void);
+    void v_resize(size_t newsize); // does not do cleaning up..?
+
+    /**
+     * Edge making helpers.
+     */
+    void e_start(int source);
+    void e_add(int source, int target);
+    void e_finish(void);
 
     /**
      * Return the number of vertices.
@@ -267,6 +263,7 @@ public:
      * Create a new Game of the subgame of the vertices given in <selection>.
      */
     Game *extract_subgame(std::vector<int> &selection);
+    Game *extract_subgame(bitset mask);
 
     /**
      * Reset <solved>, <winner> and <strategy>.
@@ -307,7 +304,7 @@ public:
     /**
      * Get the "real" label of a vertex
      */
-    inline std::string& rawlabel(const int vertex) const
+    inline std::string* rawlabel(const int vertex) const
     {
         return _label[vertex];
     }
@@ -356,14 +353,9 @@ public:
         return inedges() + firstin(vertex);
     }
 
-    /*inline auto out_iter(const int vertex) const
-    {
-        return out[vertex].cbegin();
-    }*/
-
     inline const std::vector<int> outvec(const int vertex) const
     {
-        return out[vertex];
+        return _outvec[vertex];
     }
 
     class _label_vertex;
@@ -387,21 +379,22 @@ private:
     int n_edges;           // number of edges
     int *_priority;        // priority of each vertex
     bitset _owner;         // owner of each vertex (1 for odd, 0 for even)
-    std::string *_label;   // (optional) vertex labels
-
-    std::vector<int> *out; // outgoing edges as vector
+    std::string **_label;  // (optional) vertex labels
 
     int *_outedges;        // outgoing edges as array
     int *_firstouts;       // first outgoing edge of each vertex
     int *_outcount;        // outgoing edge count of each vertex
 
-    int *_inedges;
-    int *_firstins;
-    int *_incount;
+    int *_inedges;         // incoming edges as array
+    int *_firstins;        // first incoming edge of each vertex
+    int *_incount;         // incoming edge count of each vertex
+
+    std::vector<int> *_outvec; // outgoing edges as vector
 
     bool is_ordered;       // records if the game is in-order
-    bool is_mmap;          // outgoing edges allocated as virtual memory
-    size_t oe_allocated;   // amount of memory allocated as virtual memory
+    size_t v_allocated;    // number of vertices allocated as virtual memory
+    size_t e_allocated;    // number of edges allocated as virtual memory
+    size_t e_size;         // number of entries used in edge array
 
 public:
     bitset solved;         // set true if vertex solved
@@ -418,9 +411,9 @@ public:
                 if (lv.v == -1) {
                     out << "-1";
                 } else {
-                    std::string& l = lv.g.rawlabel(lv.v);
-                    if (l.empty()) out << lv.v << "/" << lv.g.priority(lv.v);
-                    else out << l;
+                    std::string* l = lv.g.rawlabel(lv.v);
+                    if (l == NULL or l->empty()) out << lv.v << "/" << lv.g.priority(lv.v);
+                    else out << *l;
                 }
                 return out;
             }
@@ -431,8 +424,6 @@ public:
 
 private:
     void unsafe_permute(int *mapping); // apply a reordering
-    void test_vectors_built(void);
-    void test_arrays_built(void);
     
     static std::random_device rd;
     std::mt19937 generator;

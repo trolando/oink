@@ -109,6 +109,7 @@ main(int argc, char** argv)
 
     // generate game
     pg::Game game(n);
+    game.vec_init();
 
     // initialize <n> nodes
     for (int i=0; i<n; i++) game.init_vertex(i, i, rng(0, 1));
@@ -148,7 +149,7 @@ main(int argc, char** argv)
         }
 
         // add the edge
-        if (game.add_edge(from, to)) {
+        if (game.vec_add_edge(from, to)) {
             outcounts[from]++;
             incounts[to]++;
         }
@@ -175,7 +176,7 @@ main(int argc, char** argv)
     }
 
     // write game
-    game.build_arrays();
+    game.vec_finish();
     game.write_pgsolver(cout);
    
     // free arrays

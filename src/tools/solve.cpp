@@ -205,6 +205,7 @@ int main(int argc, char **argv)
         ("no-single", "Do not solve single-parity games during preprocessing")
         ("no-loops", "Do not remove self-loops during preprocessing (default behavior)")
         ("no-wcwc", "Do not solve winner-controlled winning cycles during preprocessing")
+        ("no", "Do not touch the game at all")
         /* Solving */
         ("scc", "Iteratively solve bottom SCCs")
         ("s,solver", "Use given solver (--solvers for info)", cxxopts::value<std::string>())
@@ -254,12 +255,10 @@ int main(int argc, char **argv)
             if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
             std::ifstream file(filename, std::ios_base::binary);
             in.push(file);
-            pg.parse_pgsolver(in, options.count("no-loops") == 0);
-            pg.build_arrays();
+            pg.parse_pgsolver(in, options.count("no-loops") == 0 and options.count("no") == 0);
             file.close();
         } else {
             pg.parse_pgsolver(std::cin, options.count("no-loops") == 0);
-            pg.build_arrays();
         }
         out << "parity game with " << pg.nodecount() << " nodes and " << pg.edgecount() << " edges." << std::endl;
     } catch (const char *err) {
@@ -315,12 +314,13 @@ int main(int argc, char **argv)
     en.setTrace(options.count("t"));
 
     // preprocessing options
+    bool no = options.count("no");
     if (options.count("inflate")) en.setInflate();
     else if (options.count("compress")) en.setCompress();
-    else en.setRenumber();
-    if (options.count("no-single")) en.setSolveSingle(false);
-    if (options.count("no-loops")) en.setRemoveLoops(false);
-    if (options.count("no-wcwc")) en.setRemoveWCWC(false);
+    else if (!no) en.setRenumber();
+    if (no or options.count("no-single")) en.setSolveSingle(false);
+    if (no or options.count("no-loops")) en.setRemoveLoops(false);
+    if (no or options.count("no-wcwc")) en.setRemoveWCWC(false);
 
     // solver
     if (options.count("solver")) {

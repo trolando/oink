@@ -85,7 +85,6 @@ test_solver(Game &game, int solverid, double &time, std::ostream &log)
 {
     game.reset_solution();
     game.ensure_sorted();
-    game.build_arrays();
 
     // solve a copy
     Game copy(game);
@@ -252,7 +251,6 @@ main(int argc, char **argv)
             try {
                 Game game;
                 game.parse_pgsolver(in, opt_loops);
-                game.build_arrays();
                 inp.close();
                 total++;
                 for (unsigned id=0; id<solvers.count(); id++) {

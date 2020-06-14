@@ -34,37 +34,36 @@ Game::Game() : _owner(0), solved(0), winner(0)
     n_edges = 0;
     _priority = NULL;
     _label = NULL;
-    out = NULL;
+    _outvec = NULL;
     _outedges = NULL;
     _firstouts = NULL;
     _outcount = NULL;
-    is_mmap = false;
-    oe_allocated = 0;
     _inedges = NULL;
     _firstins = NULL;
     _incount = NULL;
     is_ordered = true;
+    v_allocated = 0;
+    e_allocated = 0;
+    e_size = 0;
     strategy = NULL;
     set_random_seed(rd());
 }
 
 Game::~Game()
 {
-    if (n_vertices != 0) {
-        delete[] _priority;
-        delete[] _label;
-        delete[] strategy;
+    for (int i=0; i<n_vertices; i++) {
+        if (_label[i]) delete _label[i];
     }
 
-    if (out != NULL) {
-        delete[] out;
-    }
+    munmap(_priority, sizeof(int[v_allocated]));
+    munmap(_label, sizeof(int[v_allocated]));
+    munmap(strategy, sizeof(int[v_allocated]));
+    munmap(_firstouts, sizeof(int[v_allocated]));
+    munmap(_outcount, sizeof(int[v_allocated]));
+    munmap(_outedges, sizeof(int[e_allocated]));
 
-    if (_outedges != NULL) {
-        if (is_mmap) munmap(_outedges, oe_allocated);
-        else delete[] _outedges;
-        delete[] _firstouts;
-        delete[] _outcount;
+    if (_outvec != NULL) {
+        delete[] _outvec;
     }
 
     if (_inedges != NULL) {
@@ -74,221 +73,80 @@ Game::~Game()
     }
 }
 
-Game::Game(int count) : _owner(count), solved(count), winner(count)
+Game::Game(int vcount, int ecount) : _owner(vcount, true), solved(vcount, true), winner(vcount, true)
 {
-    assert(count > 0);
-    n_vertices = count;
+    assert(vcount > 0);
+    if (ecount == -1) ecount = size_t(4) * vcount; // reasonable default outdegree
+
+    n_vertices = vcount;
     n_edges = 0;
-    _priority = new int[n_vertices];
-    memset(_priority, 0, sizeof(int[n_vertices]));
-    _label = new std::string[n_vertices];
-    out = new std::vector<int>[n_vertices];
-    _outedges = NULL;
-    _firstouts = NULL;
-    _outcount = NULL;
-    is_mmap = false;
-    oe_allocated = 0;
+
+    v_allocated = vcount;
+    e_allocated = vcount+ecount+1;  // extra space for -1
+    e_size = 0;
+
+    _priority = (int*)mmap(0, sizeof(int[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    _label = (string**)mmap(0, sizeof(string*[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    strategy = (int*)mmap(0, sizeof(int[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    _firstouts = (int*)mmap(0, sizeof(int[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    _outcount = (int*)mmap(0, sizeof(int[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    _outedges = (int*)mmap(0, sizeof(int[e_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (_priority == (int*)MAP_FAILED) abort();
+    if (_label == (string**)MAP_FAILED) abort();
+    if (strategy == (int*)MAP_FAILED) abort();
+    if (_firstouts == (int*)MAP_FAILED) abort();
+    if (_outcount == (int*)MAP_FAILED) abort();
+    if (_outedges == (int*)MAP_FAILED) abort();
+
+    _outvec = NULL;
     _inedges = NULL;
     _firstins = NULL;
     _incount = NULL;
     is_ordered = true;
-    strategy = new int[n_vertices];
-    memset(strategy, -1, sizeof(int[n_vertices]));
+
+    _outedges[0] = -1;
+    e_size++;
+
     set_random_seed(rd());
 }
 
 /**
  * Make a deep clone of the given game <other>.
+ * Does not clone the vector representation.
+ * Does not clone the <in> array.
  */
-Game::Game(const Game& other) : _owner(other.n_vertices), solved(other.n_vertices), winner(other.n_vertices)
+Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
 {
-    n_vertices = other.n_vertices;
     n_edges = other.n_edges;
 
-    _priority = new int[n_vertices];
     memcpy(_priority, other._priority, sizeof(int[n_vertices]));
     _owner = other._owner;
-    _label = new std::string[n_vertices];
-    for (int i=0; i<n_vertices; i++) _label[i] = other._label[i];
-
-    // clone the edge VECTOR
-    if (other.out != NULL) {
-        out = new std::vector<int>[n_vertices];
-        for (int i=0; i<n_vertices; i++) out[i] = other.out[i];
-    } else {
-        out = NULL;
+    for (int i=0; i<n_vertices; i++) {
+        if (other._label[i]) _label[i] = new std::string(*other._label[i]);
     }
 
     // clone the edge out ARRAY
-    if (other._outedges != NULL) {
-        long len = n_vertices + n_edges;
-        _outedges = new int[len];
-        is_mmap = false;
-        oe_allocated = 0;
-        _firstouts = new int[n_vertices];
-        _outcount = new int[n_vertices];
-        memcpy(_outedges, other._outedges, sizeof(int[len]));
-        memcpy(_firstouts, other._firstouts, sizeof(int[n_vertices]));
-        memcpy(_outcount, other._outcount, sizeof(int[n_vertices]));
-    } else {
-        _outedges = NULL;
-        is_mmap = false;
-        oe_allocated = 0;
-        _firstouts = NULL;
-        _outcount = NULL;
-    }
+    e_size = other.e_size;
+    memcpy(_outedges, other._outedges, sizeof(int[e_size]));
+    memcpy(_firstouts, other._firstouts, sizeof(int[n_vertices]));
+    memcpy(_outcount, other._outcount, sizeof(int[n_vertices]));
 
-    // clone the edge in ARRAY
+    // copy inedges
     if (other._inedges != NULL) {
-        long len = n_vertices + n_edges;
-        _inedges = new int[len];
-        _firstins = new int[n_vertices];
-        _incount = new int[n_vertices];
-        memcpy(_inedges, other._inedges, sizeof(int[len]));
-        memcpy(_firstins, other._firstins, sizeof(int[n_vertices]));
-        memcpy(_incount, other._incount, sizeof(int[n_vertices]));
-    } else {
-        _inedges = NULL;
-        _firstins = NULL;
-        _incount = NULL;
+         size_t len = n_vertices + n_edges;
+         _inedges = new int[len];
+         _firstins = new int[n_vertices];
+         _incount = new int[n_vertices];
+         memcpy(_inedges, other._inedges, sizeof(int[len]));
+         memcpy(_firstins, other._firstins, sizeof(int[n_vertices]));
+         memcpy(_incount, other._incount, sizeof(int[n_vertices]));
     }
 
     is_ordered = other.is_ordered;
 
     solved = other.solved;
     winner = other.winner;
-    strategy = new int[n_vertices];
     memcpy(strategy, other.strategy, sizeof(int[n_vertices]));
-
-    set_random_seed(rd());
-}
-
-/**
- * Extract the subgame... (assume each vertex has a successor)
- */
-Game::Game(const Game& other, bitset mask) : n_vertices(mask.count()), _owner(n_vertices), solved(n_vertices), winner(n_vertices)
-{
-    // check if there are any dead ends (not allowed)
-    // also count the number of edges in the subgame
-    n_edges = 0;
-    for (int v=0; v<other.n_vertices; v++) {
-        if (mask[v]) {
-            bool bad = true;
-            for (auto curedge = other.outs(v); *curedge != -1; curedge++) {
-                if (mask[*curedge]) {
-                    bad = false;
-                    n_edges++;
-                }
-            }
-            if (bad) abort(); // bad!
-        }
-    }
-
-    // create mapping from game to subgame
-    // our v is their invmap[v]
-    // their w is our mapping[w]
-    // also count the number of vertices in the subgame
-    int *mapping = new int[other.n_vertices];
-    int *invmap = new int[n_vertices];
-
-    int vertices = 0;
-    for (int v=0; v<other.n_vertices; v++) {
-        if (mask[v]) {
-            invmap[vertices] = v;
-            mapping[v] = vertices;
-            vertices++;
-        }
-    }
-    assert(vertices == n_vertices);
-
-    _priority = new int[n_vertices];
-    _label = new std::string[n_vertices];
-    strategy = new int[n_vertices];
-
-    for (int v=0; v<n_vertices; v++) {
-        const int w = invmap[v];
-        _priority[v] = other._priority[w];
-        _owner[v] = other._owner[w];
-        _label[v] = other._label[w];
-        solved[v] = other.solved[w];
-        winner[v] = other.winner[w];
-        strategy[v] = other.strategy[w];
-    }
-
-    if (other.out != NULL) {
-        out = new std::vector<int>[n_vertices];
-        for (int v=0; v<n_vertices; v++) {
-            for (auto to : other.out[invmap[v]]) if (mask[to]) out[v].push_back(mapping[to]);
-        }
-    } else {
-        out = NULL;
-    }
-
-    if (other._outedges != NULL) {
-        long len = n_vertices + n_edges;
-
-        _outedges = new int[len];
-        is_mmap = false;
-        oe_allocated = 0;
-        _firstouts = new int[n_vertices];
-        _outcount = new int[n_vertices];
-
-        int outidx = 0;
-        for (int v=0; v<n_vertices; v++) {
-            _firstouts[v] = outidx;
-            _outcount[v] = 0;
-            for (auto curedge = other.outs(invmap[v]); *curedge != -1; curedge++) {
-                int to = *curedge;
-                if (mask[to]) {
-                    _outcount[v]++;
-                    _outedges[outidx++] = mapping[to];
-                }
-            }
-            _outedges[outidx++] = -1; // mark end
-        }
-    } else {
-        _outedges = NULL;
-        _firstouts = NULL;
-        _outcount = NULL;
-    }
-
-    if (other._inedges != NULL) {
-        long len = n_vertices + n_edges;
-
-        _inedges = new int[len];
-        _firstins = new int[n_vertices];
-        _incount = new int[n_vertices];
-
-        int inidx = 0;
-        for (int v=0; v<n_vertices; v++) {
-            _firstins[v] = inidx;
-            _incount[v] = 0;
-            for (auto curedge = other.ins(invmap[v]); *curedge != -1; curedge++) {
-                int from = *curedge;
-                if (mask[from]) {
-                    _incount[v]++;
-                    _inedges[inidx++] = mapping[from];
-                }
-            }
-            _inedges[inidx++] = -1; // mark end
-        }
-    } else {
-        _inedges = NULL;
-        _firstins = NULL;
-        _incount = NULL;
-    }
-
-    delete[] mapping;
-    delete[] invmap;
-
-    // check if ordered...
-    is_ordered = true;
-    for (int i=1; i<n_vertices; i++) {
-        if (_priority[i-1] > _priority[i]) {
-            is_ordered = false;
-            break;
-        }
-    }
 
     set_random_seed(rd());
 }
@@ -325,191 +183,6 @@ read_uint64(std::streambuf *rd, uint64_t *res)
     return true;
 }
 
-Game::Game(istream &inp, bool removeBadLoops)
-{
-    std::streambuf *rd = inp.rdbuf();
-
-    char buf[64];
-    uint64_t n;
-    char ch;
-
-    /**
-     * Read header line...
-     * "parity" <number of nodes> ;
-     */
-
-    inp.read(buf, 6);
-    if (!inp) throw "expecting parity game specification";
-    if (strncmp(buf, "parity", 6) != 0) throw "expecting parity game specification";
-
-    skip_whitespace(rd);
-    if (!read_uint64(rd, &n)) throw "missing number of nodes";
-
-    skip_whitespace(rd);
-    while ((inp >> ch) and ch != ';') continue;
-    if (ch != ';') throw "missing ';'";
-
-    /**
-     * Construct game...
-     */
-
-    n_vertices = n+1; // plus 1, in case this parity game encodes "max id" instead of "n_vertices"
-    n_edges = 0;
-
-    _priority = new int[n_vertices];
-    _owner.resize(n_vertices);
-    _label = new std::string[n_vertices];
-
-#if USE_MMAP
-    oe_allocated = 1ULL<<30;
-    _outedges = (int*)mmap(0, oe_allocated, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (_outedges != (int*)MAP_FAILED) {
-        is_mmap = true;
-        _firstouts = new int[n_vertices];
-        _outcount = new int[n_vertices];
-        out = NULL;
-    } else {
-        // failed, use fallback
-        is_mmap = false;
-    }
-#else
-    is_mmap = false;
-#endif
-
-    if (!is_mmap) {
-        out = new std::vector<int>[n_vertices]; // TODO replace by just a mmap virtual memory edge array
-        _outedges = NULL;
-        is_mmap = false;
-        oe_allocated = 0;
-        _firstouts = NULL;
-        _outcount = NULL;
-    }
-
-    _inedges = NULL;
-    _firstins = NULL;
-    _incount = NULL;
-
-    solved.resize(n_vertices);
-    winner.resize(n_vertices);
-    strategy = new int[n_vertices];
-
-    memset(strategy, -1, sizeof(int[n_vertices]));
-
-    /**
-     * Parse the nodes...
-     */
-
-    int node_count = 0; // number of read nodes
-    solved.set(); // we use solved to store whether a node has not yet been read
-
-    size_t oe_index = 0;
-
-    while (node_count < n_vertices) {
-        uint64_t id;
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &id)) {
-            // we expect maybe one more node...
-            if (node_count == n_vertices-1) {
-                n_vertices--;
-                _owner.resize(n_vertices);
-                solved.resize(n_vertices);
-                winner.resize(n_vertices);
-                // ignore rest, they can be bigger
-                break;
-            }
-            throw "unable to read id";
-        }
-        if (id >= (unsigned)n_vertices) throw "invalid id";
-
-        if (!solved[id]) throw "duplicate id";
-        solved[id] = false;
-        node_count++;
-
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &n)) throw "missing priority";
-        _priority[id] = n;
-
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &n)) throw "missing owner";
-
-        if (n == 0) { /* nothing */ }
-        else if (n == 1) { _owner[id] = true; }
-        else { throw "invalid owner"; }
-
-        if (is_mmap) {
-            _firstouts[id] = oe_index;
-            _outcount[id] = 0;
-        }
-
-        bool has_self = false;
-        int count = 0;
-
-        // parse successors and optional label
-        for (;;) {
-            skip_whitespace(rd);
-            if (!read_uint64(rd, &n)) throw "missing successor";
-            if (n >= (uint64_t)n_vertices) {
-                std::cout << "id " << id << " with successor " << n << std::endl;
-                throw "invalid successor";
-            }
-
-            if (id == n and removeBadLoops and (_owner[id] != (_priority[id]&1))) {
-                has_self = true;
-            } else {
-                // add edge to the vector
-                if (is_mmap) _outedges[oe_index++] = n;
-                else out[id].push_back(n);
-                count++;
-            }
-
-            char ch;
-            skip_whitespace(rd);
-            if (!(inp >> ch)) throw "missing ; to end line";
-            if (ch == ',') continue; // next successor
-            if (ch == ';') break; // end of line
-            if (ch == '\"') {
-                while (true) {
-                    inp >> ch;
-                    if (ch == '\"') break;
-                    _label[id] += ch;
-                }
-                // now read ;
-                skip_whitespace(rd);
-                if (!(inp >> ch) or ch != ';') throw "missing ; to end line";
-            }
-            else _label[id] = "";
-            break;
-        }
-
-        if (has_self and count == 0) {
-            if (is_mmap) _outedges[oe_index++] = n;
-            else out[id].push_back(n);
-            count++;
-        }
-
-        if (is_mmap) {
-            _outcount[id] = count;
-            _outedges[oe_index++] = -1;
-        }
-
-        n_edges += count;
-    }
-
-    if (solved.any()) {
-        std::cout << "count : " << solved.count() << std::endl;
-        throw "missing nodes";
-    }
-
-    // check if ordered...
-    is_ordered = true;
-    for (int i=1; i<n_vertices; i++) {
-        if (_priority[i-1] > _priority[i]) {
-            is_ordered = false;
-            break;
-        }
-    }
-}
-
 void
 Game::init_game(int count)
 {
@@ -531,12 +204,13 @@ Game::init_random_game(int n, int maxP, int maxE)
     init_game(n);
 
     // First initialize all vertices, and give each vertex one random successor
+    vec_init();
 
     for (int i=0; i<n; i++) {
         // initialize vertex i with random priority and random owner
         init_vertex(i, rng(0, maxP), rng(0, 1));
         // add 1 random edge (including self-loops)
-        add_edge(i, rng(0, n-1));
+        vec_add_edge(i, rng(0, n-1));
     }
 
     // Then add more edges randomly, at most maxE extra edges (random)
@@ -552,7 +226,7 @@ Game::init_random_game(int n, int maxP, int maxE)
         int from = sources[src_idx];
         // select a random target vertex
         auto to = rng(0, n-1);
-        if (add_edge(from, to)) {
+        if (vec_add_edge(from, to)) {
             if (outvec(from).size() == (unsigned)n) {
                 // last target, so remove from sources
                 sources[src_idx] = sources[--source_count];
@@ -561,6 +235,8 @@ Game::init_random_game(int n, int maxP, int maxE)
             maxE++;
         }
     }
+
+    vec_finish();
 }
 
 void
@@ -591,18 +267,52 @@ Game::set_owner(int node, int owner)
 void
 Game::set_label(int node, std::string label)
 {
-    this->_label[node] = label;
+    if (this->_label[node]) delete this->_label[node];
+    if (label != "") this->_label[node] = new std::string(label);
+    else this->_label[node] = 0;
+}
+
+
+/**
+ * Vector stuff
+ */
+
+void
+Game::vec_init(void)
+{
+    if (_outvec != NULL) delete[] _outvec;
+    _outvec = new std::vector<int>[n_vertices];
+
+    // copy current edges to vectors
+    for (int v=0; v<n_vertices; v++) {
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            _outvec[v].push_back(*curedge);
+        }
+    }
+}
+
+void
+Game::vec_finish(void)
+{
+    e_size = 0;
+    n_edges = 0;
+    for (int v=0; v<n_vertices; v++) {
+        e_start(v);
+        for (int to : _outvec[v]) e_add(v, to);
+        e_finish();
+    }
+    delete[] _outvec;
+    _outvec = NULL;
 }
 
 bool
-Game::add_edge(int from, int to)
+Game::vec_add_edge(int from, int to)
 {
     assert(from >= 0 and from < n_vertices);
     assert(to >= 0 and to < n_vertices);
 
-    if (!has_edge_vec(from, to)) {
-        out[from].push_back(to);
-        n_edges++;
+    if (!vec_has_edge(from, to)) {
+        _outvec[from].push_back(to);
         return true;
     } else {
         return false;
@@ -610,15 +320,14 @@ Game::add_edge(int from, int to)
 }
 
 bool
-Game::remove_edge(int from, int to)
+Game::vec_remove_edge(int from, int to)
 {
     assert(from >= 0 and from < n_vertices);
     assert(to >= 0 and to < n_vertices);
 
-    if (has_edge_vec(from, to)) {
-        auto &o = out[from];
+    if (vec_has_edge(from, to)) {
+        auto &o = _outvec[from];
         o.erase(std::remove(o.begin(), o.end(), to), o.end());
-        n_edges--;
         return true;
     } else {
         return false;
@@ -626,9 +335,9 @@ Game::remove_edge(int from, int to)
 }
 
 bool
-Game::has_edge_vec(int from, int to)
+Game::vec_has_edge(int from, int to)
 {
-    return std::find(out[from].begin(), out[from].end(), to) != out[from].end();
+    return std::find(_outvec[from].begin(), _outvec[from].end(), to) != _outvec[from].end();
 }
 
 bool
@@ -647,10 +356,135 @@ Game::find_edge(int from, int to)
 }
 
 void
-Game::parse_pgsolver(std::istream &in, bool removeBadLoops)
+Game::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 {
-    Game g(in, removeBadLoops);
-    swap(g);
+    std::streambuf *rd = inp.rdbuf();
+
+    char buf[64];
+    uint64_t n;
+    char ch;
+
+    /**
+     * Read header line...
+     * "parity" <number of nodes> ;
+     */
+
+    inp.read(buf, 6);
+    if (!inp) throw "expecting parity game specification";
+    if (strncmp(buf, "parity", 6) != 0) throw "expecting parity game specification";
+
+    skip_whitespace(rd);
+    if (!read_uint64(rd, &n)) throw "missing number of nodes";
+
+    skip_whitespace(rd);
+    while ((inp >> ch) and ch != ';') continue;
+    if (ch != ';') throw "missing ';'";
+
+    /**
+     * Construct game...
+     */
+
+    Game res(n+1, true);
+    swap(res);
+
+    /**
+     * Parse the nodes...
+     */
+
+    int node_count = 0; // number of read nodes
+    solved.set(); // we use solved to store whether a node has not yet been read
+
+    while (node_count < n_vertices) {
+        uint64_t id;
+        skip_whitespace(rd);
+        if (!read_uint64(rd, &id)) {
+            // we expect maybe one more node...
+            if (node_count == n_vertices-1) {
+                v_resize(node_count);
+                // ignore rest, they can be bigger
+                break;
+            }
+            throw "unable to read id";
+        }
+        if (id >= (unsigned)n_vertices) throw "invalid id";
+
+        if (!solved[id]) throw "duplicate id";
+        solved[id] = false;
+        node_count++;
+
+        skip_whitespace(rd);
+        if (!read_uint64(rd, &n)) throw "missing priority";
+        _priority[id] = n;
+
+        skip_whitespace(rd);
+        if (!read_uint64(rd, &n)) throw "missing owner";
+
+        if (n == 0) { /* nothing */ }
+        else if (n == 1) { _owner[id] = true; }
+        else { throw "invalid owner"; }
+
+        e_start(id);
+
+        bool has_self = false;
+        int count = 0;
+
+        // parse successors and optional label
+        for (;;) {
+            skip_whitespace(rd);
+            if (!read_uint64(rd, &n)) throw "missing successor";
+            if (n >= (uint64_t)n_vertices) {
+                std::cout << "id " << id << " with successor " << n << std::endl;
+                throw "invalid successor";
+            }
+
+            if (id == n and removeBadLoops and (_owner[id] != (_priority[id]&1))) {
+                has_self = true;
+            } else {
+                // add edge to the vector
+                e_add(id, n);
+                count++;
+            }
+
+            char ch;
+            skip_whitespace(rd);
+            if (!(inp >> ch)) throw "missing ; to end line";
+            if (ch == ',') continue; // next successor
+            if (ch == ';') break; // end of line
+            if (ch == '\"') {
+                _label[id] = new std::string();
+                while (true) {
+                    inp >> ch;
+                    if (ch == '\"') break;
+                    *_label[id] += ch;
+                }
+                // now read ;
+                skip_whitespace(rd);
+                if (!(inp >> ch) or ch != ';') throw "missing ; to end line";
+            }
+            break;
+        }
+
+        if (has_self and count == 0) {
+            e_add(id, id);
+            count++;
+        }
+
+        e_finish();
+    }
+
+    if (solved.any()) {
+        std::cout << "count : " << solved.count() << std::endl;
+        throw "missing nodes";
+    }
+
+    // check if ordered...
+    is_ordered = true;
+    for (int i=1; i<n_vertices; i++) {
+        if (_priority[i-1] > _priority[i]) {
+            is_ordered = false;
+            break;
+        }
+    }
 }
 
 void
@@ -704,22 +538,13 @@ Game::write_pgsolver(std::ostream &os)
     // print vertices
     for (int i=0; i<n_vertices; i++) {
         os << i << " " << priority(i) << " " << owner(i) << " ";
-        if (_outedges != NULL) {
-            bool first = true;
-            for (auto curedge = outs(i); *curedge != -1; curedge++) {
-                if (first) first = false;
-                else os << ",";
-                os << *curedge;
-            }
-        } else {
-            bool first = true;
-            for (int to : out[i]) {
-                if (first) first = false;
-                else os << ",";
-                os << to;
-            }
+        bool first = true;
+        for (auto curedge = outs(i); *curedge != -1; curedge++) {
+            if (first) first = false;
+            else os << ",";
+            os << *curedge;
         }
-        if (_label[i] != "") os << " \"" << _label[i] << "\"";
+        if (_label[i] != 0 and !_label[i]->empty()) os << " \"" << *_label[i] << "\"";
         os << ";" << std::endl;
     }
 }
@@ -731,14 +556,8 @@ Game::write_dot(std::ostream &out)
     for (int i=0; i<n_vertices; i++) {
         out << i << " [ shape=\"" << (owner(i) ? "box" : "diamond")
             << "\", label=\"" << priority(i) << "\"];" << std::endl;
-        if (_outedges != NULL) {
-            for (auto curedge = outs(i); *curedge != -1; curedge++) {
-                out << i << " -> " << (*curedge) << ";" << std::endl;
-            }
-        } else {
-            for (int to : this->out[i]) {
-                out << i << " -> " << to << ";" << std::endl;
-            }
+        for (auto curedge = outs(i); *curedge != -1; curedge++) {
+            out << i << " -> " << (*curedge) << ";" << std::endl;
         }
     }
     out << "}" << std::endl;
@@ -819,21 +638,19 @@ Game::permute(int *mapping)
     }
 }
 
+/**
+ * Apply permutation (only to arrays)
+ */
 void
 Game::unsafe_permute(int *mapping)
 {
     // first update vectors and arrays and the strategies
     for (int i=0; i<n_vertices; i++) {
-        if (out != NULL) {
-            for (auto it = out[i].begin(); it != out[i].end(); it++) *it = mapping[*it];
-        }
         if (strategy[i] != -1) strategy[i] = mapping[strategy[i]];
     }
     unsigned long len = n_vertices + n_edges;
-    if (_outedges != NULL) {
-        for (unsigned long i=0; i<len; i++) {
-            if (_outedges[i] != -1) _outedges[i] = mapping[_outedges[i]];
-        }
+    for (unsigned long i=0; i<len; i++) {
+        if (_outedges[i] != -1) _outedges[i] = mapping[_outedges[i]];
     }
     if (_inedges != NULL) {
         for (unsigned long i=0; i<len; i++) {
@@ -851,15 +668,9 @@ Game::unsafe_permute(int *mapping)
             std::swap(_priority[i], _priority[k]);
             { bool b = _owner[k]; _owner[k] = _owner[i]; _owner[i] = b; }
             std::swap(_label[i], _label[k]);
-            // swap out vector
-            if (out != NULL) {
-                std::swap(out[i], out[k]);
-            }
             // swap out array
-            if (_outedges != NULL) {
-                std::swap(_firstouts[i], _firstouts[k]);
-                std::swap(_outcount[i], _outcount[k]);
-            }
+            std::swap(_firstouts[i], _firstouts[k]);
+            std::swap(_outcount[i], _outcount[k]);
             // swap in array
             if (_inedges != NULL) {
                 std::swap(_firstins[i], _firstins[k]);
@@ -979,7 +790,70 @@ Game::extract_subgame(std::vector<int> &selection)
     // translate to a bitmask
     bitset sel(n_vertices);
     for (int i : selection) sel[i] = true;
-    return new Game(*this, sel);
+    return extract_subgame(sel);
+}
+
+Game *
+Game::extract_subgame(bitset mask)
+{
+    // check if there are any dead ends (not allowed)
+    // also count the number of edges in the subgame
+
+    int nv = mask.count();
+    int ne = 0;
+    for (int v=0; v<n_vertices; v++) {
+        if (mask[v]) {
+            bool bad = true;
+            for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                if (mask[*curedge]) {
+                    bad = false;
+                    ne++;
+                }
+            }
+            if (bad) abort(); // bad!
+        }
+    }
+
+    Game *res = new Game(nv, ne);
+
+    // create mapping from game to subgame
+    // our v is their invmap[v]
+    // their w is our mapping[w]
+    // also count the number of vertices in the subgame
+    int *mapping = new int[n_vertices];
+    int *invmap = new int[nv];
+
+    int vertices = 0;
+    for (int v=0; v<n_vertices; v++) {
+        if (!mask[v]) continue;
+
+        // update mapping and invmapping
+        int w = vertices++;
+        invmap[w] = v;
+        mapping[v] = w;
+
+        // initialize most stuff (except edges)
+        if (_label[v] != 0) res->init_vertex(w, _priority[v], _owner[v], *_label[v]);
+        else res->init_vertex(w, _priority[v], _owner[v], "");
+    }
+
+    // now add all edges
+
+    for (int w=0; w<nv; w++) {
+        int v = invmap[w];
+        res->e_start(v);
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            if (mask[*curedge]) res->e_add(v, mapping[*curedge]);
+        }
+        res->e_finish();
+    }
+
+    delete[] mapping;
+    delete[] invmap;
+
+    // TODO: fix is_ordered?
+
+    return res;
 }
 
 Game&
@@ -998,7 +872,7 @@ Game::swap(Game &other)
     std::swap(_priority, other._priority);
     std::swap(_owner, other._owner);
     std::swap(_label, other._label);
-    std::swap(out, other.out);
+    std::swap(_outvec, other._outvec);
     std::swap(_outedges, other._outedges);
     std::swap(_firstouts, other._firstouts);
     std::swap(_outcount, other._outcount);
@@ -1009,8 +883,9 @@ Game::swap(Game &other)
     std::swap(winner, other.winner);
     std::swap(strategy, other.strategy);
     std::swap(is_ordered, other.is_ordered);
-    std::swap(is_mmap, other.is_mmap);
-    std::swap(oe_allocated, other.oe_allocated);
+    std::swap(v_allocated, other.v_allocated);
+    std::swap(e_allocated, other.e_allocated);
+    std::swap(e_size, other.e_size);
 }
 
 void
@@ -1029,154 +904,109 @@ Game::copy_solution(Game &other)
     memcpy(strategy, other.strategy, sizeof(int[n_vertices]));
 }
 
-void
-Game::rebuild_arrays()
+void 
+Game::e_sizeup(void)
 {
-    if (_outedges != NULL) {
-        if (is_mmap) munmap(_outedges, oe_allocated);
-        else delete[] _outedges;
-        delete[] _firstouts;
-        delete[] _outcount;
-        _outedges = NULL;
-    }
+    size_t old = e_allocated;
+    e_allocated += e_allocated/2;
+    _outedges = (int*)mremap(_outedges, sizeof(int[old]), sizeof(int[e_allocated]), MREMAP_MAYMOVE);
+    if (_outedges == (int*)MAP_FAILED) abort();
+}
+
+void
+Game::v_sizeup(void)
+{
+    size_t old = v_allocated;
+    v_allocated += v_allocated/2;
+    n_vertices = v_allocated;
+    _priority = (int*)mremap(0, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
+    strategy = (int*)mremap(0, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
+    _firstouts = (int*)mremap(0, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
+    _outcount = (int*)mremap(0, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
+    _label = (string**)mremap(0, sizeof(string*[old]), sizeof(string*[v_allocated]), MREMAP_MAYMOVE);
+    if (_priority == (int*)MAP_FAILED) abort();
+    if (_label == (string**)MAP_FAILED) abort();
+    if (strategy == (int*)MAP_FAILED) abort();
+    if (_firstouts == (int*)MAP_FAILED) abort();
+    if (_outcount == (int*)MAP_FAILED) abort();
+    _owner.resize(v_allocated);
+    solved.resize(v_allocated);
+    winner.resize(v_allocated);
+}
+
+void
+Game::v_resize(size_t newsize)
+{
+    while (newsize > v_allocated) v_sizeup();
+    n_vertices = newsize;
+    _owner.resize(n_vertices);
+    solved.resize(n_vertices);
+    winner.resize(n_vertices);
+}
+
+void
+Game::e_start(int source)
+{
+    _firstouts[source] = e_size;
+    _outcount[source] = 0;
+}
+
+void
+Game::e_add(int source, int target)
+{
+    if (e_size == e_allocated) e_sizeup();
+    _outedges[e_size++] = target;
+    _outcount[source] += 1;
+    n_edges++;
+}
+
+void
+Game::e_finish(void)
+{
+    if (e_size == e_allocated) e_sizeup();
+    _outedges[e_size++] = -1;
+}
+
+void
+Game::build_in_array(bool rebuild)
+{
     if (_inedges != NULL) {
-        delete[] _inedges;
-        delete[] _firstins;
-        delete[] _incount;
-        _inedges = NULL;
-    }
-    build_arrays();
-}
-
-void
-Game::rebuild_vectors()
-{
-    if (out != NULL) {
-        delete[] out;
-        out = NULL;
-    }
-    build_vectors();
-}
-
-void
-Game::build_vectors()
-{
-    if (out == NULL) {
-        test_arrays_built();
-        out = new std::vector<int>[n_vertices];
-        long found_edges = 0;
-        for (int v=0; v<n_vertices; v++) {
-            for (auto curedge = outs(v); *curedge != -1; curedge++) {
-                out[v].push_back(*curedge);
-                found_edges++;
-            }
-        }
-        assert(n_edges == found_edges);
-    }
-}
-
-void
-Game::build_arrays()
-{
-    // TODO: check overflow of 32-bit integer....
-    long len = n_vertices + n_edges;
-
-    /**
-     * First step: convert out vectors to out array
-     */
-    
-    if (_outedges == NULL) {
-        test_vectors_built();
-        _outedges = new int[len];
-        is_mmap = false;
-        oe_allocated = 0;
-        _firstouts = new int[n_vertices];
-        _outcount = new int[n_vertices];
-
-        long outidx = 0;
-        for (int v=0; v<n_vertices; v++) {
-            _firstouts[v] = outidx;
-            _outcount[v] = out[v].size();
-            for (int to : out[v]) _outedges[outidx++] = to;
-            _outedges[outidx++] = -1; // mark end
-        }
-        assert(outidx == len);
-    }
-
-    /**
-     * Second step: create in array
-     */
-
-    if (_inedges == NULL) {
-        _inedges = new int[len];
-        _firstins = new int[n_vertices];
-        _incount = new int[n_vertices];
-
-        memset(_incount, 0, sizeof(int[n_vertices]));
-        for (int i=0; i<len; i++) {
-            if (_outedges[i] != -1) _incount[_outedges[i]]++;
-        }
-
-        unsigned long pos = 0;
-        for (int v=0; v<n_vertices; v++) {
-            _firstins[v] = pos+_incount[v]; // start at end!!
-            _inedges[_firstins[v]] = -1;
-            pos += (_incount[v] + 1);
-        }
-
-        for (int v=0; v<n_vertices; v++) {
-            for (auto curedge = outs(v); *curedge != -1; curedge++) {
-                int to = *curedge;
-                _inedges[--_firstins[to]] = v;
-            }
+        if (rebuild) {
+            delete[] _inedges;
+            delete[] _firstins;
+            delete[] _incount;
+        } else {
+            return;
         }
     }
-}
 
-void
-Game::test_vectors_built(void)
-{
-    if (out == NULL) {
-        std::cerr << "error: use Game::build_vectors()!" << std::endl;
-        abort();
-    }
-}
+    _inedges = new int[e_size];
+    _firstins = new int[n_vertices];
+    _incount = new int[n_vertices];
 
-void
-Game::test_arrays_built(void)
-{
-    if (_outedges == NULL or _inedges == NULL) {
-        std::cerr << "error: use Game::build_arrays()!" << std::endl;
-        abort();
-    }
-}
+    // set incount of each vertex
 
-bool
-Game::test_consistency(void)
-{
-    test_vectors_built();
-    test_arrays_built();
-
-    long edge_counter = 0;
+    memset(_incount, 0, sizeof(int[n_vertices]));
     for (int v=0; v<n_vertices; v++) {
-        edge_counter += out[v].size();
-    }
-    // assert(edge_counter == n_edges);
-    if (edge_counter != n_edges) return false;
-
-    for (int v=0; v<n_vertices; v++) {
-        for (int w : out[v]) {
-            if (!has_edge(v, w)) return false;
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            int to = *curedge;
+            _incount[to]++;
         }
+    }
+
+    unsigned long pos = 0;
+    for (int v=0; v<n_vertices; v++) {
+        _firstins[v] = pos+_incount[v]; // start at end!!
+        _inedges[_firstins[v]] = -1;
+        pos += (_incount[v] + 1);
     }
 
     for (int v=0; v<n_vertices; v++) {
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
-            if (!has_edge_vec(v, *curedge)) return false;
+            int to = *curedge;
+            _inedges[--_firstins[to]] = v;
         }
     }
-
-    return true;
 }
 
 std::random_device Game::rd;

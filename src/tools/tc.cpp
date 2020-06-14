@@ -59,14 +59,14 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
     game.init_vertex(c+3, inpr,   1-pl, string_format("%s%d-LL", plch, i));  // gate (distraction/input)
 #endif
 
-    game.add_edge(c+1, c);   // from tangle to top
+    game.vec_add_edge(c+1, c);   // from tangle to top
 #if DOUBLEDISTRACTION
-    game.add_edge(c+2, c+3); // from input/distraction to tangle
-    game.add_edge(c+3, c+1); // from input/distraction to tangle
-    game.add_edge(c+1, c+4); // from tangle to first connector
+    game.vec_add_edge(c+2, c+3); // from input/distraction to tangle
+    game.vec_add_edge(c+3, c+1); // from input/distraction to tangle
+    game.vec_add_edge(c+1, c+4); // from tangle to first connector
 #else
-    game.add_edge(c+2, c+1); // from input/distraction to tangle
-    game.add_edge(c+1, c+3); // from tangle to first connector
+    game.vec_add_edge(c+2, c+1); // from input/distraction to tangle
+    game.vec_add_edge(c+1, c+3); // from tangle to first connector
 #endif
 
     /**
@@ -80,18 +80,18 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
         game.init_vertex(d+1, lopr-1, 1-pl, string_format("%s%d-A-%d", plch, i, j)); // exit one (even)
         game.init_vertex(d+2, lopr-1, 1-pl, string_format("%s%d-B-%d", plch, i, j)); // exit two (odd)
 
-        game.add_edge(d, d+1);  // s to one
-        game.add_edge(d, d+2);  // s to two
+        game.vec_add_edge(d, d+1);  // s to one
+        game.vec_add_edge(d, d+2);  // s to two
 
-        game.add_edge(d+1, d+3); // one to next selector
-        game.add_edge(d+2, d+3); // two to next selector
+        game.vec_add_edge(d+1, d+3); // one to next selector
+        game.vec_add_edge(d+2, d+3); // two to next selector
 
         int *ina = pl ? in1 : in0;
         int *inb = pl ? in0 : in1;
-        game.add_edge(d+1, ina[j]); // one to even input of bit <j>
-        game.add_edge(d+2, inb[j]); // two to odd input of bit <j>
+        game.vec_add_edge(d+1, ina[j]); // one to even input of bit <j>
+        game.vec_add_edge(d+2, inb[j]); // two to odd input of bit <j>
 
-        // for (int j = i+pl; j<n; j++) game.add_edge(d, _in[j]);
+        // for (int j = i+pl; j<n; j++) game.vec_add_edge(d, _in[j]);
     }
 
     /**
@@ -99,17 +99,17 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
      */
 
 #if 0
-    game.add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]-1);
+    game.vec_add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]-1);
 #else
-    game.add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]);
+    game.vec_add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]);
 #endif
 
     // even (lower or same bit)
     // odd (only to lower bits)
     int x = c+3+DOUBLEDISTRACTION+3*i;
     game.init_vertex(x, lopr-1, pl, string_format("%s%d-Z", plch, i));  // Z (distracted)
-    game.add_edge(x, c+1); // from Z to tangle
-    for (int j = i+1-pl; j<n; j++) game.add_edge(x, _in[j]);
+    game.vec_add_edge(x, c+1); // from Z to tangle
+    for (int j = i+1-pl; j<n; j++) game.vec_add_edge(x, _in[j]);
 }
 
 int
@@ -153,6 +153,7 @@ main(int argc, char** argv)
      */
 
     Game game(size);
+    game.vec_init();
 
     /**
      * Create the two counters
@@ -179,9 +180,9 @@ main(int argc, char** argv)
     }
 #endif
 
+    game.vec_finish();
     game.sort();
     game.renumber();
-    game.build_arrays();
     game.write_pgsolver(std::cout);
 
     delete[] in0;

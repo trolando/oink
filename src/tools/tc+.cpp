@@ -59,15 +59,15 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
     game.init_vertex(c+2, lopr, 1-pl, string_format("%s-T", bitid));  // low (tangle)
 #if DOUBLEDISTRACTION
     game.init_vertex(c+3, inpr, 1-pl, string_format("%s-II", bitid));  // gate (distraction/input)
-    game.add_edge(c+1, c+3); // connect I -> T
-    game.add_edge(c+3, c+2); // connect I -> T
-    game.add_edge(c+2, c+4); // connect T -> first S
+    game.vec_add_edge(c+1, c+3); // connect I -> T
+    game.vec_add_edge(c+3, c+2); // connect I -> T
+    game.vec_add_edge(c+2, c+4); // connect T -> first S
 #else
-    game.add_edge(c+1, c+2); // connect I -> T
-    game.add_edge(c+2, c+2); // connect T -> first S
+    game.vec_add_edge(c+1, c+2); // connect I -> T
+    game.vec_add_edge(c+2, c+2); // connect T -> first S
 #endif
-    game.add_edge(c+2, c);   // connect T -> H
-    game.add_edge(c, inmy[i == 0 ? n-1 : i-1]); // connect H -> I{(j-1) mod n}
+    game.vec_add_edge(c+2, c);   // connect T -> H
+    game.vec_add_edge(c, inmy[i == 0 ? n-1 : i-1]); // connect H -> I{(j-1) mod n}
 
     /**
      * Create connectors (to higher bits)
@@ -82,28 +82,28 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
 
         const int next_s = (j+1 == i) ? c+2 : d+3;
 
-        game.add_edge(d, d+1);       // connect Sj -> Aj
-        game.add_edge(d, d+2);       // connect Sj -> Bj
-        game.add_edge(d+1, next_s);  // connect Aj -> S{j+1}
-        game.add_edge(d+2, next_s);  // connect Bj -> S{j+1}
-        game.add_edge(d+1, inmy[j]); // connect Aj -> <my> Ij
-        game.add_edge(d+2, inop[j]); // connect Bj -> <their> Ij
+        game.vec_add_edge(d, d+1);       // connect Sj -> Aj
+        game.vec_add_edge(d, d+2);       // connect Sj -> Bj
+        game.vec_add_edge(d+1, next_s);  // connect Aj -> S{j+1}
+        game.vec_add_edge(d+2, next_s);  // connect Bj -> S{j+1}
+        game.vec_add_edge(d+1, inmy[j]); // connect Aj -> <my> Ij
+        game.vec_add_edge(d+2, inop[j]); // connect Bj -> <their> Ij
     }
 
 #if 0
 #if 1
     game.init_vertex(c+3+3*i, lopr+2, pl, string_format("%s-D-%d", bitid, i));
-    game.add_edge(c+3+3*i, c+2);
+    game.vec_add_edge(c+3+3*i, c+2);
 #else
     if (pl == 0) {
         game.init_vertex(c+3+3*i, lopr+2, pl, string_format("d(%d,%d,%d)",pl,i,i));
-        game.add_edge(c+3+3*i, c+2);
+        game.vec_add_edge(c+3+3*i, c+2);
         // we want Odd to play first for DP,
         // but this breaks symmetry for RTL
-        game.add_edge(c+3+3*i, inop[i]);
+        game.vec_add_edge(c+3+3*i, inop[i]);
     } else {
         game.init_vertex(c+3+3*i, lopr+2, pl, string_format("d(%d,%d,%d)",pl,i,i));
-        game.add_edge(c+3+3*i, c+2);
+        game.vec_add_edge(c+3+3*i, c+2);
     }
 #endif
 #endif
@@ -117,9 +117,9 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
         const int dv = c + 3 + DOUBLEDISTRACTION + 3*i + (j-x);
         const int pr = lopr + 2*(j-i+1);
         game.init_vertex(dv, pr, pl, string_format("%s-D-%d", bitid, j)); // todo fix priority
-        game.add_edge(dv, c+2); // dv -> T
-        game.add_edge(c+2, dv); // T -> dv
-        game.add_edge(dv, inop[j]); // dv -> ...-I
+        game.vec_add_edge(dv, c+2); // dv -> T
+        game.vec_add_edge(c+2, dv); // T -> dv
+        game.vec_add_edge(dv, inop[j]); // dv -> ...-I
     }
 }
 
@@ -164,6 +164,7 @@ main(int argc, char** argv)
      */
 
     Game game(size);
+    game.vec_init();
 
     /**
      * Create the two counters
@@ -179,11 +180,11 @@ main(int argc, char** argv)
         toppo -= 2;
     }
 
+    game.vec_finish();
     int mapping[game.nodecount()];
     game.sort(mapping);
     game.renumber();
     game.permute(mapping);
-    game.build_arrays();
     game.write_pgsolver(std::cout);
 
     delete[] in0;

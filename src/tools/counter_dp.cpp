@@ -31,6 +31,7 @@ main(int argc, char** argv)
     int n = std::stoi(argv[1]);
 
     Game game(4+n*4);
+    game.vec_init();
 
     /* create n+1 pieces */
     for (int i=0; i<=n; i++) {
@@ -38,19 +39,19 @@ main(int argc, char** argv)
         game.init_vertex(4*i+1, i, 1-(i&1));
         game.init_vertex(4*i+2, i, (i&1));
         game.init_vertex(4*i+3, i+3, (i&1));
-        game.add_edge(4*i+0, 4*i+1);
-        game.add_edge(4*i+1, 4*i+0);
-        game.add_edge(4*i+1, 4*i+2);
-        game.add_edge(4*i+2, 4*i+1);
-        game.add_edge(4*i+3, 4*i+2);
+        game.vec_add_edge(4*i+0, 4*i+1);
+        game.vec_add_edge(4*i+1, 4*i+0);
+        game.vec_add_edge(4*i+1, 4*i+2);
+        game.vec_add_edge(4*i+2, 4*i+1);
+        game.vec_add_edge(4*i+3, 4*i+2);
     }
     
     /* connect the pieces */
     for (int i=0; i<n; i++) {
-        game.add_edge(4*i+6, 4*i+3);
-        game.add_edge(4*i+1, 4*i+7);
+        game.vec_add_edge(4*i+6, 4*i+3);
+        game.vec_add_edge(4*i+1, 4*i+7);
     }
 
-    game.build_arrays();
+    game.vec_finish();
     game.write_pgsolver(std::cout);
 }

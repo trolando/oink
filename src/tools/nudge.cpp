@@ -153,26 +153,29 @@ nudge(Game *game, int profile)
         pg::bitset mask(game->vertexcount());
         mask.set();
         mask[n] = false;
-        Game subgame(*game, mask);
-        game->swap(subgame);
+        Game *subgame = game->extract_subgame(mask);
+        game->swap(*subgame);
+        delete subgame;
         return true;
     } else if (action == 3) {
         // remove the vertex and forward incoming edges if it has only 1 outgoing edge
         if (game->outcount(n) == 1 and game->outs(n)[0] != n) {
+            game->vec_init();
             for (auto curedge = game->ins(n); *curedge != -1; curedge++) {
                 int from = *curedge;
                 // add each edge "n -> to" to "from -> to"
                 for (auto curedge = game->outs(n); *curedge != -1; curedge++) {
-                    game->add_edge(from, *curedge);
+                    game->vec_add_edge(from, *curedge);
                 }
             }
-            game->rebuild_arrays();
+            game->vec_finish();
             // remove the vertex
             pg::bitset mask(game->vertexcount());
             mask.set();
             mask[n] = false;
-            Game subgame(*game, mask);
-            game->swap(subgame);
+            Game *subgame = game->extract_subgame(mask);
+            game->swap(*subgame);
+            delete subgame;
             return true;
         }
     } else if (action == 4) {
@@ -180,11 +183,12 @@ nudge(Game *game, int profile)
         if (game->incount(n) > 0) {
             int from = game->ins(n)[rng(0, game->incount(n)-1)];
             if (from != n) {
-                game->remove_edge(from, n);
+                game->vec_init();
+                game->vec_remove_edge(from, n);
                 for (auto curedge = game->outs(n); *curedge != -1; curedge++) {
-                    game->add_edge(from, *curedge);
+                    game->vec_add_edge(from, *curedge);
                 }
-                game->rebuild_arrays();
+                game->vec_finish();
                 return true;
             }
         }
@@ -193,16 +197,17 @@ nudge(Game *game, int profile)
         if (game->outcount(n) > 1) {
             int edge = rng(0, game->outcount(n)-1);
             int m = game->outs(n)[edge];
-            game->remove_edge(n, m);
-            game->rebuild_arrays();
+            game->vec_init();
+            game->vec_remove_edge(n, m);
+            game->vec_finish();
             return true;
         }
     } else if (action == 6) {
         // add a random edge
-        if (game->add_edge(n, rng(0, game->vertexcount()-1))) {
-            game->rebuild_arrays();
-            return true;
-        }
+        game->vec_init();
+        bool res = game->vec_add_edge(n, rng(0, game->vertexcount()-1));
+        game->vec_finish();
+        if (res) return true;
     }
     return false;
 }
@@ -239,14 +244,14 @@ main(int argc, char **argv)
     /**
      * Read a game from file or stdin.
      */
-    Game *game;
+    Game *game = new Game();
     try {
         if (options.count("input")) {
             std::ifstream file(options["input"].as<std::string>());
-            game = new Game(file);
+            game->parse_pgsolver(file, false);
             file.close();
         } else {
-            game = new Game(std::cin);
+            game->parse_pgsolver(std::cin, false);
         }
     } catch (const char *err) {
         std::cerr << "parsing error: " << err << std::endl;
@@ -258,7 +263,6 @@ main(int argc, char **argv)
      */
     if (options.count("modify")) {
         int profile = options["modify"].as<int>();
-        game->build_vectors();
         while (nudge(game, profile) == false) {}
     }
 

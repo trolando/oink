@@ -33,8 +33,8 @@ Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.
 {
     // ensure the vertices are ordered properly
     game.ensure_sorted();
-    // ensure arrays are built
-    game.build_arrays();
+    // ensure arrays are built, but don't rebuild
+    game.build_in_array(false);
 
     // initialize outcount (for flush)
     outcount = new int[game.vertexcount()];
