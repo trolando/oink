@@ -18,9 +18,15 @@
 #define BITSET_HPP
 
 #include <libpopcnt.h>
+#include <sys/mman.h>  // for mmap, munmap
 
 namespace pg
 {
+
+static inline int bsr(uint64_t x)
+{
+    return __builtin_clzll(x) ^ 63;
+}
 
 class bitset
 {
@@ -61,42 +67,76 @@ public:
     {
         _size = 0;
         _bitssize = 0;
+        _allocsize = 0;
         _bits = NULL;
+        with_mmap = false;
     }
 
-    bitset(size_t newsize)
+    bitset(size_t newsize, bool use_mmap=false)
     {
-        _size = newsize;
-        _bitssize = (_size+63)/64;
-        _bits = new uint64_t[_bitssize];
-        std::fill(_bits, _bits+_bitssize, '\0');
+        if (use_mmap) {
+            _size = newsize;
+            _bitssize = (_size+63)/64;
+            _allocsize = _bitssize * 8;
+            _bits = (uint64_t*)mmap(0, _allocsize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            if (_bits == (uint64_t*)MAP_FAILED) abort();
+            with_mmap = true;
+        } else {
+            _size = newsize;
+            _bitssize = (_size+63)/64;
+            _allocsize = _bitssize * 8;
+            _bits = new uint64_t[_bitssize];
+            std::fill(_bits, _bits+_bitssize, '\0');
+            with_mmap = false;
+        }
     }
 
     bitset(const bitset &other)
     {
         _size = other._size;
         _bitssize = other._bitssize;
+        _allocsize = _bitssize * 8;
         _bits = new uint64_t[_bitssize];
+        with_mmap = false;
         std::copy(other._bits, other._bits+_bitssize, _bits);
     }
 
     ~bitset()
     {
-        if (_bits != NULL) delete[] _bits;
+        if (with_mmap) {
+            munmap(_bits, _allocsize);
+        } else {
+            if (_bits != NULL) delete[] _bits;
+        }
     }
 
+    /**
+     * After resizing the *new* bits _can_ be undefined.
+     */
     void resize(size_t newsize)
     {
-        if (_size == 0) {
+        if (_allocsize == 0) {
             bitset b(newsize);
             swap(b);
-        } else if (newsize <= _size) {
+        } else if (newsize <= _allocsize*8) {
+            // fits in allocated array already
             _size = newsize;
             _bitssize = (newsize+63)/64;
-            zero_unused_bits();
+            zero_unused_bits(); // only zeroes the last used block...
         } else {
-            // not supported
-            abort();
+            // need a larger allocated array
+            if (with_mmap) {
+                _size = newsize;
+                _bitssize = (newsize+63)/64;
+                size_t new_allocsize = _bitssize*8;
+                _bits = (uint64_t*)mremap(_bits, _allocsize, new_allocsize, MREMAP_MAYMOVE);
+                if (_bits == (uint64_t*)MAP_FAILED) abort();
+                _allocsize = new_allocsize;
+            } else {
+                bitset b(newsize, false);
+                std::copy(_bits, _bits+_bitssize, b._bits);
+                swap(b);
+            }
         }
     }
 
@@ -268,7 +308,9 @@ public:
     {
         std::swap(_size, other._size);
         std::swap(_bitssize, other._bitssize);
+        std::swap(_allocsize, other._allocsize);
         std::swap(_bits, other._bits);
+        std::swap(with_mmap, other.with_mmap);
     }
 
     bool intersects(const bitset& other) const
@@ -288,12 +330,23 @@ public:
         else return i*64 + __builtin_ffsll(_bits[i]) - 1;
     }
 
+    size_t find_last() const
+    {
+        if (num_blocks() == 0) return npos;
+
+        size_t i = num_blocks()-1;
+        for (;;) {
+            if (_bits[i] != 0) return i*64 + bsr(_bits[i]);
+            if (i == 0) return npos;
+            i--;
+        }
+    }
+
     size_t find_next(size_t pos) const
     {
         if (pos >= _size) return npos;
         pos++;
         size_t i = block_index(pos);
-        //uint64_t m = _bits[i] & ~(bit_mask(pos)-1);
         uint64_t m = _bits[i] & (~uint64_t(0) << bit_index(pos));
         if (m) {
             return i*64 + __builtin_ffsll(m) - 1;
@@ -305,11 +358,31 @@ public:
         }
     }
 
+    size_t find_prev(size_t pos) const
+    {
+        if (pos == 0 or pos == npos) return npos;
+        size_t i = block_index(pos);
+        uint64_t m = _bits[i] & ~((~uint64_t(0)) << (int)bit_index(pos));
+        if (m) {
+            return i*64 + bsr(m);
+        } else {
+            if (i == 0) return npos;
+            i -= 1;
+            for (;;) {
+                if (_bits[i] != 0) return i*64 + bsr(_bits[i]);
+                if (i == 0) return npos;
+                i--;
+            }
+        }
+    }
+
     static const size_t npos = static_cast<size_t>(-1);
 
 protected:
     uint64_t *_bits;
     size_t _size, _bitssize;
+    size_t _allocsize;
+    bool with_mmap;
 };
 
 inline bitset operator^(const bitset& x, const bitset& y)
