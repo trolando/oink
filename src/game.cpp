@@ -242,7 +242,8 @@ Game::init_random_game(int n, int maxP, int maxE)
 void
 Game::init_vertex(int v, int priority, int owner, std::string label)
 {
-    assert(v >= 0 and v < n_vertices);
+    assert(v >= 0);
+    while (v >= n_vertices) v_sizeup();
     set_priority(v, priority);
     set_owner(v, owner);
     set_label(v, label);
@@ -919,11 +920,11 @@ Game::v_sizeup(void)
     size_t old = v_allocated;
     v_allocated += v_allocated/2;
     n_vertices = v_allocated;
-    _priority = (int*)mremap(0, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
-    strategy = (int*)mremap(0, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
-    _firstouts = (int*)mremap(0, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
-    _outcount = (int*)mremap(0, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
-    _label = (string**)mremap(0, sizeof(string*[old]), sizeof(string*[v_allocated]), MREMAP_MAYMOVE);
+    _priority = (int*)mremap(_priority, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
+    strategy = (int*)mremap(strategy, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
+    _firstouts = (int*)mremap(_firstouts, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
+    _outcount = (int*)mremap(_outcount, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
+    _label = (string**)mremap(_label, sizeof(string*[old]), sizeof(string*[v_allocated]), MREMAP_MAYMOVE);
     if (_priority == (int*)MAP_FAILED) abort();
     if (_label == (string**)MAP_FAILED) abort();
     if (strategy == (int*)MAP_FAILED) abort();
