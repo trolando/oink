@@ -486,6 +486,9 @@ Game::parse_pgsolver(std::istream &inp, bool removeBadLoops)
             break;
         }
     }
+
+    // ensure strategy empty
+    std::fill(strategy, strategy+n_vertices, static_cast<int>(~0));
 }
 
 void
@@ -526,6 +529,8 @@ Game::parse_solution(std::istream &in)
             // if (!has_edge(ident, str)) throw "strategy not successor of node";
             // actually this is already checked by the verifier
             strategy[ident] = str;
+        } else {
+            strategy[ident] = -1;
         }
     }
 }
