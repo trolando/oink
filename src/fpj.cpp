@@ -55,7 +55,6 @@ FPJSolver::runSeqGreedy()
      * Initialize loop
      */
 
-    bool blockchanged = false; // did the current block change (new distractions)
     int cur_parity = parity[0]; // parity of current block
     int i = 0; // the current vertex
 
@@ -72,7 +71,11 @@ FPJSolver::runSeqGreedy()
         }
 
         if (blockended) {
-            if (blockchanged) {
+            if (Q.nonempty()) {
+                /**
+                 * First set as distraction
+                 */
+                for (unsigned int n=0; n<Q.size(); n++) distraction[Q[n]] = true;
                 /**
                  * We have to reset all justified vertices that are now no longer justified...
                  */
@@ -80,16 +83,14 @@ FPJSolver::runSeqGreedy()
                     const int v = Q.pop();
                     for (auto curedge = ins(v); *curedge != -1; curedge++) {
                         const int from = *curedge;
-                        if (justified[from]) {
-                            if (strategy[from] == -1 or strategy[from] == v) {
+                        if (justified[from] and (strategy[from] == -1 or strategy[from] == v)) {
 #ifndef NDEBUG
-                                if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(from) << std::endl;
+                            if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(from) << std::endl;
 #endif
-                                justified[from] = false;
-                                distraction[from] = false; // reset it
-                                Q.push(from);
-                                if (from < i) i = from; // afterwards, continue at lowest unjustified vertex
-                            }
+                            justified[from] = false;
+                            distraction[from] = false; // reset it
+                            Q.push(from);
+                            if (from < i) i = from; // afterwards, continue at lowest unjustified vertex
                         }
                     }
                 }
@@ -97,7 +98,6 @@ FPJSolver::runSeqGreedy()
                 if (trace) logger << "restarting after finding distractions of prio " << priority(i-1) << std::endl;
 #endif
                 iterations++;
-                blockchanged = false;
             }
 
             if (i == nodecount()) break; // in case the last block didn't result in unjustifications
@@ -148,9 +148,7 @@ FPJSolver::runSeqGreedy()
 
         // evaluation stays the same
         if (cur_parity != onestep_winner) {
-            Q.push(i); // add to the Queue, because all justified predecessors are now invalid
-            distraction[i] = true;
-            blockchanged = true;
+            Q.push(i); // add to Q
 #ifndef NDEBUG
             if (trace >= 2) {
                 logger << "\033[38;5;165;1mjustified*\033[m " << label_vertex(i);
@@ -203,7 +201,6 @@ FPJSolver::runSeq()
      * Initialize loop
      */
 
-    bool blockchanged = false; // did the current block change (new distractions)
     int cur_parity = parity[0]; // parity of current block
     int i = 0; // the current vertex
     int blockstart = 0; // first vertex of the current block
@@ -221,7 +218,14 @@ FPJSolver::runSeq()
         }
 
         if (blockended) {
-            if (blockchanged) {
+            if (Q.nonempty()) {
+                /**
+                 * First set as justified and distraction
+                 */
+                for (unsigned int n=0; n<Q.size(); n++) {
+                    justified[Q[n]] = true;
+                    distraction[Q[n]] = true;
+                }
                 /**
                  * We have to reset all justified vertices that are now no longer justified...
                  */
@@ -234,7 +238,7 @@ FPJSolver::runSeq()
 #ifndef NDEBUG
                                 if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(from) << std::endl;
 #endif
-                                justified[from] = false;
+                                justified[from] = false; // no longer justified
                                 distraction[from] = false; // reset it
                                 Q.push(from);
                                 if (from < i) i = from; // afterwards, continue at lowest unjustified vertex
@@ -246,7 +250,6 @@ FPJSolver::runSeq()
                 if (trace) logger << "restarting after finding distractions of prio " << priority(i-1) << std::endl;
 #endif
                 iterations++;
-                blockchanged = false;
                 if (i > blockstart) i = blockstart;
             } else {
                 // We now know that the current strategy of all unjustified vertices of the block is justified
@@ -270,7 +273,10 @@ FPJSolver::runSeq()
         }
 
         // if the current vertex is justified, we don't need to check it
-        if (justified[i]) { i++; continue; }
+        if (justified[i]) {
+            i++;
+            continue;
+        }
 
         // compute one step winner of <i> and update the strategy
         int onestep_winner, str = -1;
@@ -311,9 +317,6 @@ FPJSolver::runSeq()
         // evaluation stays the same
         if (cur_parity != onestep_winner) {
             Q.push(i); // add to the Queue, because all justified predecessors are now invalid
-            distraction[i] = true;
-            justified[i] = true;
-            blockchanged = true;
 #ifndef NDEBUG
             if (trace >= 2) {
                 logger << "\033[38;5;165;1mjustified*\033[m " << label_vertex(i);
