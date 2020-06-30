@@ -157,11 +157,13 @@ FPJSolver::runSeqGreedy()
             }
 #endif
         } else {
+#ifndef NDEBUG
             if (trace >= 2) {
                 logger << "\033[38;5;165;1mjustified\033[m " << label_vertex(i);
                 if (strategy[i] != -1) logger << " => " << label_vertex(strategy[i]);
                 logger << std::endl;
             }
+#endif
         }
 
         i++;
@@ -223,8 +225,16 @@ FPJSolver::runSeq()
                  * First set as justified and distraction
                  */
                 for (unsigned int n=0; n<Q.size(); n++) {
-                    justified[Q[n]] = true;
-                    distraction[Q[n]] = true;
+                    const int v = Q[n];
+                    justified[v] = true;
+                    distraction[v] = true;
+#ifndef NDEBUG
+                    if (trace >= 2) {
+                        logger << "\033[38;5;165;1mjustified*\033[m " << label_vertex(v);
+                        if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
+                        logger << std::endl;
+                    }
+#endif
                 }
                 /**
                  * We have to reset all justified vertices that are now no longer justified...
@@ -256,11 +266,13 @@ FPJSolver::runSeq()
                 for (int v=blockstart; v<i; v++) {
                     if (!disabled[v] and !justified[v]) {
                         justified[v] = true;
+#ifndef NDEBUG
                         if (trace >= 2) {
                             logger << "\033[38;5;165;1mjustified\033[m " << label_vertex(v);
                             if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
                             logger << std::endl;
                         }
+#endif
                     }
                 }
             }
