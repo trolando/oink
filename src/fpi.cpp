@@ -35,11 +35,20 @@ TASK_3(int, update_block_rec, FPISolver*, solver, int, i, int, n)
 {
     if (n>128) {
         // because dynamic bitset is not thread safe, work in blocks of 64...
-        int N = (n/128)*64;
-        SPAWN(update_block_rec, solver, i+N, n-N);
-        int a = CALL(update_block_rec, solver, i, N);
-        int b = SYNC(update_block_rec);
-        return a+b;
+        if (i&127) {
+            // start not yet aligned
+            int N = 128 - (i&127);
+            SPAWN(update_block_rec, solver, i+N, n-N);
+            int a = solver->updateBlock(i, N);
+            int b = SYNC(update_block_rec);
+            return a+b;
+        } else {
+            int N = (n/128)*64;
+            SPAWN(update_block_rec, solver, i+N, n-N);
+            int a = CALL(update_block_rec, solver, i, N);
+            int b = SYNC(update_block_rec);
+            return a+b;
+        }
     } else {
         return solver->updateBlock(i, n);
     }
@@ -49,10 +58,18 @@ VOID_TASK_4(freeze_thaw_reset_rec, FPISolver*, solver, int, i, int, n, int, p)
 {
     if (n>128) {
         // because dynamic bitset is not thread safe, work in blocks of 64...
-        int N = (n/128)*64;
-        SPAWN(freeze_thaw_reset_rec, solver, i+N, n-N, p);
-        CALL(freeze_thaw_reset_rec, solver, i, N, p);
-        SYNC(freeze_thaw_reset_rec);
+        if (i&127) {
+            // start not yet aligned
+            int N = 128 - (i&127);
+            SPAWN(freeze_thaw_reset_rec, solver, i+N, n-N, p);
+            solver->freezeThawReset(i, N, p);
+            SYNC(freeze_thaw_reset_rec);
+        } else {
+            int N = (n/128)*64;
+            SPAWN(freeze_thaw_reset_rec, solver, i+N, n-N, p);
+            CALL(freeze_thaw_reset_rec, solver, i, N, p);
+            SYNC(freeze_thaw_reset_rec);
+        }
     } else {
         solver->freezeThawReset(i, n, p);
     }
