@@ -65,6 +65,7 @@ add_library(oink
     src/qpt.cpp
     src/tl.cpp
     src/rtl.cpp
+    src/zlkpp.cpp
     src/ptl.cpp
     src/dtl.cpp
 )

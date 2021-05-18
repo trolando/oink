@@ -33,6 +33,7 @@
 #include "rtl.hpp"
 #include "npp.hpp"
 #include "sspm.hpp"
+#include "zlkpp.hpp"
 #include "zlkq.hpp"
 #include "ptl.hpp"
 #include "dtl.hpp"
@@ -44,6 +45,9 @@ Solvers::Solvers()
     add("zlkq", "qpt Zielonka", 0, [] (Oink* oink, Game* game) { return new ZLKQSolver(oink, game); });
     add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKSolver(oink, game); });
     add("uzlk", "unoptimized Zielonka", 0, [] (Oink* oink, Game* game) { return new UnoptimizedZLKSolver(oink, game); });
+    add("zlkpp-std", "Zielonka (implementation by Paweł Parys)", 0, [] (Oink* oink, Game* game) { return new ZLKPPSolver(oink, game, ZLK_STANDARD); });
+    add("zlkpp-waw", "Warsaw quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink* oink, Game* game) { return new ZLKPPSolver(oink, game, ZLK_WARSAW); });
+    add("zlkpp-liv", "Liverpool quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink* oink, Game* game) { return new ZLKPPSolver(oink, game, ZLK_LIVERPOOL); });
     add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game) { return new NPPSolver(oink, game); });
     add("pp", "priority promotion PP", 0, [] (Oink* oink, Game* game) { return new PPSolver(oink, game); });
     add("ppp", "priority promotion PP+", 0, [] (Oink* oink, Game* game) { return new PPPSolver(oink, game); });

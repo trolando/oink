@@ -42,7 +42,10 @@ SPM  | Accelerated version of small progress measures
 MSPM | Maciej Gazda's modified small progress measures
 SSPM | Quasi-polynomial time succinct progress measures
 QPT  | Quasi-polynomial time ordered progress measures
-ZLKQ | Quasi-polynomial time recursive algorithm
+ZLKQ | Quasi-polynomial time recursive algorithm (optimized implementation by Tom van Dijk)
+ZLKPP-STD | Zielonka's recursive algorithm (exponential, version by Pawel Parys)
+ZLKPP-WAW | Zielonka's recursive algorithm (Warsaw version by Pawel Parys)
+ZLKPP-LIV | Zielonka's recursive algorithm (Liverpool version by Pawel Parys)
 FPI  | Distraction-based Fixpoint Iteration
 FPJ  | Distraction-based Fixpoint Iteration using Justifications
 FPJG | Distraction-based Fixpoint Iteration using Greedy Justifications
@@ -58,6 +61,7 @@ See the TACAS 2018 paper for more details on most of the implemented algorithms.
 * The QPT recursive algorithm is based on work by Pawel Parys and the follow-up work by Karoliina Lehtinen, Sven Schewe, Dominik Wojtczak.
 * FPI is the distraction-based fixpoint algorithm by Tom van Dijk and Bob Rubbens.
 * FPJ and FPJG are adaptations of FPI and the Justifications algorithm by Ruben Lapauw et al.
+* The ZLKPP algorithms are the implementations by Pawel Parys accompanying the paper "Karoliina Lehtinen, Pawel Parys, Sven Schewe, Dominik Wojtczak: A Recursive Approach to Solving Parity Games in Quasipolynomial Time."
 * All tangle learning algorithms are proposed by Tom van Dijk (me).
 
 The parallel algorithms use the work-stealing framework Lace.
