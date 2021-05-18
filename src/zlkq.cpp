@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 Tom van Dijk, University of Twente
+ * Copyright 2019 Tom van Dijk, University of Twente
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,7 +86,7 @@ ZLKQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R, bit
 }
 
 void
-ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
+ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
 {
     /**
      * This is based on a universal tree of height pr/2, with parameter n associated with pe or po
@@ -109,11 +109,37 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
 
     if (po <= 0) {
         W0 |= SG;
+
+#ifndef NDEBUG
+        if (trace and SG.any()) {
+            logger << "End of precision; presumed won by player 0:";
+            for (int v=vtop; v>=0; v--) {
+                if (SG[v]) {
+                    logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
+                }
+            }
+            logger << std::endl;
+        }
+#endif
+
         return;
     }
 
     if (pe <= 0) {
         W1 |= SG;
+
+#ifndef NDEBUG
+        if (trace and SG.any()) {
+            logger << "End of precision; presumed won by player 1:";
+            for (int v=vtop; v>=0; v--) {
+                if (SG[v]) {
+                    logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
+                }
+            }
+            logger << std::endl;
+        }
+#endif
+
         return;
     }
 
@@ -133,19 +159,33 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
      * This is like taking a shortcut in the Tree
      */
 
-    pr = priority(vtop);
+    const int pr = priority(vtop);
     const int pl = pr&1;
-
-#ifndef NDEBUG
-    if (trace >= 2) logger << "IN: " << pr << " (" << pl << ") E=" << pe << " O=" << po << "\n";
-#endif
 
     /**
      * Expand the left side of the current level of the universal tree
      */
 
-    if (pl == 0) solve(SG, vtop, pr, pe, po/2);
-    else solve(SG, vtop, pr, pe/2, po);
+    if (pl == 0) {
+        solve(SG, vtop, pe, po/2);
+    } else {
+        solve(SG, vtop, pe/2, po);
+    }
+
+#ifndef NDEBUG
+    if (trace >= 2) logger << "in pr=" << pr << ", pe=" << pe << ", po=" << po << std::endl;
+#endif
+
+    /**
+     * If the remaining subgame size <= po/2 cq pe/2 then we don't need to continue after the recursion.
+     *   (this optimization is due to Lehtinen, Parys, Schewe, Wojtczak '21)
+     */
+
+    if (pl == 0) {
+        if (SG.count() <= (unsigned long)(po/2)) return;
+    } else {
+        if (SG.count() <= (unsigned long)(pe/2)) return;
+    }
 
     auto &Wm = pl == 0 ? W0 : W1; // my W
     auto &Wo = pl == 0 ? W1 : W0; // opponent's W
@@ -164,7 +204,8 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
     /**
      * Update vtop to the highest vertex in the intersection
      */
-    while (vtop>=0 and !R[vtop]) vtop--;
+    while (vtop >= 0 and !R[vtop]) vtop--;
+    if (vtop == -1) return;
 
     /**
      * Compute H := Attr(vertices of <pr> in <R>)
@@ -172,7 +213,8 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
     bitset H(nodecount());
 
     for (int v=vtop; v!=-1; v--) {
-        if (priority(v) != pr) break; // stop attracting ... ;) [todo: add otf compression ?]
+        // if (priority(v) != pr) break; // stop attracting ... ;) [todo: add otf compression ?]
+        if ((priority(v)&1) != pl) break; // on-the-fly compression
         if (R[v]) {
             H[v] = true;
             str[v] = -1;
@@ -182,6 +224,16 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
             }
         }
     }
+
+#ifndef NDEBUG
+    if (trace) {
+        logger << "\033[1;33mregion \033[36m" << pr << "\033[m";
+        for (auto v = H.find_last(); v != bitset::npos; v = H.find_prev(v)) {
+            logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
+        }
+        logger << std::endl;
+    }
+#endif
 
     /**
      * Reset Wo and Wm for vertices in <R> - <H>;
@@ -196,34 +248,11 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
     // and set H := R - H
     H ^= R;
 
-#ifndef NDEBUG
-    /**
-     * If so desired, report our current status...
-     */
-    if (trace) {
-        logger << "Pre-rec subgame of (" << pr << " pe=" << pe << " po=" << po << "):";
-        for (int v=vtop; v>=0; v--) {
-            if (SG[v]) {
-                if (R[v]) {
-                    if (Wm[v]) {
-                        if (Wo[v]) logger << " \033[38;5;202m" << label_vertex(v) << "\033[m"; 
-                        else if (!H[v]) logger << " \033[1;38;5;46m" << label_vertex(v) << "\033[m";
-                        else logger << " \033[38;5;38m" << label_vertex(v) << "\033[m"; 
-                    }
-                    else logger << " \033[1;38;5;196m" << label_vertex(v) << "\033[m"; 
-                }
-                else logger << " \033[38;5;160m" << label_vertex(v) << "\033[m"; 
-            }
-        }
-        logger << std::endl;
-    }
-#endif
-
     /**
      * Go recursive!
      */
-    solve(H, vtop, pr-1, pe, po);
- 
+    solve(H, vtop, pe, po);
+
     /**
      * Let the opponent attract from our region...
      * The intersection of H and Wo is the opponent's subgame
@@ -251,19 +280,19 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
     /**
      * If so desired, report our current status...
      */
-    if (trace) {
+    if (trace >= 2) {
         logger << "Subgame of (" << pr << " pe=" << pe << " po=" << po << "):";
         for (int v=vtop; v>=0; v--) {
             if (SG[v]) {
                 if (R[v]) {
                     if (Wm[v]) {
-                        if (Wo[v]) logger << " \033[38;5;202m" << label_vertex(v) << "\033[m"; 
+                        if (Wo[v]) logger << " \033[38;5;202m" << label_vertex(v) << "\033[m";
                         else if (!H[v]) logger << " \033[1;38;5;46m" << label_vertex(v) << "\033[m";
-                        else logger << " \033[38;5;38m" << label_vertex(v) << "\033[m"; 
+                        else logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
                     }
-                    else logger << " \033[1;38;5;196m" << label_vertex(v) << "\033[m"; 
+                    else logger << " \033[1;38;5;196m" << label_vertex(v) << "\033[m";
                 }
-                else logger << " \033[38;5;160m" << label_vertex(v) << "\033[m"; 
+                else logger << " \033[38;5;160m" << label_vertex(v) << "\033[m";
             }
         }
         logger << std::endl;
@@ -282,9 +311,15 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
         // Reduce subgame by removing opponent's winning region <Wo>
         R -= Wo;
 
+        // Update vtop
+        while (vtop >= 0 and !R[vtop]) vtop--;
+
+        // Check if the game is empty
+        if (vtop == -1) return; // empty game, bye
+
         // Expand the right side of the current level of the universal tree
-        if (pl == 0) solve(R, vtop, pr, pe, po/2);
-        else solve(R, vtop, pr, pe/2, po);
+        if (pl == 0) solve(R, vtop, pe, po/2);
+        else solve(R, vtop, pe/2, po);
     } else {
         // Set strategy for vertices that do not yet have a strategy
         for (int v=vtop; v>=0; v--) {
@@ -299,10 +334,6 @@ ZLKQSolver::solve(bitset &SG, int vtop, int pr, const int pe, const int po)
             }
         }
     }
-
-#ifndef NDEBUG
-    if (trace >= 2) logger << "OUT: " << pr << " (" << pl << ") E=" << pe << " O=" << po << "\n";
-#endif
 }
 
 void
@@ -315,12 +346,12 @@ ZLKQSolver::run()
     Q.resize(nodecount());
     W0.resize(nodecount());
     W1.resize(nodecount());
-    
+
     bitset G(nodecount());
     G = disabled;
     G.flip();
 
-    solve(G, nodecount()-1, priority(nodecount()-1), nodecount(), nodecount());
+    solve(G, nodecount()-1, nodecount(), nodecount());
 
 #ifndef NDEBUG
     if (trace) {

@@ -49,7 +49,7 @@ protected:
     bitset W0, W1; // current approximation of winning areas
 
     inline void attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y);
-    void solve(bitset &Subgame, int vtop, int pr, int pe, int po);
+    void solve(bitset &Subgame, int vtop, int pe, int po);
 };
 
 }
