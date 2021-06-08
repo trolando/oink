@@ -20,6 +20,7 @@
 
 using namespace pg;
 
+// The core family of difficult parity games by Benerecetti et al
 int
 main(int argc, char** argv)
 {
@@ -28,22 +29,14 @@ main(int argc, char** argv)
         return -1;
     }
 
-    int n = std::stoi(argv[1]);
+    int n = 2*std::stoi(argv[1]);
 
-    Game game(3+6*n);
+    Game game(3+3*n);
     game.vec_init();
 
-    game.init_vertex(0, 5, 0);
-    game.init_vertex(1, 0, 0);
-    game.init_vertex(2, 0, 1);
-    game.vec_add_edge(2, 2);
-    game.vec_add_edge(1, 2);
-    game.vec_add_edge(2, 1);
-    game.vec_add_edge(0, 1);
-
-    /* create 2n+1 pieces */
-    for (int i=0; i<=2*n; i++) {
-        game.init_vertex(3*i+0, 2*n+1+i, (i&1));
+    /* create n+1 pieces */
+    for (int i=0; i<=n; i++) {
+        game.init_vertex(3*i+0, n+1+i, (i&1));
         game.init_vertex(3*i+1, i, (i&1));
         game.init_vertex(3*i+2, i, 1-(i&1));
         game.vec_add_edge(3*i+0, 3*i+1);
@@ -53,7 +46,7 @@ main(int argc, char** argv)
     }
     
     /* connect the pieces */
-    for (int i=0; i<2*n; i++) {
+    for (int i=0; i<n; i++) {
         game.vec_add_edge(3*i+2, 3*i+3);
         game.vec_add_edge(3*i+4, 3*i+0);
     }

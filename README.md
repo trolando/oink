@@ -96,8 +96,9 @@ counter\_dp    | Counterexample to the DP solver
 counter\_m     | Counterexample of Maciej Gazda, PhD Thesis, Sec. 3.5
 counter\_qpt   | Counterexample of Fearnley et al, An ordered approach to solving parity games in quasi polynomial time and quasi linear space, SPIN 2017
 counter\_core  | Counterexample of Benerecetti et al, Robust Exponential Worst Cases for Divide-et-Impera Algorithms for Parity Games, GandALF 2017
-tc             | Two Counters counterexample (GandALF 2019)
-tc+            | Two Counters counterexample modified for progressive tangle learning
+counter\_rob   | SCC version of counter\_core.
+tc             | Two binary counters generator (game family that defeats many of the recursive algorithms). See https://doi.org/10.4204/EPTCS.305.8 for details.
+tc+            | TC modified to defeat the RTL solver
 
 Instructions
 -----------
