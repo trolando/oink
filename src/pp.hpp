@@ -40,16 +40,17 @@ protected:
     std::vector<int> *regions;
     int *region;
     int *strategy;
-    //std::set<std::pair<int,int>> seen;
+    bitset Z;
+    uintqueue Q;
 
-    virtual void attract(int prio, std::queue<int> queue=std::queue<int>());
-    virtual void promote(int from, int to);
-    virtual void resetRegion(int priority);
-    virtual bool setupRegion(int index, int priority, bool mustReset);
-    virtual void setDominion(int priority);
+    void attract(int prio);
+    void promote(int from, int to);
+    void resetRegion(int priority);
+    bool setupRegion(int index, int priority, bool mustReset);
+    void setDominion(int priority);
     virtual int getRegionStatus(int index, int priority);
-    virtual void reportRegion(int priority);
-    virtual void printState();
+    void reportRegion(int priority);
+    void printState();
 };
 
 }
