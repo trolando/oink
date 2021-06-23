@@ -25,7 +25,7 @@
 
 namespace pg {
 
-PPSolver::PPSolver(Oink *oink, Game *game) : Solver(oink, game)
+PPSolver::PPSolver(Oink *oink, Game *game) : Solver(oink, game), Z(game->nodecount()), Q(game->nodecount())
 {
 }
 
@@ -34,19 +34,18 @@ PPSolver::~PPSolver()
 }
 
 void
-PPSolver::attract(int prio, std::queue<int> queue)
+PPSolver::attract(int prio)
 {
     const int pl = prio & 1;
     auto &rv = regions[prio];
 
-    // if queue is empty, then add all nodes of priority <p> to the queue
-    if (queue.empty()) for (int i : rv) queue.push(i);
+    // if queue is empty, then add all nodes in region[prio] to the queue
+    if (Q.empty()) for (int i : rv) Q.push(i);
 
     // for every node in the queue, try to attract its predecessors
-    while (!queue.empty()) {
+    while (Q.nonempty()) {
         // for every node in the queue...
-        int cur = queue.front();
-        queue.pop();
+        int cur = Q.pop();
 
         // (this iteration is a hot spot...)
         for (auto curedge = ins(cur); *curedge != -1; curedge++) {
@@ -62,8 +61,10 @@ PPSolver::attract(int prio, std::queue<int> queue)
                 rv.push_back(from);
                 region[from] = prio;
                 strategy[from] = cur;
-                queue.push(from);
+                Q.push(from);
+#ifndef NDEBUG
                 if (trace >= 3) logger << "\033[1;37mattracted \033[36m" << label_vertex(from) << " \033[37mto \033[36m" << prio << "\033[m (via " << label_vertex(cur) << ")" << std::endl;
+#endif
             } else {
                 // if owned by other parity, check all outgoing edges
                 bool can_escape = false;
@@ -80,46 +81,54 @@ PPSolver::attract(int prio, std::queue<int> queue)
                 rv.push_back(from);
                 region[from] = prio;
                 strategy[from] = -1;
-                queue.push(from);
+                Q.push(from);
+#ifndef NDEBUG
                 if (trace >= 3) logger << "\033[1;37mforced \033[36m" << label_vertex(from)<< " \033[37mto \033[36m" << prio << "\033[m" << std::endl;
+#endif
             }
         }
     }
 }
 
+/**
+ * Perform promotion of region <from> to region <to>, afterwards maximize the region via attraction
+ */
 void
 PPSolver::promote(int from, int to)
 {
     assert(from < to);
 
-    if (trace) {
-        if (trace >= 2) {
-            logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m:";
-            for (int n : regions[from]) {
-                logger << " \033[37m" << label_vertex(n) << "\033[m";
-            }
-            logger << std::endl;
-        } else {
-            logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m" << std::endl;
+#ifndef NDEBUG
+    if (trace >= 2) {
+        logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m:";
+        for (int n : regions[from]) {
+            logger << " \033[37m" << label_vertex(n) << "\033[m";
         }
+        logger << std::endl;
+    } else
+#endif
+    if (trace) {
+        logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m" << std::endl;
     }
 
-    // promote all nodes of region <from> to region <to>
-    std::queue<int> queue;
+    // promote all nodes of region <from> to region <to>, add them all to the queue (for attraction)
     for (int i : regions[from]) {
         region[i] = to;
-        queue.push(i);
+        Q.push(i);
     }
 
     regions[to].insert(regions[to].end(), regions[from].begin(), regions[from].end());
     regions[from].clear();
 
     // attract from the newly promoted nodes
-    attract(to, queue);
+    attract(to);
 
     promotions++;
 }
 
+/**
+ * Reset region <p> by resetting all vertices currently in region <p> to their original priority
+ */
 void
 PPSolver::resetRegion(int p)
 {
@@ -135,6 +144,10 @@ PPSolver::resetRegion(int p)
     regions[p].clear();
 }
 
+/**
+ * Setup a region, i.e., take the existing region, check if it needs to be reset.
+ * Then ensure that all top vertices are in the region...
+ */
 bool
 PPSolver::setupRegion(int i, int p, bool mustReset)
 {
@@ -142,8 +155,16 @@ PPSolver::setupRegion(int i, int p, bool mustReset)
     
     if (!mustReset) {
         // Check if we must reset anyway (because region is tainted)
+        // When must a region be reset?
+        // - some vertices are in a dominion (now disabled)
+        // - some vertices are already reset (i.e., attracted by opponent, then reset)
+        // - some vertices are attracted to a higher OPPONENT region
+        // When does a region not need to be reset?
+        // - some vertices are attracted to a higher SAME-PARITY region
         for (int i : regions[p]) {
-            if (disabled[i] or region[i] != p) {
+            if (region[i] == p) {
+                Z[i] = true;
+            } else if (disabled[i] or region[i] < p or (region[i] > p and (region[i]&1) != (p&1))) {
                 mustReset = true;
                 break;
             }
@@ -152,22 +173,32 @@ PPSolver::setupRegion(int i, int p, bool mustReset)
 
     if (mustReset) {
         if (!regions[p].empty()) resetRegion(p);
+        Z.reset();
     } else {
-        // No reset, but remove escapes (to be added)
+        // No reset, but remove escapes (to be added) and remove things in a higher region...
+        // The reason is that there may be vertices of priority p that are not yet in the region vector
         regions[p].erase(std::remove_if(regions[p].begin(), regions[p].end(),
-                [&](const int x){ return priority(x) == p; }),
+                [&](const int x){ return Z[x] != 1; }),
                 regions[p].end());
     }
 
     // Add all escapes to regions vector
     for (int j=i; j>=0 && priority(j) == p; j--) {
-        if (region[j] == -2) continue;
-        else if (disabled[j]) region[j] = -2;
-        else if (region[j] == p) {
-            if (strategy[j] != -1 and (disabled[strategy[j]] or region[strategy[j]] != p)) strategy[j] = -1;
-            regions[p].push_back(j);
+        if (region[j] == -2) continue; // already known to be disabled
+        else if (disabled[j]) region[j] = -2; // set now to region -2
+        else if (region[j] == p) { // is [to be] in region!
+            if (Z[j]) {
+                // already in the region, but check strategy
+                if (strategy[j] != -1 and !Z[strategy[j]]) strategy[j] = -1;
+                continue;
+            } else {
+                regions[p].push_back(j);
+                strategy[j] = -1;
+            }
         }
     }
+
+    Z.reset();
 
     // If the region is empty, return false
     if (regions[p].empty()) return false;
@@ -186,21 +217,13 @@ PPSolver::setDominion(int p)
     for (int i : regions[p]) {
         assert(region[i] == p);
         assert(owner(i) != pl or (strategy[i] != -1 and region[strategy[i]] == p));
+#ifndef NDEBUG
         if (trace >= 2) logger << " " << i;
+#endif
         oink->solve(i, pl, owner(i) == pl ? strategy[i] : -1);
     }
     if (trace) logger << std::endl;
     oink->flush();
-
-    // to recover, all regions containing a disabled node must be reset...
-    /*
-    for (int i=0; i<nodecount(); i++) {
-        if (region[i] == -2) continue;
-        if (!disabled[i]) continue;
-        int r = region[i];
-        logger << "tainted " << r << std::endl;
-    }
-    */
 }
 
 int
@@ -324,7 +347,9 @@ PPSolver::run()
         if (setupRegion(i, p, true)) {
             // region not empty, maybe promote
             while (true) {
+#ifndef NDEBUG
                 if (trace >= 2) reportRegion(p);
+#endif
                 int res = getRegionStatus(i, p);
                 if (res == -2) {
                     // not closed, skip to next priority and break inner loop

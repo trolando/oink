@@ -149,7 +149,12 @@ DPSolver::run()
 
         // if empty, possibly reset and continue with next
         if (priority(i) != p) {
-            if (!regions[p].empty()) resetRegion(p);
+            if (!regions[p].empty()) {
+                resetRegion(p);
+                // but then we must also reset everything lower...
+                if (p&1) reset1 = p-2;
+                else reset0 = p-2;
+            }
             continue;
         }
 
@@ -186,7 +191,10 @@ DPSolver::run()
                     // for (int j=0; j<nodecount(); j++) region[j] = disabled[j] ? -2 : priority(j);
                     // for (int j=0; j<nodecount(); j++) strategy[j] = -1;
                     for (int j=0; j<nodecount(); j++) region_[j] = -1;
-                    reset0 = reset1 = -1;
+                    reset0 = priority(nodecount()-1);
+                    reset1 = priority(nodecount()-1);
+                    if (reset0&1) reset0--;
+                    else reset1--;
                     P.clear();
                     break;
                 } else {
