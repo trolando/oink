@@ -63,7 +63,12 @@ PPPSolver::run()
 
         // if empty, possibly reset and continue with next
         if (priority(i) != p) {
-            if (!regions[p].empty()) resetRegion(p);
+            if (!regions[p].empty()) {
+                resetRegion(p);
+                // but then we must also reset everything lower...
+                if (p&1) reset1 = p-2;
+                else reset0 = p-2;
+            }
             continue;
         }
 
@@ -96,6 +101,10 @@ PPPSolver::run()
                     setDominion(p);
                     // restart algorithm and break inner loop
                     i = nodecount() - 1;
+                    reset0 = priority(nodecount()-1);
+                    reset1 = priority(nodecount()-1);
+                    if (reset0&1) reset0--;
+                    else reset1--;
                     break;
                 } else {
                     // found promotion, promote
