@@ -344,7 +344,7 @@ public:
 
     size_t find_next(size_t pos) const
     {
-        if (pos >= _size) return npos;
+        if (pos == npos or (pos+1) >= _size) return npos;
         pos++;
         size_t i = block_index(pos);
         uint64_t m = _bits[i] & (~uint64_t(0) << bit_index(pos));
