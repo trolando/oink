@@ -167,6 +167,16 @@ skip_whitespace(std::streambuf *rd)
     rd->sungetc();
 }
 
+static void
+skip_line(std::streambuf *rd)
+{
+    while (true) {
+        int ch;
+        if ((ch=rd->sbumpc()) == EOF) return;
+        if (ch == '\n' or ch == '\r') return;
+    }
+}
+
 static bool
 read_uint64(std::streambuf *rd, uint64_t *res)
 {
@@ -381,6 +391,14 @@ Game::parse_pgsolver(std::istream &inp, bool removeBadLoops)
     while ((inp >> ch) and ch != ';') continue;
     if (ch != ';') throw "missing ';'";
 
+    // check if next token is 'start'
+    {
+        skip_whitespace(rd);
+        int ch = rd->sbumpc();
+        if (ch == 's') skip_line(rd);
+        else rd->sungetc();
+    }
+
     /**
      * Construct game...
      */
@@ -415,6 +433,7 @@ Game::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 
         skip_whitespace(rd);
         if (!read_uint64(rd, &n)) throw "missing priority";
+        if (n > INT_MAX) throw "priority too high"; // don't be ridiculous
         _priority[id] = n;
 
         skip_whitespace(rd);
