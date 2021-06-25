@@ -45,6 +45,7 @@ bool opt_compress = false;
 bool opt_single = false;
 bool opt_loops = false;
 bool opt_wcwc = false;
+bool opt_sort = false;
 int opt_workers = 0;
 int opt_trace = -1;
 
@@ -138,6 +139,7 @@ main(int argc, char **argv)
         ("single", "Enable preprocessor \"single\" (solve single-parity games)")
         ("loops", "Enable preprocessor \"loops\" (remove/solve self-loops)")
         ("wcwc", "Enable preprocessor \"wcwc\" (solve winner-controlled winning cycles)")
+        ("sort", "Sort the list of files for solving (if given a list of files)")
         ;
     opts.add_options("Random games")
         ("count", "Number of random games", cxxopts::value<int>()->default_value("100"))
@@ -168,9 +170,9 @@ main(int argc, char **argv)
 
     if (options.count("gameseed")) {
         // create random game and write to stdout
-        int size = options["size"].as<int>();
-        int maxP = options.count("maxp") ? options["maxp"].as<int>() : size; // default #priorities = size
-        int maxE = options.count("maxe") ? options["maxe"].as<int>() : 4*size; // default avg degree [1..4]
+        long size = options["size"].as<int>();
+        long maxP = options.count("maxp") ? options["maxp"].as<int>() : size; // default #priorities = size
+        long maxE = options.count("maxe") ? options["maxe"].as<int>() : size*4L; // default avg degree [1..4]
         // limit maxE to bound [0 .. size*size]
         if (maxE < 0) maxE = 0;
         if (maxE > (size*size)) maxE = size*size;
@@ -189,6 +191,7 @@ main(int argc, char **argv)
     opt_single = options.count("single") != 0;
     opt_loops = options.count("loops") != 0;
     opt_wcwc = options.count("wcwc") != 0;
+    opt_sort = options.count("sort") != 0;
     if (options.count("workers")) opt_workers = options["workers"].as<int>();
     if (options.count("trace")) opt_trace = options["trace"].as<int>();
 
@@ -240,7 +243,8 @@ main(int argc, char **argv)
                 files.push_back(p);
             }
         }
-        sort(files.begin(), files.end());
+        if (opt_sort) sort(files.begin(), files.end());
+        else std::random_shuffle(files.begin(), files.end());
         for (auto &cp : files) {
             std::string filename = cp.leaf().string();
             std::cout << filename << ": " << std::flush;
@@ -279,12 +283,11 @@ main(int argc, char **argv)
         }
     } else {
         // random
-        int n = options["count"].as<int>();
-        int size = options["size"].as<int>();
-        int maxP = options.count("maxp") ? options["maxp"].as<int>() : size; // default #priorities = size
-        int maxE = options.count("maxe") ? options["maxe"].as<int>() : 4*size; // default avg degree [1..4]
+        uint64_t n = options["count"].as<int>();
+        uint64_t size = options["size"].as<int>();
+        uint64_t maxP = options.count("maxp") ? options["maxp"].as<int>() : size; // default #priorities = size
+        uint64_t maxE = options.count("maxe") ? options["maxe"].as<int>() : 4*size; // default avg degree [1..4]
 
-        if (maxE < 0) maxE = 0;
         if (maxE > (size*size)) maxE = size*size;
 
         unsigned int seriesseed;
@@ -300,7 +303,7 @@ main(int argc, char **argv)
         boost::random::mt19937 generator(seriesseed);
         Game g;
 
-        for (int i=0; i<n && !quit; i++) {
+        for (unsigned int i=0; i<n && !quit; i++) {
             unsigned int seed;
             if (n == 1 and options.count("seed")) seed = options["seed"].as<unsigned int>();
             else seed = generator();
