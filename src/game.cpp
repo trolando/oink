@@ -18,7 +18,6 @@
 #include <cassert>
 #include <cstring> // memset
 #include <iostream>
-#include <sys/mman.h> // for mmap, munmap
 #include <ctime>
 
 #include "game.hpp"
@@ -56,12 +55,12 @@ Game::~Game()
         if (_label[i]) delete _label[i];
     }
 
-    munmap(_priority, sizeof(int[v_allocated]));
-    munmap(_label, sizeof(int[v_allocated]));
-    munmap(strategy, sizeof(int[v_allocated]));
-    munmap(_firstouts, sizeof(int[v_allocated]));
-    munmap(_outcount, sizeof(int[v_allocated]));
-    munmap(_outedges, sizeof(int[e_allocated]));
+    free(_priority);
+    free(_label);
+    free(strategy);
+    free(_firstouts);
+    free(_outcount);
+    free(_outedges);
 
     if (_outvec != NULL) {
         delete[] _outvec;
@@ -74,7 +73,7 @@ Game::~Game()
     }
 }
 
-Game::Game(int vcount, int ecount) : _owner(vcount, true), solved(vcount, true), winner(vcount, true)
+Game::Game(int vcount, int ecount) : _owner(vcount), solved(vcount), winner(vcount)
 {
     assert(vcount > 0);
     if (ecount == -1) ecount = size_t(4) * vcount; // reasonable default outdegree
@@ -86,18 +85,18 @@ Game::Game(int vcount, int ecount) : _owner(vcount, true), solved(vcount, true),
     e_allocated = vcount+ecount+1;  // extra space for -1
     e_size = 0;
 
-    _priority = (int*)mmap(0, sizeof(int[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    _label = (string**)mmap(0, sizeof(string*[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    strategy = (int*)mmap(0, sizeof(int[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    _firstouts = (int*)mmap(0, sizeof(int[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    _outcount = (int*)mmap(0, sizeof(int[v_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    _outedges = (int*)mmap(0, sizeof(int[e_allocated]), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (_priority == (int*)MAP_FAILED) abort();
-    if (_label == (string**)MAP_FAILED) abort();
-    if (strategy == (int*)MAP_FAILED) abort();
-    if (_firstouts == (int*)MAP_FAILED) abort();
-    if (_outcount == (int*)MAP_FAILED) abort();
-    if (_outedges == (int*)MAP_FAILED) abort();
+    _priority = (int*)malloc(sizeof(int[v_allocated]));
+    _label = (string**)calloc(sizeof(string*), v_allocated);
+    strategy = (int*)malloc(sizeof(int[v_allocated]));
+    _firstouts = (int*)malloc(sizeof(int[v_allocated]));
+    _outcount = (int*)malloc(sizeof(int[v_allocated]));
+    _outedges = (int*)malloc(sizeof(int[e_allocated]));
+    if (_priority == (int*)0) abort();
+    if (_label == (string**)0) abort();
+    if (strategy == (int*)0) abort();
+    if (_firstouts == (int*)0) abort();
+    if (_outcount == (int*)0) abort();
+    if (_outedges == (int*)0) abort();
 
     _outvec = NULL;
     _inedges = NULL;
@@ -217,7 +216,7 @@ Game::init_random_game(int n, long maxP, long maxE)
     init_game(n);
 
     // First initialize all vertices, and give each vertex one random successor
-    vec_init();
+    _outvec = new std::vector<int>[n_vertices];
 
     for (int i=0; i<n; i++) {
         // initialize vertex i with random priority and random owner
@@ -259,6 +258,7 @@ Game::init_vertex(int v, int priority, int owner, std::string label)
     while (v >= n_vertices) v_sizeup();
     set_priority(v, priority);
     set_owner(v, owner);
+    this->_label[v] = 0; // just ensure that it's properly zeroed before use
     set_label(v, label);
 }
 
@@ -268,7 +268,8 @@ Game::set_priority(int node, int priority)
     _priority[node] = priority;
     if (is_ordered) {
         if (node > 0 and _priority[node-1] > _priority[node]) is_ordered = false;
-        else if (node < (n_vertices-1) and _priority[node] > _priority[node+1]) is_ordered = false;
+        // just assume we get vertices in-order...
+        // else if (node < (n_vertices-1) and _priority[node] > _priority[node+1]) is_ordered = false;
     }
 }
 
@@ -446,6 +447,7 @@ Game::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         else if (n == 1) { _owner[id] = true; }
         else { throw "invalid owner"; }
 
+        _label[id] = 0;
         e_start(id);
 
         bool has_self = false;
@@ -943,28 +945,26 @@ Game::copy_solution(Game &other)
 void 
 Game::e_sizeup(void)
 {
-    size_t old = e_allocated;
     e_allocated += e_allocated/2;
-    _outedges = (int*)mremap(_outedges, sizeof(int[old]), sizeof(int[e_allocated]), MREMAP_MAYMOVE);
-    if (_outedges == (int*)MAP_FAILED) abort();
+    _outedges = (int*)realloc(_outedges, sizeof(int[e_allocated]));
+    if (_outedges == NULL) abort();
 }
 
 void
 Game::v_sizeup(void)
 {
-    size_t old = v_allocated;
     v_allocated += v_allocated/2;
     n_vertices = v_allocated;
-    _priority = (int*)mremap(_priority, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
-    strategy = (int*)mremap(strategy, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
-    _firstouts = (int*)mremap(_firstouts, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
-    _outcount = (int*)mremap(_outcount, sizeof(int[old]), sizeof(int[v_allocated]), MREMAP_MAYMOVE);
-    _label = (string**)mremap(_label, sizeof(string*[old]), sizeof(string*[v_allocated]), MREMAP_MAYMOVE);
-    if (_priority == (int*)MAP_FAILED) abort();
-    if (_label == (string**)MAP_FAILED) abort();
-    if (strategy == (int*)MAP_FAILED) abort();
-    if (_firstouts == (int*)MAP_FAILED) abort();
-    if (_outcount == (int*)MAP_FAILED) abort();
+    _priority = (int*)realloc(_priority, sizeof(int[v_allocated]));
+    strategy = (int*)realloc(strategy, sizeof(int[v_allocated]));
+    _firstouts = (int*)realloc(_firstouts, sizeof(int[v_allocated]));
+    _outcount = (int*)realloc(_outcount, sizeof(int[v_allocated]));
+    _label = (string**)realloc(_label, sizeof(string*[v_allocated]));
+    if (_priority == (int*)0) abort();
+    if (strategy == (int*)0) abort();
+    if (_firstouts == (int*)0) abort();
+    if (_outcount == (int*)0) abort();
+    if (_label == (string**)0) abort();
     _owner.resize(v_allocated);
     solved.resize(v_allocated);
     winner.resize(v_allocated);

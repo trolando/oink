@@ -18,7 +18,6 @@
 #define BITSET_HPP
 
 #include <libpopcnt.h>
-#include <sys/mman.h>  // for mmap, munmap
 
 namespace pg
 {
@@ -69,26 +68,15 @@ public:
         _bitssize = 0;
         _allocsize = 0;
         _bits = NULL;
-        with_mmap = false;
     }
 
-    bitset(size_t newsize, bool use_mmap=false)
+    bitset(size_t newsize)
     {
-        if (use_mmap) {
-            _size = newsize;
-            _bitssize = (_size+63)/64;
-            _allocsize = _bitssize * 8;
-            _bits = (uint64_t*)mmap(0, _allocsize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            if (_bits == (uint64_t*)MAP_FAILED) abort();
-            with_mmap = true;
-        } else {
-            _size = newsize;
-            _bitssize = (_size+63)/64;
-            _allocsize = _bitssize * 8;
-            _bits = new uint64_t[_bitssize];
-            std::fill(_bits, _bits+_bitssize, '\0');
-            with_mmap = false;
-        }
+        _size = newsize;
+        _bitssize = (_size+63)/64;
+        _allocsize = _bitssize * 8;
+        _bits = new uint64_t[_bitssize];
+        std::fill(_bits, _bits+_bitssize, '\0');
     }
 
     bitset(const bitset &other)
@@ -97,17 +85,12 @@ public:
         _bitssize = other._bitssize;
         _allocsize = _bitssize * 8;
         _bits = new uint64_t[_bitssize];
-        with_mmap = false;
         std::copy(other._bits, other._bits+_bitssize, _bits);
     }
 
     ~bitset()
     {
-        if (with_mmap) {
-            munmap(_bits, _allocsize);
-        } else {
-            if (_bits != NULL) delete[] _bits;
-        }
+        if (_bits != NULL) delete[] _bits;
     }
 
     /**
@@ -124,19 +107,9 @@ public:
             _bitssize = (newsize+63)/64;
             zero_unused_bits(); // only zeroes the last used block...
         } else {
-            // need a larger allocated array
-            if (with_mmap) {
-                _size = newsize;
-                _bitssize = (newsize+63)/64;
-                size_t new_allocsize = _bitssize*8;
-                _bits = (uint64_t*)mremap(_bits, _allocsize, new_allocsize, MREMAP_MAYMOVE);
-                if (_bits == (uint64_t*)MAP_FAILED) abort();
-                _allocsize = new_allocsize;
-            } else {
-                bitset b(newsize, false);
-                std::copy(_bits, _bits+_bitssize, b._bits);
-                swap(b);
-            }
+            bitset b(newsize);
+            std::copy(_bits, _bits+_bitssize, b._bits);
+            swap(b);
         }
     }
 
@@ -315,7 +288,6 @@ public:
         std::swap(_bitssize, other._bitssize);
         std::swap(_allocsize, other._allocsize);
         std::swap(_bits, other._bits);
-        std::swap(with_mmap, other.with_mmap);
     }
 
     bool intersects(const bitset& other) const
@@ -387,7 +359,6 @@ protected:
     uint64_t *_bits;
     size_t _size, _bitssize;
     size_t _allocsize;
-    bool with_mmap;
 };
 
 inline bitset operator^(const bitset& x, const bitset& y)
