@@ -34,13 +34,13 @@ main(int argc, char** argv)
     }
 
     /**
-     * Solve with ATL solver and no WCWC / SP solving
+     * Solve with TL solver and no WCWC / SP solving
      */
     std::stringstream log;
     pg::Oink solver(pg, log);
     solver.setSolveSingle(false);
     solver.setRemoveWCWC(false);
-    solver.setSolver("atl");
+    solver.setSolver("tl");
     solver.run();
 
     /**
