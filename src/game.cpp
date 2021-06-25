@@ -108,6 +108,7 @@ Game::Game(int vcount, int ecount) : _owner(vcount, true), solved(vcount, true),
     _outedges[0] = -1;
     e_size++;
 
+    std::fill(strategy, strategy+vcount, '\xff');
 
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
@@ -210,7 +211,7 @@ Game::init_game(int count)
  * - then generate at most <maxE> more edges
  */
 void
-Game::init_random_game(int n, int maxP, int maxE)
+Game::init_random_game(int n, long maxP, long maxE)
 {
     // reset/initialize game with vector representation
     init_game(n);
@@ -837,7 +838,15 @@ Game::extract_subgame(bitset mask)
                     ne++;
                 }
             }
-            if (bad) abort(); // bad!
+            if (bad) {
+                std::cerr << "no successor for vertex " << label_vertex(v) << " in extract_subgame!" << std::endl;
+                std::cerr << "successors not in subgame:";
+                for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                    std::cerr << " " << label_vertex(*curedge);
+                }
+                std::cerr << std::endl;
+                abort(); // bad!
+            }
         }
     }
 
@@ -868,9 +877,9 @@ Game::extract_subgame(bitset mask)
 
     for (int w=0; w<nv; w++) {
         int v = invmap[w];
-        res->e_start(v);
+        res->e_start(w);
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
-            if (mask[*curedge]) res->e_add(v, mapping[*curedge]);
+            if (mask[*curedge]) res->e_add(w, mapping[*curedge]);
         }
         res->e_finish();
     }
