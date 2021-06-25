@@ -376,8 +376,8 @@ public:
      */
 
 private:
-    int n_vertices;        // number of vertices
-    int n_edges;           // number of edges
+    long n_vertices;        // number of vertices
+    long n_edges;           // number of edges
     int *_priority;        // priority of each vertex
     bitset _owner;         // owner of each vertex (1 for odd, 0 for even)
     std::string **_label;  // (optional) vertex labels
