@@ -35,7 +35,7 @@ protected:
 public:
     Error(const char *msg, const char *file, const unsigned int line) : msg(msg), file(file), line(line) { }
     ~Error() throw() { }
-    const char *what() throw() {
+    virtual const char *what() throw() {
         std::ostringstream o;
         o << msg << " (at " << file << ":" << line << ")";
         thewhat = o.str();
