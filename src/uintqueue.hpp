@@ -74,6 +74,11 @@ public:
         return (queue[--pointer]);
     }
 
+    __attribute__((always_inline)) void pop2()
+    {
+        pointer -= 2;
+    }
+
     __attribute__((always_inline)) void push(uint element)
     {
         queue[pointer++] = element;
@@ -82,6 +87,11 @@ public:
     __attribute__((always_inline)) uint& back()
     {
         return (queue[pointer-1]);
+    }
+
+    __attribute__((always_inline)) uint& back2()
+    {
+        return (queue[pointer-2]);
     }
 
     __attribute__((always_inline)) void clear()
