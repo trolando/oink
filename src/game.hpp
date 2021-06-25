@@ -98,7 +98,7 @@ public:
       * - each vertex minimum 1 random edge
       * - then generate at most <maxE> more edges
       */
-    void init_random_game(int n, int maxP, int maxE);
+    void init_random_game(int n, long maxP, long maxE);
     inline void set_random_seed(unsigned int seed) { generator.seed(seed); }
 
     /**
