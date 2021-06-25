@@ -30,7 +30,7 @@ main(int argc, char **argv)
         game.parse_pgsolver(file, false);
         file.close();
     } else {
-        game.parse_pgsolver(std::cin);
+        game.parse_pgsolver(std::cin, false);
     }
 
     if (argc >= 3) {
