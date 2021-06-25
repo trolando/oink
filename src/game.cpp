@@ -19,6 +19,7 @@
 #include <cstring> // memset
 #include <iostream>
 #include <sys/mman.h> // for mmap, munmap
+#include <ctime>
 
 #include "game.hpp"
 
@@ -46,7 +47,7 @@ Game::Game() : _owner(0), solved(0), winner(0)
     e_allocated = 0;
     e_size = 0;
     strategy = NULL;
-    set_random_seed(rd());
+    set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
 
 Game::~Game()
@@ -107,7 +108,8 @@ Game::Game(int vcount, int ecount) : _owner(vcount, true), solved(vcount, true),
     _outedges[0] = -1;
     e_size++;
 
-    set_random_seed(rd());
+
+    set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
 
 /**
@@ -148,7 +150,7 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
     winner = other.winner;
     memcpy(strategy, other.strategy, sizeof(int[n_vertices]));
 
-    set_random_seed(rd());
+    set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
 
 /**
@@ -1033,7 +1035,5 @@ Game::build_in_array(bool rebuild)
         }
     }
 }
-
-std::random_device Game::rd;
 
 }
