@@ -21,7 +21,8 @@
 #include <sstream>
 #include <vector>
 #include <map>
-#include <random>
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_int_distribution.hpp>
 
 #include <bitset.hpp>
 
@@ -425,9 +426,8 @@ public:
 private:
     void unsafe_permute(int *mapping); // apply a reordering
     
-    static std::random_device rd;
-    std::mt19937 generator;
-    inline int rng(int low, int high) { return std::uniform_int_distribution<int>(low, high)(generator); }
+    boost::random::mt19937 generator;
+    inline long rng(long low, long high) { return boost::random::uniform_int_distribution<> (low, high)(generator); }
 };
 
 }

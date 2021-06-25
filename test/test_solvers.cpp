@@ -26,6 +26,7 @@
 #include <boost/iostreams/filter/bzip2.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/random/random_device.hpp>
 
 #include "tools/cxxopts.hpp"
 #include "game.hpp"
@@ -290,13 +291,13 @@ main(int argc, char **argv)
         if (options.count("seed")) {
             seriesseed = options["seed"].as<unsigned int>();
         } else {
-            std::random_device rd;
+            boost::random::random_device rd;
             seriesseed = rd();
         }
 
         std::cout << "Creating " << n << " random games: --size=" << size << " --maxp=" << maxP << " --maxe=" << maxE << " --seed=" << seriesseed << std::endl;
 
-        std::mt19937 generator(seriesseed);
+        boost::random::mt19937 generator(seriesseed);
         Game g;
 
         for (int i=0; i<n && !quit; i++) {
