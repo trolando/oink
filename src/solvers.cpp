@@ -55,7 +55,7 @@ Solvers::Solvers()
     add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink* oink, Game* game) { return new DPSolver(oink, game); });
     add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink* oink, Game* game) { return new RRDPSolver(oink, game); });
     add("fpi", "fixpoint iteration", 1, [] (Oink* oink, Game* game) { return new FPISolver(oink, game); });
-    add("fpj", "fixpoint iteration with justifications", 1, [] (Oink* oink, Game* game) { return new FPJSolver(oink, game); });
+    add("fpj", "fixpoint iteration with justifications", 0, [] (Oink* oink, Game* game) { return new FPJSolver(oink, game); });
     add("fpjg", "greedy fixpoint iteration with justifications", 1, [] (Oink* oink, Game* game) { return new FPJGSolver(oink, game); });
     add("psi", "parallel strategy improvement", 1, [] (Oink* oink, Game* game) { return new PSISolver(oink, game); });
     add("spm", "accelerated small progress measures", 0, [] (Oink* oink, Game* game) { return new SPMSolver(oink, game); });
