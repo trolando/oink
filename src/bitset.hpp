@@ -174,6 +174,11 @@ public:
         return *this;
     }
 
+    inline std::size_t size(void) const
+    {
+        return _size;
+    }
+
     std::size_t count(void) const
     {
         return popcnt(_bits, num_blocks()*8);
