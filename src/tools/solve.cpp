@@ -326,7 +326,7 @@ int main(int argc, char **argv)
     if (options.count("solver")) {
         en.setSolver(solvers.id(options["solver"].as<std::string>()));
     } else {
-        en.setSolver("atl"); // default solver :)
+        en.setSolver("tl"); // default solver
         for (unsigned id=0; id<solvers.count(); id++) {
             if (options.count(solvers.label(id))) en.setSolver(id);
         }
