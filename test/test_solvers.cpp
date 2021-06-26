@@ -33,6 +33,7 @@
 #include "oink.hpp"
 #include "solvers.hpp"
 #include "verifier.hpp"
+#include "lace.h"
 
 using namespace pg;
 namespace fs = boost::filesystem;
@@ -157,7 +158,7 @@ main(int argc, char **argv)
     }
     opts.add_options("Solving")
         ("t,trace", "Write trace with given level (0-3) to stdout", cxxopts::value<int>())
-        ("w,workers", "Number of workers for parallel algorithms, or -1 for sequential, 0 for autodetect", cxxopts::value<int>()->default_value("0"))
+        ("w,workers", "Number of workers for parallel algorithms, or -1 for sequential, 0 for autodetect", cxxopts::value<int>()->default_value("-1"))
         ;
 
     /* Parse command line */
@@ -217,6 +218,8 @@ main(int argc, char **argv)
     }
 
     setsighandlers();
+
+    if (opt_workers >= 0) lace_start(opt_workers, 1000000UL);
 
     int final_res = 0;
     std::stringstream log;
@@ -345,6 +348,8 @@ main(int argc, char **argv)
             std::cout << std::endl;
         }
     }
+
+    if (opt_workers >= 0) lace_stop();
 
     std::cout << "\033[38;5;226msummary\033[m: " << total << " games" << std::endl;
     std::cout << "\033[38;5;226msolvers\033[m:";

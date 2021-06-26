@@ -49,7 +49,6 @@ public:
      */
     virtual bool full_solver() { return true; }
 
-protected:
     Oink *oink;
     Game *game;
     std::ostream &logger;

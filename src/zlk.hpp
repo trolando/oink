@@ -35,7 +35,6 @@ public:
 
     int iterations;
 
-protected:
     int *inverse;
     int max_prio;
 
@@ -51,9 +50,9 @@ protected:
     int attractExt(int i, int r, std::vector<int> *R);
     int attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R);
 
-    friend void attractParT_WORK(WorkerP*, Task*, int, int, int, ZLKSolver*);
-    friend int attractPar_WORK(WorkerP*, Task*, int, int, std::vector<int>*, ZLKSolver*);
-    friend void updateOutcount_WORK(WorkerP*, Task*, int, int, ZLKSolver*);
+    // friend void attractParT_WORK(WorkerP*, Task*, int, int, int, ZLKSolver*);
+    // friend int attractPar_WORK(WorkerP*, Task*, int, int, std::vector<int>*, ZLKSolver*);
+    // friend void updateOutcount_WORK(WorkerP*, Task*, int, int, ZLKSolver*);
 };
 
 class UnoptimizedZLKSolver : public ZLKSolver

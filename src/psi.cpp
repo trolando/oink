@@ -419,6 +419,42 @@ PSISolver::print_debug()
     }
 }
 
+VOID_TASK_1(psi_run_par, PSISolver*, _this)
+{
+    for (;;) {
+        ++_this->major;
+        if (_this->trace) fmt::printf(_this->logger, "\033[1;38;5;208mMajor iteration %d\033[m\n", _this->major);
+        for (;;) {
+            ++_this->minor;
+            CALL(compute_all_val, _this);                            // update valuation
+#ifndef NDEBUG
+            if (_this->trace >= 3) _this->print_debug();
+#endif
+            int count = CALL(switch_strategy, _this, 1, 0, _this->nodecount()); // switch strategies
+            if (_this->trace) fmt::printf(_this->logger, "%d changed strategies for Odd\n", count);
+            if (count == 0) break;                                  // if nothing left, done
+        }
+        /* print selected strategies for the odd player */
+        if (_this->trace) {
+            for (int n=0; n<_this->nodecount(); n++) {
+                if (_this->disabled[n]) continue;
+                if (_this->owner(n) == 0) continue;
+                _this->logger << "Odd plays from \033[1;33m" << _this->label_vertex(n) << "\033[m to \033[1;33m" << _this->label_vertex(str[n]) << "\033[m (";
+                if (halt[str[n]]) _this->logger << "H";
+                else _this->logger << _this->si_top_val(str[n]);
+                _this->logger << ")" << std::endl;
+            }
+        }
+        int solved = CALL(mark_solved_rec, _this, 0, _this->nodecount());       // mark nodes won by Even
+        if (_this->trace) fmt::printf(_this->logger, "%d nodes marked as won by Even\n", solved);
+        int count = CALL(switch_strategy, _this, 0, 0, _this->nodecount());     // switch strategies
+        count += CALL(switch_halting, _this, 0, _this->nodecount());     // switch halting strategies
+        if (_this->trace) fmt::printf(_this->logger, "%d changed strategies for Even\n", count);
+        if (count == 0) break;                                      // if nothing left, done
+    }
+}
+
+
 /**
  * Run the parallel strategy improvement solver
  */
@@ -495,39 +531,7 @@ PSISolver::run()
             if (count == 0) break;                                      // if nothing left, done
         }
     } else {
-        LACE_ME;
-
-        for (;;) {
-            ++major;
-            if (trace) fmt::printf(logger, "\033[1;38;5;208mMajor iteration %d\033[m\n", major);
-            for (;;) {
-                ++minor;
-                CALL(compute_all_val, this);                            // update valuation
-#ifndef NDEBUG
-                if (trace >= 3) print_debug();
-#endif
-                int count = CALL(switch_strategy, this, 1, 0, nodecount()); // switch strategies
-                if (trace) fmt::printf(logger, "%d changed strategies for Odd\n", count);
-                if (count == 0) break;                                  // if nothing left, done
-            }
-            /* print selected strategies for the odd player */
-            if (trace) {
-                for (int n=0; n<nodecount(); n++) {
-                    if (disabled[n]) continue;
-                    if (owner(n) == 0) continue;
-                    logger << "Odd plays from \033[1;33m" << label_vertex(n) << "\033[m to \033[1;33m" << label_vertex(str[n]) << "\033[m (";
-                    if (halt[str[n]]) logger << "H";
-                    else logger << si_top_val(str[n]);
-                    logger << ")" << std::endl;
-                }
-            }
-            int solved = CALL(mark_solved_rec, this, 0, nodecount());       // mark nodes won by Even
-            if (trace) fmt::printf(logger, "%d nodes marked as won by Even\n", solved);
-            int count = CALL(switch_strategy, this, 0, 0, nodecount());     // switch strategies
-            count += CALL(switch_halting, this, 0, nodecount());     // switch halting strategies
-            if (trace) fmt::printf(logger, "%d changed strategies for Even\n", count);
-            if (count == 0) break;                                      // if nothing left, done
-        }
+        RUN(psi_run_par, this);
     }
 
     // Now set dominions and derive strategy for odd.

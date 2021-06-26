@@ -45,11 +45,6 @@ public:
     void compute_vals_seq(void);
     int mark_solved_seq(void);
     int switch_strategy_seq(int pl);
-
-    friend void compute_val_WORK(_WorkerP*, _Task*, int, PSISolver*);
-    friend void compute_all_val_WORK(_WorkerP*, _Task*, PSISolver*);
-    friend int mark_solved_rec_WORK(_WorkerP*, _Task*, PSISolver*, int, int);
-    friend int switch_strategy_WORK(_WorkerP*, _Task*, PSISolver*, int, int, int);
 };
 
 }

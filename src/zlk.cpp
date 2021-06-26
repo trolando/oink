@@ -431,14 +431,14 @@ ZLKSolver::run()
     int next_r = 0;
 
     bool usePar = lace_workers() != 0;
-    WorkerP* __lace_worker = NULL;
-    Task* __lace_dq_head = NULL;
+    // WorkerP* __lace_worker = NULL;
+    // Task* __lace_dq_head = NULL;
 
     if (usePar) {
         // initialize Lace and also allocate space for pvec for each worker
         const int W = lace_workers();
-        __lace_worker = lace_get_worker();
-        __lace_dq_head = lace_get_head(__lace_worker);
+        // __lace_worker = lace_get_worker();
+        // __lace_dq_head = lace_get_head(__lace_worker);
         pvec = (par_helper**)malloc(sizeof(par_helper*[W]));
         for (int i=0; i<W; i++) pvec[i] = (par_helper*)malloc(sizeof(par_helper) + sizeof(int[nodecount()]));
     }
@@ -488,7 +488,7 @@ ZLKSolver::run()
 #endif
 
             // attract until inversion and add to A
-            int j = usePar ? CALL(attractPar, i, r, A, this) : attractExt(i, r, A);
+            int j = usePar ? RUN(attractPar, i, r, A, this) : attractExt(i, r, A);
             // j is now the next i (subgame), or -1 if the subgame is empty
 
 #ifndef NDEBUG
