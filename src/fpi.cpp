@@ -171,6 +171,56 @@ FPISolver::freezeThawReset(int i, int n, int p)
     }
 }
 
+VOID_TASK_1(fpi_run_par, FPISolver*, _this)
+{
+    int d = _this->priority(_this->nodecount()-1);
+    int *p_start = new int[d+1];
+    int *p_len = new int[d+1];
+
+    // initialize p_start, p_len, parity
+    {
+        int v=0;
+        for (int p=0; p<=d; p++) {
+            if (_this->priority(v) == p) {
+                p_start[p] = v;
+                while (v < _this->nodecount() and _this->priority(v) == p) {
+                    _this->parity[v] = p&1;
+                    v++;
+                }
+                p_len[p] = v - p_start[p];
+            } else {
+                p_start[p] = -1;
+                p_len[p] = 0;
+            }
+        }
+    }
+
+    _this->iterations = 1;
+    int p = 0;
+    while (p <= d) {
+        if (p_len[p] == 0) {
+            p++;
+        } else if (CALL(update_block_rec, _this, p_start[p], p_len[p])) {
+            // something changed, freeze and reset
+            if (p != 0) {
+                CALL(freeze_thaw_reset_rec, _this, 0, p_start[p], p);
+                p = 0;
+            }
+            _this->iterations++;
+#ifndef NDEBUG
+            if (_this->trace >= 2) _this->logger << "restarting after finding distractions" << std::endl;
+#endif
+        } else {
+            // nothing changed
+            p++;
+        }
+    }
+
+    delete[] p_start;
+    delete[] p_len;
+}
+
+
 void
 FPISolver::runPar()
 {
@@ -187,50 +237,7 @@ FPISolver::runPar()
 
     memset(frozen, 0, sizeof(int[nodecount()])); // initially no vertex is frozen (we don't freeze at level 0)
 
-    int d = priority(nodecount()-1);
-    int *p_start = new int[d+1];
-    int *p_len = new int[d+1];
-
-    // initialize p_start, p_len, parity
-    {
-        int v=0;
-        for (int p=0; p<=d; p++) {
-            if (priority(v) == p) {
-                p_start[p] = v;
-                while (v < nodecount() and priority(v) == p) {
-                    parity[v] = p&1;
-                    v++;
-                }
-                p_len[p] = v - p_start[p];
-            } else {
-                p_start[p] = -1;
-                p_len[p] = 0;
-            }
-        }
-    }
-
-    LACE_ME;
-
-    iterations = 1;
-    int p = 0;
-    while (p <= d) {
-        if (p_len[p] == 0) {
-            p++;
-        } else if (CALL(update_block_rec, this, p_start[p], p_len[p])) {
-            // something changed, freeze and reset
-            if (p != 0) {
-                CALL(freeze_thaw_reset_rec, this, 0, p_start[p], p);
-                p = 0;
-            }
-            iterations++;
-#ifndef NDEBUG
-            if (trace >= 2) logger << "restarting after finding distractions" << std::endl;
-#endif
-        } else {
-            // nothing changed
-            p++;
-        }
-    }
+    RUN(fpi_run_par, this);
 
     // done
     for (int v=0; v<nodecount(); v++) {
@@ -242,8 +249,6 @@ FPISolver::runPar()
     // free allocated data structures
     delete[] strategy;
     delete[] frozen;
-    delete[] p_start;
-    delete[] p_len;
 
     logger << "solved with " << iterations << " iterations." << std::endl;
 }

@@ -513,9 +513,10 @@ Oink::run()
     if (solvers.isParallel(solver)) {
         if (workers >= 0) {
             if (lace_workers() == 0) {
-                lace_init(workers, 100*1000*1000);
+                lace_start(workers, 0);
                 logger << "initialized Lace with " << lace_workers() << " workers" << std::endl;
-                lace_startup(0, (lace_startup_cb)TASK(solve_loop), this);
+                RUN(solve_loop, this);
+                lace_stop();
             } else {
                 logger << "running parallel (Lace already initialized)" << std::endl;
                 solveLoop();

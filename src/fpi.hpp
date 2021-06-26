@@ -41,9 +41,6 @@ public:
     bitset parity;
     bitset distraction;
 
-    friend int update_block_rec_WORK(_WorkerP*, _Task*, int, FPISolver*, int, int);
-    friend void freeze_thaw_reset_rec_WORK(_WorkerP*, _Task*, int, FPISolver*, int, int, int);
-
     virtual void run();
 };
 
