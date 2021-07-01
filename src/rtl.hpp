@@ -51,34 +51,33 @@ protected:
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
 
-    uintqueue Q;
-    uintqueue Qtar;
-    uintqueue Zvec;
-    uintqueue heads;
-    int *str;
-    int *tarj;
-    int pre;
-    uintqueue tarres;
-    uintqueue tangleto;
-    bitset bs_exits;
+    uintqueue pea_state; // v,i,...
+    uintqueue pea_S;  // S
+    unsigned int* pea_vidx;    // rindex
+    bitset pea_root;  // root
+    int pea_curidx;   // index
 
-    int *region;
-    bitset H; // currently halted vertices
+    std::vector<int> tangle; // stores the new tangle
+    uintqueue tangleto;
+    bitset escapes; // which escapes we considered
+
+    bitset R; // remaining region (in rtl)
+    bitset Z; // current region (in rtl)
     bitset G; // the unsolved game
     bitset S; // solved vertices (in queue Q)
-    uintqueue open_heads;
+    bitset V; // heads 1
+    bitset W; // heads 2
+
+    uintqueue Q;
+    int *str;
 
     bool onesided = false;
 
-    int *val; // for cascader
-
-    inline void attractVertices(const int pr, const int pl, int v, bitset &R, int *str, bitset &Z);
-    bool attractTangle(const int t, const int pl, bitset &R, int *str, bitset &Z);
-    inline int attractTangles(const int pr, const int pl, int v, bitset &R, int *str, bitset &Z);
-    inline int attractTangles(const int pr, const int pl, bitset &R, int *str, bitset &Z);
-    void search(bitset &R, int top, int only_player, int depth);
-    void extractTangles(int i, bitset &R, int *str);
-    void loop(int only_player);
+    void attractVertices(const int pl, int v, bitset &R, bitset &Z, int maxpr);
+    bool attractTangle(const int t, const int pl, bitset &R, bitset &Z, int maxpr);
+    inline void attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr);
+    bool extractTangles(int startvertex, bitset &R);
+    bool rtl(bitset &R, int only_player, int depth);
 };
 
 class ORTLSolver : public RTLSolver

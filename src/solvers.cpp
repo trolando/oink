@@ -70,7 +70,7 @@ Solvers::Solvers()
     add("dtl", "distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new DTLSolver(oink, game); });
     add("idtl", "interleaved distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new IDTLSolver(oink, game); });
     add("rtl", "recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new RTLSolver(oink, game); });
-    //add("ortl", "one-sided recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new ORTLSolver(oink, game); });
+    add("ortl", "one-sided recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new ORTLSolver(oink, game); });
     add("tl", "tangle learning", 0, [] (Oink* oink, Game* game) { return new TLSolver(oink, game); });
 }       
 

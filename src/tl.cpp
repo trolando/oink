@@ -32,8 +32,7 @@ TLSolver::~TLSolver()
 
 
 /**
- * Attract as player <pl> via <v> to <Z>, vertices in <R> from subgame <G>.
- * If <max_prio> >= 0, then only attract vertices with priority 0 <= pr <= max_prio.
+ * Attract as player <pl> via <v> to <Z>, vertices in <R>.
  * Add attracted vertices to <Z> and to queue <Q>.
  * Update <str> with the obtained attractor strategy.
  */
