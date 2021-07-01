@@ -258,7 +258,7 @@ int main(int argc, char **argv)
             pg.parse_pgsolver(in, options.count("no-loops") == 0 and options.count("no") == 0);
             file.close();
         } else {
-            pg.parse_pgsolver(std::cin, options.count("no-loops") == 0);
+            pg.parse_pgsolver(std::cin, options.count("no-loops") == 0 and options.count("no") == 0);
         }
         out << "parity game with " << pg.nodecount() << " nodes and " << pg.edgecount() << " edges." << std::endl;
     } catch (const char *err) {
