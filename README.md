@@ -31,10 +31,11 @@ Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
 TL              | Tangle learning (standard variant)
 RTL             | Recursive Tangle Learning (research variant)
+ORTL            | One-sided Recursive Tangle Learning (research variant)
 PTL             | Progressive Tangle Learning (research variant)
 SPPTL           | Single-player Progressive Tangle Learning (research variant)
-DTL             | Distraction-free Tangle Learning (research variant)
-IDTL            | Interleaved Distraction-free Tangle Learning (research variant)
+DTL             | Distance Tangle Learning (research variant based on 'good path length')
+IDTL            | Interleaved Distance Tangle Learning (interleaved variant of DTL)
 FPI             | (parallel) Distraction Fixpoint Iteration (similar to APT algorithm and to Bruse/Falk/Lange)
 FPJ             | Fixpoint Iteration using Justifications
 FPJG            | Fixpoint Iteration using Justifications, greedy variant
