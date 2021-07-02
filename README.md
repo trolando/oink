@@ -108,6 +108,7 @@ counter\_qpt   | Counterexample of Fearnley et al, An ordered approach to solvin
 counter\_core  | Counterexample of Benerecetti et al, Robust Exponential Worst Cases for Divide-et-Impera Algorithms for Parity Games, GandALF 2017
 counter\_rob   | SCC version of counter\_core.
 counter\_dtl   | Counterexample to the DTL solver
+counter\_ortl  | Counterexample to the ORTL solver
 tc             | Two binary counters generator (game family that is an exponential lower bound for many of the recursive algorithms). See https://doi.org/10.4204/EPTCS.305.8 for details.
 tc+            | TC modified to defeat the RTL solver
 
