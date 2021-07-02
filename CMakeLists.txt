@@ -177,6 +177,10 @@ if(OINK_BUILD_EXTRA_TOOLS)
 
     add_executable(counter_qpt src/tools/counter_qpt.cpp)
     set_target_props(counter_qpt) 
+
+    add_executable(counter_ortl src/tools/counter_ortl.cpp)
+    set_target_props(counter_ortl) 
+    target_link_libraries(counter_ortl oink)
 endif()
 
 
