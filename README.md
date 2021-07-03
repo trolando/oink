@@ -1,6 +1,6 @@
-Oink
-====
-Oink is an implementation of modern parity game solvers written in C++.
+# Oink
+
+Oink is an modern implementation of parity game solvers written in C++.
 Oink aims to provide high-performance implementations of state-of-the-art
 algorithms representing different approaches to solving parity games.
 
@@ -22,10 +22,18 @@ Tom van Dijk (2018) [Oink: An Implementation and Evaluation of Modern Parity Gam
 
 The main repository of Oink is https://github.com/trolando/oink.
 
-Implemented algorithms
-----------------------
+## Implemented algorithms
 
 Oink implements various modern algorithms.
+Several of the algorithms can be run with multiple threads.
+These parallel algorithms use the work-stealing framework Lace.
+
+### Tangle learning family
+
+The tangle learning algorithms are a focus of research for finding a polynomial-time algorithm to solve parity games.
+
+See also:  
+* Tom van Dijk (2018) [Attracting Tangles to Solve Parity Games](https://doi.org/10.1007/978-3-319-96142-2/_14). In: CAV 2018.
 
 Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
@@ -36,22 +44,102 @@ PTL             | Progressive Tangle Learning (research variant)
 SPPTL           | Single-player Progressive Tangle Learning (research variant)
 DTL             | Distance Tangle Learning (research variant based on 'good path length')
 IDTL            | Interleaved Distance Tangle Learning (interleaved variant of DTL)
+
+### Fixpoint algorithms
+
+The fixpoint algorithms are based on a translation of parity games to a formula of the modal mu-calculus, which can be solved
+using a naive fixpoint algorithm. Despite its atrocious behavior on constructed hard games, for practical parity games
+they are among the fastest algorithms.
+The FPI algorithm has a scalable parallel implementation.
+
+See also:  
+* Tom van Dijk and Bob Rubbens (2019) [Simple Fixpoint Iteration To Solve Parity Games](https://doi.org/10.4204/EPTCS.305.9). In: GandALF 2019.  
+* Ruben Lapauw, Maurice Bruynooghe, Marc Denecker (2020) [Improving Parity Game Solvers with Justifications](https://doi.org/10.1007/978-3-030-39322-9_21). In: VMCAI 2020.
+
+Algorithm       | Description
+:-------------- | :-------------------------------------------------------------------------------------------------
 FPI             | (parallel) Distraction Fixpoint Iteration (similar to APT algorithm and to Bruse/Falk/Lange)
 FPJ             | Fixpoint Iteration using Justifications
-FPJG            | Fixpoint Iteration using Justifications, greedy variant
-NPP             | Priority promotion (implementation by authors Benerecetti et al)
+FPJG            | Fixpoint Iteration using Justifications (greedy variant by TvD)
+
+### Priority promotion family
+
+The priority promotion algorithms are efficient algorithms described in several papers by Benerecetti, Dell'Erba and Mogavero.
+The implementations PP, PPP, RR, DP and RRDP are by TvD; the authors provided their own implementation NPP.
+
+See also:
+* Massimo Benerecetti, Daniele Dell'Erba, Fabio Mogavero (2016) [Solving Parity Games via Priority Promotion](https://doi.org/10.1007/978-3-319-41540-6_15). In: CAV 2016.
+* Massimo Benerecetti, Daniele Dell'Erba, Fabio Mogavero (2016) [A Delayed Promotion Policy for Parity Games](https://doi.org/10.4204/EPTCS.226.3). In: GandALF 2016.
+* Massimo Benerecetti, Daniele Dell'Erba, Fabio Mogavero (2016) [Improving Priority Promotion for Parity Games](https://doi.org/10.1007/978-3-319-49052-6_8). In: HVC 2016.
+
+Algorithm       | Description
+:-------------- | :-------------------------------------------------------------------------------------------------
+NPP             | Priority promotion (implementation by authors BDM)
 PP              | Priority promotion (basic algorithm)
 PPP             | Priority promotion PP+ (better reset heuristic)
-RR              | Priority promotion RR (even better improved reset heuristic)
+RR              | Priority promotion RR (even better reset heuristic)
 DP              | Priority promotion PP+ with the delayed promotion strategy
 RRDP            | Priority promotion RR with the delayed promotion strategy
+
+### Zielonka's recursive algorithm
+
+One of the oldest algorithms for solving parity games is the recursive algorithm due to Zielonka, based on work by McNaughton.
+The standard implementation ZLK is described in the TACAS 2018 paper about Oink. It is an optimized version based on earlier optimizations by various authors.
+The UZLK variant removes some of the optimizations for research purposes.
+
+The ZLKQ algorithm is an implementation by TvD based on work by Parys and by Lehtinen et al., with additional optimizations,
+including a shortcut in the tree to the next priority in the subgame and skipping recursions if the remaining game is smaller than the precision parameter.
+
+The ZLKPP algorithms are the implementations by Pawel Parys accompanying the paper with Lehtinen et al.
+
+See also:
+* Pawel Parys (2019) [Parity Games: Zielonka's Algorithm in Quasi-Polynomial Time](https://doi.org/10.4230/LIPIcs.MFCS.2019.10). In: MFCS 2019.
+* Karoliina Lehtinen, Pawel Parys, Sven Schewe, Dominik Wojtczak (2021) [A Recursive Approach to Solving Parity Games in Quasipolynomial Time](https://arxiv.org/abs/2104.09717).
+
+Algorithm       | Description
+:-------------- | :-------------------------------------------------------------------------------------------------
 ZLK             | (parallel) Zielonka's recursive algorithm
 UZLK            | an unoptimized version of Zielonka for research purposes
 ZLKQ            | Quasi-polynomial time recursive algorithm (optimized implementation by TvD)
 ZLKPP-STD       | Zielonka's recursive algorithm (standard version, by Pawel Parys)
-ZLKPP-WAW       | Zielonka's recursive algorithm (Warsaw version, by Pawel Parys)
-ZLKPP-LIV       | Zielonka's recursive algorithm (Liverpool version, by Pawel Parys)
+ZLKPP-WAW       | Quasi-polynomial time recursive algorithm (Warsaw version, by Pawel Parys)
+ZLKPP-LIV       | Quasi-polynomial time recursive algorithm (Liverpool version, by Pawel Parys)
+
+### Strategy improvement
+
+The strategy improvement algorithm is one of the older algorithms, receiving a lot of attention from the academic community in the past.
+The parallel strategy improvement implementation is inspired by the work of Fearnley in CAV 2017 but uses a different approach with work-stealing.
+This is described in the TACAS 2018 paper about Oink.
+
+See also:
+* John Fearnley (2017) [Efficient Parallel Strategy Improvement for Parity Games](https://doi.org/10.1007/978-3-319-63390-9_8). In: CAV 2017.
+
+Algorithm       | Description
+:-------------- | :-------------------------------------------------------------------------------------------------
 PSI             | (parallel) strategy improvement
+
+### Progress measures
+
+Progress measures algorithms are based on a monotonically increasing value attached to every vertex of the parity game.
+Several of the quasi-polynomial solutions to parity games are modifications of the small progress measures algorithm.
+
+The original algorithm by Jurdzinski in 2000 is implemented as the TSPM algorithm.
+The accelerated SPM approach is a novel approach developed by TvD.
+The idea is to let progress measures increase until a bound, then analyse the halted result.
+The measures are then immediately increased to a higher value, skipping many small increases.
+
+The QPT ordered progress measures algorithm was published by Fearnley et al in SPIN 2016.  The QPT succinct progress measures algorithm was published by Jurdzinski et al in LICS 2017.
+
+The bounded variants `BSSPM` and `BQPT` are an idea by Tom van Dijk and Marcin Jurdzinski.
+
+See also:
+* Marcin Jurdzinski (2000) [Small Progress Measures for Solving Parity Games](https://doi.org/10.1007/3-540-46541-3_24). In: STACS 2000.
+* Maciej Gazda, Tim Willemse (2015) [Improvement in Small Progress Measures](https://doi.org/10.4204/EPTCS.193.12). In: GandALF 2015.
+* John Fearnley, Sanjay Jain, Sven Schewe, Frank Stephan, Dominik Wojtczak (2017) [An ordered approach to solving parity games in quasi polynomial time and quasi linear space](https://doi.org/10.1145/3092282.3092286). In: SPIN 2017.
+* Marcin Jurdzinski, Ranko Lazic (2017) [Succinct progress measures for solving parity games](https://doi.org/10.1109/LICS.2017.8005092). In: LICS 2017.
+
+Algorithm       | Description
+:-------------- | :-------------------------------------------------------------------------------------------------
 TSPM            | Traditional small progress measures (standard variant without cycle acceleration)
 SPM             | Accelerated version of small progress measures (cycle acceleration variant by TvD)
 MSPM            | Maciej Gazda's modified small progress measures
@@ -60,33 +148,22 @@ BSSPM           | Quasi-polynomial time succinct progress measures (bounding var
 QPT             | Quasi-polynomial time ordered progress measures
 BQPT            | Quasi-polynomial time ordered progress measures (bounding variant by TvD and MJ, often faster)
 
-* The Zielonka implementation is inspired by work in 2017 with additional improvements by TvD.
-* The priority promotion family of algorithms has been proposed in 2016.
-* The parallel strategy improvement implementation is inspired by the work of Fearnley in CAV 2017 but uses a different approach with work-stealing.
-* The accelerated SPM approach is a novel approach developed by Tom van Dijk.  
-  The idea is to let progress measures increase until a bound, then analyse the halted result. The measures are then immediately increased to a higher value, skipping many small increases.
-* The QPT ordered progress measures algorithm was published by Fearnley et al in SPIN 2016.
-* The QPT succinct progress measures algorithm was published by Jurdzinski et al in LICS 2017.
-* The bounded variants `BSSPM` and `BQPT` are an idea by Tom van Dijk and Marcin Jurdzinski.
-* The ZLKQ algorithm is an implementation by TvD based on work by Parys, Lehtinen et al. https://arxiv.org/abs/2104.09717 with additional optimizations, including a shortcut in the tree to the next priority in the subgame and skipping recursions if the remaining game is smaller than the precision parameter.
-* The ZLKPP algorithms are the implementations by Pawel Parys accompanying the paper "Karoliina Lehtinen, Pawel Parys, Sven Schewe, Dominik Wojtczak: A Recursive Approach to Solving Parity Games in Quasipolynomial Time." https://arxiv.org/abs/2104.09717
+### Preprocessing
 
-The parallel algorithms use the work-stealing framework Lace.
+Oink can also apply the following preprocessors before solving the game:
 
-The solver can further be tuned using several pre-processors:
+* Removing all self-loops (recommended)
+* Removing winner-controlled winning cycles (recommended)
+* Inflating or compressing the priorities before solving the parity game.  
+  Compression is useful for several solvers. By default, priorities are simply renumbered (to remove gaps). Several algorithms actually perform on-the-fly compression and are not affected by renumbering or compression.
+* SCC decomposition to solve the parity game one SCC at a time.  
+  May either improve or deteriorate performance.
 
-1. Removing all self-loops (recommended)
-2. Removing winner-controlled winning cycles (recommended)
-3. Inflating or compressing the priorities before solving it (compression is useful for many solvers)
-4. SCC decomposition to solve the parity game one SCC at a time.  
-   May either improve or deteriorate performance
-
-Tools
------
+## Tools
 
 Oink comes with several simple tools that are built around the library `liboink`.
 
-Main tools:
+### Main tools
 
 Tool          | Description
 :------------ | :-------------
@@ -96,7 +173,7 @@ nudge         | Swiss army knife for transforming parity games
 dotty         | Small tool that just generates a .dot graph of a parity game
 test\_solvers | Main testing tool for parity game solvers and benchmarking
 
-Tools to generate games:
+### Game generators
 
 Tool           | Description
 :------------- | :----------
@@ -105,16 +182,33 @@ stgame         | Faster version of the steady game generator of PGSolver
 counter\_rr    | Counterexample to the RR solver
 counter\_dp    | Counterexample to the DP solver
 counter\_m     | Counterexample of Maciej Gazda, PhD Thesis, Sec. 3.5
-counter\_qpt   | Counterexample of Fearnley et al, An ordered approach to solving parity games in quasi polynomial time and quasi linear space, SPIN 2017
-counter\_core  | Counterexample of Benerecetti et al, Robust Exponential Worst Cases for Divide-et-Impera Algorithms for Parity Games, GandALF 2017
+counter\_qpt   | Counterexample of Fearnley et al, [An ordered approach to solving parity games in quasi polynomial time and quasi linear space](https://doi.org/10.1145/3092282.3092286). In: SPIN 2017.
+counter\_core  | Counterexample of Benerecetti, Dell'Erba, Mogavero, [Robust Exponential Worst Cases for Divide-et-Impera Algorithms for Parity Games](https://doi.org/10.4204/EPTCS.256.9). In: GandALF 2017.
 counter\_rob   | SCC version of counter\_core.
 counter\_dtl   | Counterexample to the DTL solver
 counter\_ortl  | Counterexample to the ORTL solver
-tc             | Two binary counters generator (game family that is an exponential lower bound for many of the recursive algorithms). See https://doi.org/10.4204/EPTCS.305.8 for details.
+tc             | Two binary counters generator (game family that is an exponential lower bound for many algorithms). See also Tom van Dijk (2019) [A Parity Game Tale of Two Counters](https://doi.org/10.4204/EPTCS.305.8). In: GandALF 2019.
 tc+            | TC modified to defeat the RTL solver
 
-Usage
------------
+### Two binary counters
+
+The two binary counters game family is an exponential lower bound for many algorithms:
+* The tangle learning algorithm TL
+* All fixpoint algorithms FPI, FPJ, FPJG
+* All priority promotion algorithms NPP, PP, PPP, DP, RRDP
+* All normal Zielonka algorithms ZLK, UZLK, ZLKPP-STD
+* The progress measures algorithms TSPM, SPM, MSPM
+
+The two binary counters game family appears to be a quasi-polynomial lower bound for the QP algorithms:
+* The Zielonka variations ZLKQ, ZLKPP-WAW, ZLKPP-LIV
+* The progress measures variations SSPM, QPT
+
+Some algorithms can solve the two binary counters games in polynomial time:
+* The tangle learning algorithms RTL, ORTL, PTL, SPPTL, DTL, IDTL
+* The strategy improvement algorithm PSI
+* Unsure: the BSSPM and BQPT algorithms
+
+## Usage
 
 Oink is compiled using CMake.
 Optionally, use `ccmake` to set options.
@@ -135,7 +229,7 @@ What you want?                          | But how then?
 To quickly solve a gzipped parity game: | `oink -v game.pg.gz game.sol`
 To verify some solution:                | `oink -v game.pg.gz --sol game.sol`
 
-A typical call to Oink is: `oink [options] [solver] <filename> [solutionfile]`. This reads a parity game from `filename`, solves it with the chosen solver (default: `--npp`), then writes the solution to `<solutionfile>` (default: don't write).
+A typical call to Oink is: `oink [options] [solver] <filename> [solutionfile]`. This reads a parity game from `filename`, solves it with the chosen solver (default: `--tl`), then writes the solution to `<solutionfile>` (default: don't write).
 Typical options are:
 - `-v` verifies the solution after solving the game.
 - `-w <workers>` sets the number of worker threads for parallel solvers. By default, these solvers run their sequential version. Use `-w 0` to automatically determine the maximum number of worker threads.
