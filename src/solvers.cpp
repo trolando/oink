@@ -37,6 +37,7 @@
 #include "zlkq.hpp"
 #include "ptl.hpp"
 #include "dtl.hpp"
+#include "dftl.hpp"
 
 namespace pg {
 
@@ -69,6 +70,8 @@ Solvers::Solvers()
     add("spptl", "single-player progressive tangle learning", 0, [] (Oink* oink, Game* game) { return new SPPTLSolver(oink, game); });
     add("dtl", "distance tangle learning", 0, [] (Oink* oink, Game* game) { return new DTLSolver(oink, game); });
     add("idtl", "interleaved distance tangle learning", 0, [] (Oink* oink, Game* game) { return new IDTLSolver(oink, game); });
+    add("dftl", "distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new DFTLSolver(oink, game); });
+    add("pdftl", "prepartition distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new PDFTLSolver(oink, game); });
     add("rtl", "recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new RTLSolver(oink, game); });
     add("ortl", "one-sided recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new ORTLSolver(oink, game); });
     add("tl", "tangle learning", 0, [] (Oink* oink, Game* game) { return new TLSolver(oink, game); });
