@@ -47,6 +47,8 @@ SPPTL           | Single-player Progressive Tangle Learning (research variant)
 DTL             | Distance Tangle Learning (research variant based on 'good path length')
 IDTL            | Interleaved Distance Tangle Learning (interleaved variant of DTL)
 TLQ             | Tangle Learning applied to the quasi-polynomial time recursive algorithm
+DFTL            | Distraction-Free Tangle Learning (research variant)
+PDFTL           | Prepartition Distraction-Free Tangle Learning (DFTL, prepartition variant)
 
 ### Fixpoint algorithms
 
@@ -196,6 +198,7 @@ counter\_rob   | SCC version of counter\_core.
 counter\_dtl   | Counterexample to the DTL solver
 counter\_ortl  | Counterexample to the ORTL solver
 counter\_symsi | Counterexample of Matthew Maat to (standard) symmetric strategy improvement
+counter\_dftl  | Counterexample to the DFTL solver
 tc             | Two binary counters generator (game family that is an exponential lower bound for many algorithms). See also Tom van Dijk (2019) [A Parity Game Tale of Two Counters](https://doi.org/10.4204/EPTCS.305.8). In: GandALF 2019.
 tc+            | TC modified to defeat the RTL solver
 
@@ -213,7 +216,7 @@ The two binary counters game family appears to be a quasi-polynomial lower bound
 * The progress measures variations SSPM, QPT
 
 Some algorithms can solve the two binary counters games in polynomial time:
-* The tangle learning algorithms RTL, ORTL, PTL, SPPTL, DTL, IDTL
+* The tangle learning algorithms RTL, ORTL, PTL, SPPTL, DTL, IDTL, DFTL, PDFTL
 * The strategy improvement algorithm PSI
 * Unsure: the BSSPM and BQPT algorithms
 

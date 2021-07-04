@@ -103,6 +103,7 @@ target_sources(oink
     src/solvers/tlq.cpp
     src/solvers/gpm.cpp
     src/solvers/pmtl.cpp
+    src/solvers/dftl.cpp
     ${OINK_HDRS}
 )
 
@@ -180,6 +181,10 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_executable(counter_qpt src/tools/counter_qpt.cpp)
         set_target_props(counter_qpt)
 
+        add_executable(counter_dftl src/tools/counter_dftl.cpp)
+        set_target_props(counter_dftl)
+        target_link_libraries(counter_dftl oink)
+
         add_executable(tc src/tools/tc.cpp)
         set_target_props(tc)
 
@@ -229,6 +234,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverTLQ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlq)
         add_test(NAME TestSolverGPM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --gpm)
         add_test(NAME TestSolverPMTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl)
+        add_test(NAME TestSolverDFTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --dftl)
         # test ZLK variations
         add_test(NAME TestSolverZLKseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w -1)
         add_test(NAME TestSolverZLKpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w 0)
