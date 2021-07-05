@@ -186,7 +186,7 @@ endif()
 
 if(NOT subproject)
     enable_testing()
-    set(CTEST_TESTING_TIMEOUT 10) 
+    set(CTEST_TESTING_TIMEOUT 30) 
 
     # test fixpoint algorithms
     add_test(NAME TestSolverFPIpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w 0)
