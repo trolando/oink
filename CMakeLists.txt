@@ -244,7 +244,7 @@ if(NOT subproject)
   install(TARGETS solve
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   )
-  install(EXPORT OinkConfig FILE "OinkConfig.cmake" NAMESPACE oink:: DESTINATION cmake)
+  install(EXPORT OinkConfig FILE "OinkConfig.cmake" NAMESPACE oink:: DESTINATION lib/oink/cmake)
 
   # Setup basic CPack support
   set(CPACK_PACKAGE_DESCRIPTION_SUMMARY ${PROJECT_DESCRIPTION})
