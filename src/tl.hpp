@@ -68,8 +68,8 @@ protected:
     bitset Odd; // accumulate odd regions
 
     inline void attractVertices(const int pl, int v, bitset &R, bitset &Z);
-    bool attractTangle(const int t, const int pl, bitset &Z, int maxpr);
-    inline void attractTangles(const int pl, int v, bitset &Z, int maxpr);
+    bool attractTangle(const int t, const int pl, bitset &R, bitset &Z, int maxpr);
+    inline void attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr);
 
     bool tl(void);
     bool extractTangles(int i, bitset &R, int *str);

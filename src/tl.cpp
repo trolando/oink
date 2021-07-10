@@ -81,7 +81,7 @@ TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
  * Update <str> with the obtained attractor strategy.
  */
 bool
-TLSolver::attractTangle(const int t, const int pl, bitset &Z, int maxpr)
+TLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int maxpr)
 {
     /**
      * Check if tangle is won by player <pl> and not deleted.
@@ -140,6 +140,7 @@ TLSolver::attractTangle(const int t, const int pl, bitset &Z, int maxpr)
             if (v == -1) break;
             const int s = *ptr++;
             if (Z[v]) continue; // already in <Z>
+            if (!R[v]) continue; // not in <R> (might be higher region)
             Z[v] = true;
             str[v] = s;
             Q.push(v);
@@ -169,10 +170,10 @@ TLSolver::attractTangle(const int t, const int pl, bitset &Z, int maxpr)
  * (for trace) Attracting to region with priority <pr>.
  */
 __attribute__((always_inline)) void
-TLSolver::attractTangles(const int pl, int v, bitset &Z, int maxpr)
+TLSolver::attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr)
 {
     const auto &in_cur = tin[v];
-    for (int from : in_cur) attractTangle(from, pl, Z, maxpr);
+    for (int from : in_cur) attractTangle(from, pl, R, Z, maxpr);
 }
 
 
@@ -420,6 +421,7 @@ TLSolver::tl(void)
         // attract from all heads with priority <pr> that are in <R>
         for (; top != bitset::npos; top = R.find_prev(top)) {
             if ((priority(top)&1) != (pr&1)) break; // otf compress
+            // if (priority(top) != pr) break; // disable otf compress
 
             vcnt++;
             V[top] = true; // heads
@@ -431,7 +433,7 @@ TLSolver::tl(void)
                 const int v = Q.pop();
                 R[v] = false; // remove from <R>
                 attractVertices(pl, v, R, Z);
-                attractTangles(pl, v, Z, pr);
+                attractTangles(pl, v, R, Z, pr);
             }
         }
 
@@ -450,6 +452,7 @@ TLSolver::tl(void)
 
 #if PARTIALLY_CLOSED
         bool leaks = false;
+        W.reset();
 
         if (top != bitset::npos) { // if not lowest region
             // figure out what are good heads.
@@ -512,7 +515,9 @@ TLSolver::tl(void)
                 }
                 while (Q.nonempty()) {
                     int v = Q.pop();
-                    // logger << "leaking: " << label_vertex(v) << std::endl;
+#ifndef NDEBUG
+                    if (trace >= 2) logger << "leaking: \033[1;36m" << label_vertex(v) << "\033[m" << std::endl;
+#endif
                     for (auto curedge = ins(v); *curedge != -1; curedge++) {
                         auto from = *curedge;
                         if (Z[from] && (str[from] == -1 or str[from] == v)) {
@@ -565,7 +570,7 @@ TLSolver::tl(void)
                     while (Q.nonempty()) {
                         const int v = Q.pop();
                         attractVertices(pl, v, G, Z);
-                        attractTangles(pl, v, Z, INT_MAX);
+                        attractTangles(pl, v, G, Z, INT_MAX);
                     }
 
                     for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) {
@@ -594,7 +599,7 @@ TLSolver::tl(void)
                         while (Q.nonempty()) {
                             const int v = Q.pop();
                             attractVertices(pl, v, G, S);
-                            attractTangles(pl, v, S, INT_MAX);
+                            attractTangles(pl, v, G, S, INT_MAX);
                         }
 
                         for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) {
