@@ -361,7 +361,12 @@ pearce_again:
                     if (str[v] != -1) logger << "->" << label_vertex(str[v]);
                 }
             }
-            logger << " with " << tangleto.size() << " escape vertices.";
+            logger << " with " << tangleto.size() << " escapes";
+            if (trace >= 2) {
+                for (unsigned int x = 0; x < tangleto.size(); x++) {
+                    logger << " \033[1;36m" << label_vertex(tangleto[x]) << "\033[m";
+                }
+            }
             logger << std::endl;
         }
 #endif
@@ -425,6 +430,12 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
         for (; top != bitset::npos; top = R.find_prev(top)) {
             if ((priority(top)&1) != (pr&1)) break; // otf compress
             // if (priority(top) != pr) break; // disable otf compress
+
+#ifndef NDEBUG
+            if (trace >= 2) {
+                logger << "\033[1;37mattracting to \033[36m" << label_vertex(top) << "\033[m for \033[1;36m" << pl << "\033[m" << " (pr: " << priority(top) << ")" << std::endl;
+            }
+#endif
 
             V[top] = true; // heads
             Z[top] = true; // add to <Z>
