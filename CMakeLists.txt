@@ -90,6 +90,7 @@ target_sources(oink
     src/zlkpp.cpp
     src/ptl.cpp
     src/dtl.cpp
+    src/dftl.cpp
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/oink.hpp>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/error.hpp>
@@ -179,8 +180,12 @@ if(OINK_BUILD_EXTRA_TOOLS)
     set_target_props(counter_qpt) 
 
     add_executable(counter_ortl src/tools/counter_ortl.cpp)
-    set_target_props(counter_ortl) 
+    set_target_props(counter_ortl)
     target_link_libraries(counter_ortl oink)
+
+    add_executable(counter_dftl src/tools/counter_dftl.cpp)
+    set_target_props(counter_dftl)
+    target_link_libraries(counter_dftl oink)
 endif()
 
 
@@ -220,6 +225,7 @@ if(NOT subproject)
     add_test(NAME TestSolverSPPTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --spptl)
     add_test(NAME TestSolverDTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --dtl)
     add_test(NAME TestSolverIDTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --idtl)
+    add_test(NAME TestSolverDFTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --dftl)
     # test ZLK variations
     add_test(NAME TestSolverZLKseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w -1)
     add_test(NAME TestSolverZLKpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w 0)
