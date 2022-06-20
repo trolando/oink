@@ -260,6 +260,7 @@ Game::init_vertex(int v, int priority, int owner, std::string label)
     set_owner(v, owner);
     this->_label[v] = 0; // just ensure that it's properly zeroed before use
     set_label(v, label);
+    this->strategy[v] = -1; // initialize strategy
 }
 
 void
