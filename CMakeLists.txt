@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.13)
+
 # Check if we are solo or as part of a larger project
 # If we're a subproject, disable testing/benchmark tools
 if(DEFINED PROJECT_NAME)
@@ -5,8 +7,6 @@ if(DEFINED PROJECT_NAME)
 else()
   set(subproject OFF)
 endif()
-
-cmake_minimum_required(VERSION 3.13)
 
 project(oink
     VERSION 1.0.0
@@ -32,7 +32,6 @@ endif()
 
 # Required package
 find_package(Boost REQUIRED filesystem iostreams regex system random)
-include(GNUInstallDirs)
 
 # Main library target
 add_library(oink)
@@ -42,9 +41,9 @@ target_compile_features(oink PUBLIC c_std_11 cxx_std_11)
 target_compile_options(oink PRIVATE -Wall -Wextra)
 target_include_directories(oink
   PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
   PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src ${Boost_INCLUDE_DIRS}>
+    $<BUILD_INTERFACE:src ${Boost_INCLUDE_DIRS}>
     $<INSTALL_INTERFACE:include/oink>
 )
 target_link_libraries(oink pthread)
@@ -53,9 +52,6 @@ option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" OFF)
 if(OINK_BUILD_NATIVE)
     target_compile_options(oink PRIVATE "-march=native")
 endif()
-
-# set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
-# set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 
 target_sources(oink
   PRIVATE
@@ -89,11 +85,11 @@ target_sources(oink
     src/ptl.cpp
     src/dtl.cpp
   PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/oink.hpp>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/error.hpp>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/game.hpp>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/bitset.hpp>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/uintqueue.hpp>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/oink.hpp>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/error.hpp>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/game.hpp>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/bitset.hpp>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/uintqueue.hpp>
 )
 
 get_target_property(oink_PUBLIC_HEADERS oink INTERFACE_SOURCES)
@@ -107,7 +103,7 @@ option(OINK_BUILD_EXTRA_TOOLS "Build extra Oink tools" OFF)
 macro(set_target_props NAME)
     target_compile_features(${NAME} PUBLIC c_std_11 cxx_std_11)
     target_compile_options(${NAME} PRIVATE -Wall -Wextra)
-    target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src ${Boost_INCLUDE_DIRS})
+    target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${Boost_INCLUDE_DIRS})
     target_link_libraries(${NAME} oink::oink pthread)
 endmacro(set_target_props)
 
@@ -231,6 +227,7 @@ endif()
 
 
 if(NOT subproject)
+  include(GNUInstallDirs)
   install(TARGETS oink
     EXPORT OinkConfig
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
