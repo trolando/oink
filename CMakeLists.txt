@@ -30,12 +30,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_L
     message(FATAL_ERROR "GCC version must be at least 4.9! (found ${CMAKE_CXX_COMPILER_VERSION}")
 endif()
 
-# Make shared or static library?
-option(BUILD_SHARED_LIBS "Build a shared library" OFF)
-if(DEFINED oink_SHARED_LIBS)
-    set(BUILD_SHARED_LIBS "${oink_SHARED_LIBS}")
-endif()
-
 # Required package
 find_package(Boost REQUIRED filesystem iostreams regex system random)
 include(GNUInstallDirs)
@@ -46,7 +40,6 @@ add_library(oink::oink ALIAS oink)
 set_target_properties(oink PROPERTIES VERSION ${oink_VERSION} SOVERSION ${oink_VERSION_MAJOR})
 target_compile_features(oink PUBLIC c_std_11 cxx_std_11)
 target_compile_options(oink PRIVATE -Wall -Wextra)
-target_compile_options(oink PRIVATE "$<$<CONFIG:Release,RelWithDebInfo>:-march=native>")
 target_include_directories(oink
   PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src
@@ -55,6 +48,11 @@ target_include_directories(oink
     $<INSTALL_INTERFACE:include/oink>
 )
 target_link_libraries(oink pthread)
+
+option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" OFF)
+if(OINK_BUILD_NATIVE)
+    target_compile_options(oink PRIVATE "-march=native")
+endif()
 
 # set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
 # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
