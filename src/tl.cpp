@@ -429,6 +429,13 @@ TLSolver::tl(void)
             str[top] = -1;
             Q.push(top);
 
+#ifndef NDEBUG
+            // maybe report event
+            if (trace >= 3) {
+                logger << "\033[1;37mattracting towards \033[36m" << label_vertex(top) << "\033[m for \033[1;36m" << pl << "\033[m" << std::endl;
+            }
+#endif
+
             while (Q.nonempty()) {
                 const int v = Q.pop();
                 R[v] = false; // remove from <R>
