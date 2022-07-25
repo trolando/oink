@@ -96,6 +96,11 @@ public:
     void setTrace(int level) { trace = level; }
 
     /**
+     * Set options for the solver
+     */
+    void setSolverOptions(std::string options) { this->options = options; }
+
+    /**
      * Mark node <node> as won by <winner> with strategy <strategy>.
      * (Set <strategy> to -1 for no strategy.)
      * After marking nodes, call flush().
@@ -163,6 +168,7 @@ protected:
     bool removeWCWC = true;  // solve winner-controlled winning cycles before solving
     bool solveSingle = true; // solve games with only 1 parity
     bool bottomSCC = false;  // solve per bottom SCC
+    std::string options = "";// options for the solver
 
     uintqueue todo;          // internal queue for solved nodes for flushing
     int *outcount;           // number of unsolved outgoing edges per node (for fast attraction)

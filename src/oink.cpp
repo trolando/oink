@@ -398,6 +398,10 @@ Oink::solveLoop()
 
             // solve current subgame
             Solver *s = solvers.construct(solver, this, game);
+            if (!s->parseOptions(options)) {
+                logger << "error parsing options: " << options << std::endl;
+                exit(-1);
+            }
             s->run();
             delete s;
 
@@ -412,6 +416,10 @@ Oink::solveLoop()
             // solve current subgame
             Solver *s = solvers.construct(solver, this, game);
             bool fullSolver = s->isFullSolver();
+            if (!s->parseOptions(options)) {
+                logger << "error parsing options: " << options << std::endl;
+                exit(-1);
+            }
             s->run();
             delete s;
 
