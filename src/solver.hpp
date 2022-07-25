@@ -49,6 +49,11 @@ public:
      */
     virtual bool isFullSolver() { return true; }
 
+    /**
+     * Set solver options (via -c "...")
+     */
+    virtual bool parseOptions(std::string&) { return true; }
+
     Oink *oink;
     Game *game;
     std::ostream &logger;
