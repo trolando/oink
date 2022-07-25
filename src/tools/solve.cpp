@@ -209,6 +209,7 @@ int main(int argc, char **argv)
         ("scc", "Iteratively solve bottom SCCs")
         ("s,solver", "Use given solver (--solvers for info)", cxxopts::value<std::string>())
         ("solvers", "List available solvers")
+        ("c,configure", "Additional configuration options for the solver", cxxopts::value<std::string>())
         ("w,workers", "Number of workers for parallel code", cxxopts::value<int>())
         ("z,timeout", "Number of seconds for timeout", cxxopts::value<int>())
         ;
@@ -334,6 +335,10 @@ int main(int argc, char **argv)
     // solving options
     if (options.count("scc")) en.setBottomSCC(true);
     if (options.count("workers")) en.setWorkers(options["workers"].as<int>());
+
+    if (options.count("configure")) {
+        en.setSolverOptions(options["configure"].as<std::string>());
+    }
 
     /**
      * STEP 6
