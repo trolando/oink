@@ -160,9 +160,11 @@ main(int argc, char **argv)
         ("t,trace", "Write trace with given level (0-3) to stdout", cxxopts::value<int>())
         ("w,workers", "Number of workers for parallel algorithms, or -1 for sequential, 0 for autodetect", cxxopts::value<int>()->default_value("-1"))
         ;
+    opts.allow_unrecognised_options();
 
     /* Parse command line */
     auto options = opts.parse(argc, argv);
+    auto unmatched = options.unmatched();
 
     if (options.count("help")) {
         std::cout << opts.help({"","Preprocessing","Random games","Solving","Solvers"}) << std::endl;
@@ -231,13 +233,13 @@ main(int argc, char **argv)
     int sgood[solvers.count()];
     for (unsigned i=0; i<solvers.count(); i++) sgood[i] = 0;
 
-    if (argc > 1) {
+    if (unmatched.size() > 0) {
         // obtain the list of files
         std::vector<fs::path> files;
-        for (int i=1; i<argc; i++) {
-            fs::path p(argv[i]);
+        for (auto item : unmatched) {
+            fs::path p(item);
             if (!exists(p)) {
-                std::cerr << "path \"" << argv[i] << "\" not found!" << std::endl;
+                std::cerr << "path \"" << item << "\" not found!" << std::endl;
             } else if (is_directory(p)) {
                 for (auto cp=fs::directory_iterator(p); cp != fs::directory_iterator(); cp++) {
                     if (is_regular_file(*cp)) files.push_back(*cp);
