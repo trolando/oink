@@ -411,11 +411,11 @@ Oink::solveLoop()
 
             // solve current subgame
             Solver *s = solvers.construct(solver, this, game);
-            bool full_solver = s->full_solver();
+            bool fullSolver = s->isFullSolver();
             s->run();
             delete s;
 
-            if (full_solver) {
+            if (fullSolver) {
                 // trash the todo buffer
                 todo.clear();
                 return;

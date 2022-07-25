@@ -47,7 +47,7 @@ public:
      * Returns true if the solver always solves all enabled vertices
      * before leaving run().
      */
-    virtual bool full_solver() { return true; }
+    virtual bool isFullSolver() { return true; }
 
     Oink *oink;
     Game *game;
