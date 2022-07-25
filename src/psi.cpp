@@ -26,14 +26,14 @@ namespace pg {
 // But I don't want to copy the pointers in all Lace tasks.
 // And we're not using multiple PSISolver objects anyway.
 
-static int k;
-static int *str;
-static int *halt;
-static int *val;
-static int *done;
-static int *won;
-static int *first_in;
-static int *next_in;
+static int k;         // k := 1+pr(G)
+static int *str;      // strategy (player/opponent)
+static int *halt;     // vertices that Even (Odd) halts _in front of_
+static int *val;      // current value, k-tuple for each vertex
+static int *done;     // 0=unvisited 1=visited 2=cycle 3=disabled/won
+static int *won;      // if won by primary player
+static int *first_in; // helper for linked-list style in-edges
+static int *next_in;  // helper for linked-list style in-edges
 
 PSISolver::PSISolver(Oink *oink, Game *game) : Solver(oink, game)
 {
