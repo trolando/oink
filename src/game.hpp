@@ -31,10 +31,7 @@ namespace pg {
 /**
  * The main class holding a Parity game.
  *
- * Internally, the implementation leverages virtual memory vs real memory.
- * We overallocate virtual memory, but use less actual memory.
- *
- * Edges are stored consecutively in a single array, ending with th evalue -1.
+ * Edges are stored consecutively in a single array, ending with the value -1.
  * For game solving, the build_in_array method creates the reverse array.
  *
  * There is a special vector representation of edges to allow for "random-order" modification

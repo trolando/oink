@@ -104,6 +104,8 @@ Game::Game(int vcount, int ecount) : _owner(vcount), solved(vcount), winner(vcou
     _incount = NULL;
     is_ordered = true;
 
+    std::fill(_firstouts, _firstouts+vcount, '\x00');
+    std::fill(_outcount, _outcount+vcount, '\x00');
     _outedges[0] = -1;
     e_size++;
 
@@ -216,7 +218,7 @@ Game::init_random_game(int n, long maxP, long maxE)
     init_game(n);
 
     // First initialize all vertices, and give each vertex one random successor
-    _outvec = new std::vector<int>[n_vertices];
+    vec_init();
 
     for (int i=0; i<n; i++) {
         // initialize vertex i with random priority and random owner
