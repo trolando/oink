@@ -406,8 +406,8 @@ public:
             friend class Game;
         public:
             friend std::ostream& operator<<(std::ostream& out, const _label_vertex &lv) {
-                if (lv.v == -1) {
-                    out << "-1";
+                if (lv.v < 0 or lv.v >= lv.g.nodecount()) {
+                    out << "<N/A>";
                 } else {
                     std::string* l = lv.g.rawlabel(lv.v);
                     if (l == NULL or l->empty()) out << lv.v << "/" << lv.g.priority(lv.v);
