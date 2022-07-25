@@ -101,6 +101,8 @@ target_sources(oink
     src/solvers/ptl.cpp
     src/solvers/dtl.cpp
     src/solvers/tlq.cpp
+    src/solvers/gpm.cpp
+    src/solvers/pmtl.cpp
     ${OINK_HDRS}
 )
 
@@ -130,6 +132,9 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         target_sources(test_solvers PRIVATE test/test_solvers.cpp)
         set_target_props(test_solvers)
         target_link_libraries(test_solvers Boost::iostreams Boost::filesystem Boost::random)
+        #add_executable(test_measures)
+        #target_sources(test_measures PRIVATE test/test_measures.cpp)
+        #set_target_props(test_measures)
     endif()
 
     if(OINK_BUILD_EXTRA_TOOLS)
@@ -222,6 +227,8 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverDTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --dtl)
         add_test(NAME TestSolverIDTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --idtl)
         add_test(NAME TestSolverTLQ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlq)
+        add_test(NAME TestSolverGPM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --gpm)
+        add_test(NAME TestSolverPMTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl)
         # test ZLK variations
         add_test(NAME TestSolverZLKseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w -1)
         add_test(NAME TestSolverZLKpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w 0)

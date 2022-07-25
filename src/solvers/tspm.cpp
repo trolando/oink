@@ -321,7 +321,7 @@ TSPMSolver::update(int pl)
             todo_push(i);
 
             if (trace) {
-                logger << "\033[1;33mupdated node " << i << "/" << priority(i) << (owner(i)?" (odd)":" (even)") << "\033[m to";
+                logger << "\033[1;33mupdated* node " << i << "/" << priority(i) << (owner(i)?" (odd)":" (even)") << "\033[m to";
                 pm_stream(logger, pms + i*k);
                 logger << std::endl;
             }
@@ -383,7 +383,7 @@ TSPMSolver::run()
      * The main loop.
      */
 
-    logger << "main loop now" << std::endl;
+    // logger << "main loop now" << std::endl;
     int64_t last_update = 0;
 
     while (!todo.empty()) {
