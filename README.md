@@ -110,13 +110,16 @@ ZLKPP-LIV       | Quasi-polynomial time recursive algorithm (Liverpool version, 
 The strategy improvement algorithm is one of the older algorithms, receiving a lot of attention from the academic community in the past.
 The parallel strategy improvement implementation is inspired by the work of Fearnley in CAV 2017 but uses a different approach with work-stealing.
 This is described in the TACAS 2018 paper about Oink.
+The symmetric strategy improvement algorithm is my own take on the 2015 ICALP paper by Schewe et al. It applies the principle of only updating strategies that are also the best response to the SI variation of PSI, that is, considering only finite paths simplifying the valuation.
 
 See also:
 * John Fearnley (2017) [Efficient Parallel Strategy Improvement for Parity Games](https://doi.org/10.1007/978-3-319-63390-9_8). In: CAV 2017.
+* Sven Schewe, Ashutosh Trivedi, Thomas Varghese (2015) [Symmetric Strategy Improvement](https://doi.org/10.1007/978-3-662-47666-6_31). In: ICALP 2015.
 
 Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
 PSI             | (parallel) strategy improvement
+SSI             | symmetric strategy improvement
 
 ### Progress measures
 
