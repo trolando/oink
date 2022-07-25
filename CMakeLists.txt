@@ -171,6 +171,13 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         set_target_props(counter_symsi)
         target_link_libraries(counter_symsi oink)
 
+        add_executable(counter_ortl src/tools/counter_ortl.cpp)
+        set_target_props(counter_ortl)
+        target_link_libraries(counter_ortl oink)
+
+        add_executable(counter_qpt src/tools/counter_qpt.cpp)
+        set_target_props(counter_qpt)
+
         add_executable(tc src/tools/tc.cpp)
         set_target_props(tc)
         target_link_libraries(tc oink)
@@ -178,13 +185,6 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_executable(tc+ src/tools/tc+.cpp)
         set_target_props(tc+)
         target_link_libraries(tc+ oink)
-
-        add_executable(counter_qpt src/tools/counter_qpt.cpp)
-        set_target_props(counter_qpt)
-
-        add_executable(counter_ortl src/tools/counter_ortl.cpp)
-        set_target_props(counter_ortl)
-        target_link_libraries(counter_ortl oink)
     endif()
 
     if(OINK_BUILD_TESTS)
