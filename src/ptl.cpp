@@ -707,11 +707,9 @@ PTLSolver::search_rec(bitset &Region, int vtop, int player, bitset &Subgame)
             if (trace >= 2) {
                 // report region
                 logger << "\033[1;33mregion\033[m \033[1;36m" << path << "-" << pr << "\033[m";
-                for (int v=top; v>=0; v--) {
-                    if (Z[v]) {
-                        logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
-                        if (str[v] != -1 and Z[str[v]]) logger << "->" << label_vertex(str[v]);
-                    }
+                for (auto v = Z.find_last(); v != bitset::npos; v = Z.find_prev(v)) {
+                    logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+                    if (str[v] != -1 and Z[str[v]]) logger << "->" << label_vertex(str[v]);
                 }
                 logger << std::endl;
             }
