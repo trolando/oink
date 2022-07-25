@@ -291,7 +291,7 @@ main(int argc, char **argv)
         uint64_t n = options["count"].as<int>();
         uint64_t size = options["size"].as<int>();
         uint64_t maxP = options.count("maxp") ? options["maxp"].as<int>() : size; // default #priorities = size
-        uint64_t maxE = options.count("maxe") ? options["maxe"].as<int>() : 4*size; // default avg degree [1..4]
+        uint64_t maxE = options.count("maxe") ? options["maxe"].as<int>() : 4L*size; // default avg degree [1..4]
 
         if (maxE > (size*size)) maxE = size*size;
 
