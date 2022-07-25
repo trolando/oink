@@ -73,6 +73,7 @@ See also:
 * Massimo Benerecetti, Daniele Dell'Erba, Fabio Mogavero (2016) [Solving Parity Games via Priority Promotion](https://doi.org/10.1007/978-3-319-41540-6_15). In: CAV 2016.
 * Massimo Benerecetti, Daniele Dell'Erba, Fabio Mogavero (2016) [A Delayed Promotion Policy for Parity Games](https://doi.org/10.4204/EPTCS.226.3). In: GandALF 2016.
 * Massimo Benerecetti, Daniele Dell'Erba, Fabio Mogavero (2016) [Improving Priority Promotion for Parity Games](https://doi.org/10.1007/978-3-319-49052-6_8). In: HVC 2016.
+* Massimo Benerecetti, Daniele Dell'Erba, Fabio Mogavero, Sven Schewe, Dominik Wojtczak [Priority Promotion with Parysian Flair](https://arxiv.org/abs/2105.01738). In: arXiv.
 
 Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
@@ -82,6 +83,7 @@ PPP             | Priority promotion PP+ (better reset heuristic)
 RR              | Priority promotion RR (even better reset heuristic)
 DP              | Priority promotion PP+ with the delayed promotion strategy
 RRDP            | Priority promotion RR with the delayed promotion strategy
+PPQ             | Pawel Parys's QP recursive algorithm augmented with priority promotion
 
 ### Zielonka's recursive algorithm
 

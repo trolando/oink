@@ -82,6 +82,7 @@ target_sources(oink
     src/rr.cpp
     src/dp.cpp
     src/rrdp.cpp
+    src/ppq.cpp
     src/fpi.cpp
     src/fpj.cpp
     src/psi.cpp
@@ -215,6 +216,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverRR COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --rr)
         add_test(NAME TestSolverDP COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --dp)
         add_test(NAME TestSolverRRDP COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --rrdp)
+        add_test(NAME TestSolverPPQ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ppq)
         # test TL and variations
         add_test(NAME TestSolverTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tl)
         add_test(NAME TestSolverRTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --rtl)
