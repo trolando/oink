@@ -190,6 +190,7 @@ counter\_core  | Counterexample of Benerecetti, Dell'Erba, Mogavero, [Robust Exp
 counter\_rob   | SCC version of counter\_core.
 counter\_dtl   | Counterexample to the DTL solver
 counter\_ortl  | Counterexample to the ORTL solver
+counter\_symsi | Counterexample of Matthew Maat to (standard) symmetric strategy improvement
 tc             | Two binary counters generator (game family that is an exponential lower bound for many algorithms). See also Tom van Dijk (2019) [A Parity Game Tale of Two Counters](https://doi.org/10.4204/EPTCS.305.8). In: GandALF 2019.
 tc+            | TC modified to defeat the RTL solver
 

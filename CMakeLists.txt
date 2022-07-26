@@ -162,6 +162,10 @@ if(OINK_BUILD_EXTRA_TOOLS)
     set_target_props(counter_rob) 
     target_link_libraries(counter_rob oink)
 
+    add_executable(counter_symsi src/tools/counter_symsi.cpp)
+    set_target_props(counter_symsi)
+    target_link_libraries(counter_symsi oink)
+
     add_executable(tc src/tools/tc.cpp)
     set_target_props(tc) 
     target_link_libraries(tc oink)
