@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2018 Tom van Dijk, Johannes Kepler University Linz
+ * Copyright 2021-2022 Tom van Dijk
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,8 +29,6 @@ public:
 
     virtual void run();
 
-    int minor = 0, major = 0;
-
     uintqueue Q;         // main queue
     bitset G;            // remaining game to solve
     bitset C;            // mark vertices on a cycle
@@ -48,7 +46,6 @@ public:
 
     bool si_val_less(int a, int b);    // is val[a] < val[b] from Even's perspective
     void compute_vals_ll(int side);    // compute values of finite paths
-    void compute_vals_bw(int side);    // compute values of finite paths
     int mark_solved(int side);         // set cycles to won by player
     int switch_opp_strategy(int side); // switch opponent strategy
     int switch_sym_strategy(int side); // switch primary strategy

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Tom van Dijk
+ * Copyright 2021-2022 Tom van Dijk
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,21 +53,19 @@ SSISolver::compute_vals_ll(int side)
 {
     auto & H = side == 0 ? halt0 : halt1;
     auto & S = side == 0 ? str0 : str1;
-    auto & W = side == 0 ? W0 : W1;
-    auto & Wopp = side == 0 ? W1 : W0;
 
-    // set all vertices as on cycle
+    // set all vertices in G to "on cycle"
     C = G;
 
-    // find all halting vertices
+    // find all halting vertices and set the linked list of in edges
     std::fill(first_in, first_in+nodecount(), '\xff');
     for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
-        if (W[v]) continue;
-        // check if the successor of v is halted
         int s = S[v];
         if (H[s]) {
+            // successor of v is halted
             Q.push(v);
         } else {
+            // successor of v is not halted
             next_in[v] = first_in[s];
             first_in[s] = v;
         }
@@ -99,82 +97,92 @@ SSISolver::compute_vals_ll(int side)
     }
 }
 
-void
-SSISolver::compute_vals_bw(int side)
-{
-    auto & H = side == 0 ? halt0 : halt1;
-    auto & S = side == 0 ? str0 : str1;
-    auto & W = side == 0 ? W0 : W1;
-
-    // set all vertices as on cycle
-    C = G;
-
-    // find all halting vertices
-    for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
-        if (H[v]) {
-            // add all predecessors with the strategy to v
-            for (auto curedge = ins(v); *curedge != -1; curedge++) {
-                auto from = *curedge;
-                if (!G[from]) continue;
-                if (S[from] == v) {
-                    Q.push(from);
-                    C[from] = false;
-                }
-            }
-        }
-    }
-
-    // walk the finite paths
-    while (Q.nonempty()) {
-        int v = Q.pop();
-
-        // set valuation
-        int *val_v = val + k*v;
-        int s = S[v];
-        if (s == -1) LOGIC_ERROR;
-        if (H[s]) {
-            std::fill(val_v, val_v+k, '\x00');
-        } else {
-            std::copy(val+k*s, val+k*(s+1), val_v);
-        }
-        val_v[priority(v)]++;
-
-        // add predecessors
-        for (auto curedge = ins(v); *curedge != -1; curedge++) {
-            int from = *curedge;
-            if (!G[from]) continue;
-            if (!C[from]) continue; // already seen
-            if (S[from] == v) {
-                Q.push(from);
-                C[from] = false;
-            }
-        }
-    }
-}
-
 int
 SSISolver::mark_solved(int side)
 {
+    if (C.none()) return 0;
+
+    auto & W = side == 0 ? W0 : W1;
+    auto & S = side == 0 ? str0 : str1;
+
+    // the vertices in C are the new winning region (dominion)
+    W |= C;
+
+    // attract to the winning region
+    int count = 0;
+    for (auto v = C.find_first(); v != bitset::npos; v = C.find_next(v)) {
+        Q.push(v);
+    }
+    while (Q.nonempty()) {
+        auto v = Q.pop();
+        count++;
+        for (auto curedge = ins(v); *curedge != -1; curedge++) {
+            auto from = *curedge;
+            if (G[from] and !W[from]) {
+                if (owner(from) != side) {
+                    // check if escapes
+                    bool escapes = false;
+                    for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                        auto to = *curedge;
+                        if (G[to] && !W[to]) {
+                            escapes = true;
+                            break;
+                        }
+                    }
+                    if (escapes) continue;
+                } else {
+                    S[from] = v;
+                }
+                C[from] = true;
+                W[from] = true;
+                Q.push(from);
+            }
+        }
+    }
+
 #ifndef NDEBUG
     if (trace >= 2) {
-        V = C;
-        V -= (side == 0 ? W0 : W1);
-        for (auto v = V.find_first(); v != bitset::npos; v = V.find_next(v)) {
-            logger << "\033[1;37mvertex " << label_vertex(v) << " is now won by " << (side == 0 ? "Even" : "Odd") << "!\033[m" << std::endl;
+        for (auto v = C.find_first(); v != bitset::npos; v = C.find_next(v)) {
+            if (owner(v) == side) {
+                logger << "\033[1;37mvertex " << label_vertex(v) << " is now won by " << (side == 0 ? "Even" : "Odd") << " with strategy " << label_vertex(S[v]) << "!\033[m" << std::endl;
+            } else {
+                logger << "\033[1;37mvertex " << label_vertex(v) << " is now won by " << (side == 0 ? "Even" : "Odd") << "!\033[m" << std::endl;
+            }
         }
     }
 #endif
-    if (side == 0) {
-        V = C;
-        V -= W0;
-        W0 = C;
-        return V.count();
-    } else {
-        V = C;
-        V -= W1;
-        W1 = C;
-        return V.count();
+
+    // remove maximized winning region from remaining game
+    G -= W;
+    V0 &= G;
+    V1 &= G;
+
+    // partially reset the strategies and reset halting
+    halt0.reset();
+    halt1.reset();
+    for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
+        if (!G[str0[v]] || !G[str1[v]]) {
+            // select first available edge
+            int to = -1;
+            for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                int u = *curedge;
+                if (G[u]) {
+                    to = u;
+                    break;
+                }
+            }
+            if (!G[str0[v]]) str0[v] = to;
+            if (!G[str1[v]]) str1[v] = to;
+        }
+
+        if (priority(v)&1) {
+            halt0[v] = true;
+        } else {
+            halt1[v] = true;
+        }
     }
+
+    return count;
 }
 
 int
@@ -184,42 +192,71 @@ SSISolver::switch_opp_strategy(int side)
 
     auto & H = side == 0 ? halt0 : halt1; // side's halt
     auto & S = side == 0 ? str0 : str1;   // side's str
-
-    // V is precomputed all non-won vertices in G, controlled by the opponent
-    // for won vertices, we are not interested in computing a better strategy
+    auto & V = side == 0 ? V1 : V0;       // opponent vertices in G
 
     for (auto v = V.find_first(); v != bitset::npos; v = V.find_next(v)) {
         int cur_strat = S[v];
+        bool cur_is_G = G[cur_strat];
         bool cur_is_C = !H[cur_strat] and C[cur_strat];
-
         bool changed = false;
+
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
             int to = *curedge;
-            if (to == cur_strat) continue; // only check different successors
-            if (!G[to]) continue; // not in G
-            if (!H[to] and C[to]) continue; // never play to a cycle!
-            if (side == 1) {
-                // improving for player Even
-                if (cur_is_C or si_val_less(H[cur_strat] ? -1 : cur_strat, H[to] ? -1 : to)) {
+            if (to == cur_strat) {
+                // only check different successors
+            } else if (!G[to]) {
+                // only check successors in G
+            } else if (!cur_is_G) {
+                // if current strategy is outside G, take anything
+#ifndef NDEBUG
+                if (trace >= 2) {
+                    if (side == 1) {
+                        logger << "\033[1;37mupdating Even's best response\033[m: " << label_vertex(v) << " => " << label_vertex(to) << std::endl;
+                    } else {
+                        logger << "\033[1;37mupdating Odd's best response\033[m: " << label_vertex(v) << " => " << label_vertex(to) << std::endl;
+                    }
+                }
+#endif
+                cur_strat = to;
+                cur_is_G = true;
+                cur_is_C = !H[cur_strat] and C[cur_strat];
+                changed = true;
+            } else if (!H[to] and C[to]) {
+                // never play to a cycle!
+            } else if (cur_is_C) {
+                // if current strategy is to a cycle, take anything
+#ifndef NDEBUG
+                if (trace >= 2) {
+                    if (side == 1) {
+                        logger << "\033[1;37mupdating Even's best response\033[m: " << label_vertex(v) << " => " << label_vertex(to) << std::endl;
+                    } else {
+                        logger << "\033[1;37mupdating Odd's best response\033[m: " << label_vertex(v) << " => " << label_vertex(to) << std::endl;
+                    }
+                }
+#endif
+                cur_strat = to;
+                cur_is_C = false;
+                changed = true;
+            } else if (side == 1) {
+                // improving for player Even?
+                if (si_val_less(H[cur_strat] ? -1 : cur_strat, H[to] ? -1 : to)) {
 #ifndef NDEBUG
                     if (trace >= 2) {
                         logger << "\033[1;37mupdating Even's best response\033[m: " << label_vertex(v) << " => " << label_vertex(to) << std::endl;
                     }
 #endif
                     cur_strat = to;
-                    cur_is_C = false;
                     changed = true;
                 }
             } else {
-                // improving for player Odd
-                if (cur_is_C or si_val_less(H[to] ? -1 : to, H[cur_strat] ? -1 : cur_strat)) {
+                // improving for player Odd?
+                if (si_val_less(H[to] ? -1 : to, H[cur_strat] ? -1 : cur_strat)) {
 #ifndef NDEBUG
                     if (trace >= 2) {
                         logger << "\033[1;37mupdating Odd's best response\033[m: " << label_vertex(v) << " => " << label_vertex(to) << std::endl;
                     }
 #endif
                     cur_strat = to;
-                    cur_is_C = false;
                     changed = true;
                 }
             }
@@ -240,18 +277,11 @@ SSISolver::switch_sym_strategy(int side)
 
     auto & H = side == 0 ? halt0 : halt1; // side's halt
     auto & S = side == 0 ? str0 : str1;   // side's str
-    auto & Sbr = side == 0 ? str1 : str0; // best response
-    auto & W = side == 0 ? W0 : W1;       // side's winning region
-
-    V = G;
-    V -= W0;
-    V -= W1;
-    V -= side == 0 ? V1 : V0;
+    auto & Sbr = side == 0 ? str1 : str0; // side's best response
+    auto & V = side == 0 ? V0 : V1;       // side's controlled vertices in G
 
     for (auto v = V.find_first(); v != bitset::npos; v = V.find_next(v)) {
         int cur_strat = S[v];
-        if (C[cur_strat]) continue; // do not change a winning strategy
-
         int br_strat = Sbr[v];
         bool better = false;
 
@@ -285,30 +315,28 @@ SSISolver::switch_sym_strategy(int side)
             S[v] = br_strat;
             count++;
         } else {
+            // best response is not improving, check if there exists an improving edge
             for (auto curedge = outs(v); *curedge != -1; curedge++) {
                 int to = *curedge;
-                if (to == cur_strat) continue; // only check different successors
-                if (to == br_strat) continue; // already checked
-                if (!G[to]) continue; // not in G
-                if (H[to]) {
+                if (to == cur_strat) {
+                    // only check different successors
+                } else if (to == br_strat) {
+                    // already checked
+                } else if (!G[to]) {
+                    // only check successors in G
+                } else if (H[to]) {
                     if (H[cur_strat]) continue; // both halting...
                     if (side == 0) {
-                        if (si_val_less(cur_strat, -1)) better = true;
+                        if (si_val_less(cur_strat, -1)) count++;
                     } else {
-                        if (si_val_less(-1, cur_strat)) better = true;
+                        if (si_val_less(-1, cur_strat)) count++;
                     }
-                } else {
-                    if (C[to]) {
-                        better = true;
-                    } else if (side == 0) {
-                        if (si_val_less(H[cur_strat] ? -1 : cur_strat, to)) better = true;
-                    } else {
-                        if (si_val_less(to, H[cur_strat] ? -1 : cur_strat)) better = true;
-                    }
-                }
-                if (better) {
+                } else if (C[to]) {
                     count++;
-                    break;
+                } else if (side == 0) {
+                    if (si_val_less(H[cur_strat] ? -1 : cur_strat, to)) count++;
+                } else {
+                    if (si_val_less(to, H[cur_strat] ? -1 : cur_strat)) count++;
                 }
             }
         }
@@ -318,9 +346,7 @@ SSISolver::switch_sym_strategy(int side)
     for (auto v = H.find_first(); v != bitset::npos; v = H.find_next(v)) {
         if (!G[v]) continue; // only vertices in G anyway
         bool good = false;
-        if (W[v]) {
-            good = true;
-        } else if (side == 0) {
+        if (side == 0) {
             if (si_val_less(-1, v)) good = true;
         } else {
             if (si_val_less(v, -1)) good = true;
@@ -358,13 +384,8 @@ SSISolver::run()
     W1.resize(nodecount());
     halt0.resize(nodecount());
     halt1.resize(nodecount());
-
-    V0 = G;
-    V1 = G;
-    for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
-        if (owner(v) == 0) V1[v] = false;
-        else V0[v] = false;
-    }
+    V0.resize(nodecount());
+    V1.resize(nodecount());
 
     val = new int[k*nodecount()];
     str0 = new int[nodecount()];
@@ -375,6 +396,8 @@ SSISolver::run()
 
     // initialize the datastructure
     for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
+        // set V0 or V1
+        (owner(v) == 0 ? V0 : V1)[v] = true;
         // select first available edge
         int to = -1;
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
@@ -403,7 +426,8 @@ SSISolver::run()
         }
     }
 
-    long remaining = G.count();
+    int minor = 0, major = 0;
+    auto remaining = G.count();
 
     for (;;) {
         ++major;
@@ -412,8 +436,6 @@ SSISolver::run()
         }
         {
             // First compute Odd's best response for Even's strategy
-            V = V1;
-            V -= W0;
             if (trace) logger << "Computing Odd's best response..." << std::endl;
             for (;;) {
                 ++minor;
@@ -421,12 +443,15 @@ SSISolver::run()
                 int count = switch_opp_strategy(0);
                 if (count == 0) break; // if nothing left, done
             }
-            remaining -= mark_solved(0); // mark nodes won by Even after Odd's best response
+            int solved = mark_solved(0); // mark nodes won by Even after Odd's best response
+            if (solved != 0) {
+                remaining -= solved;
+                if (remaining <= 0) break;
+                continue; // restart major loop
+            }
         }
         {
             // Now compute Even's best response for Odd's strategy
-            V = V0;
-            V -= W1;
             if (trace) logger << "Computing Even's best response..." << std::endl;
             for (;;) {
                 ++minor;
@@ -434,53 +459,49 @@ SSISolver::run()
                 int count = switch_opp_strategy(1);
                 if (count == 0) break; // if nothing left, done
             }
-            remaining -= mark_solved(1); // mark nodes won by Odd after Even's best response
+            int solved = mark_solved(1); // mark nodes won by Odd after Even's best response
+            if (solved != 0) {
+                remaining -= solved;
+                if (remaining <= 0) break;
+                continue; // restart major loop
+            }
         }
-        if (remaining <= 0) break;
         if (trace) logger << "Improving Odd's strategy..." << std::endl;
         if (switch_sym_strategy(1) == 0) {
             // Now all vertices not in a winning region are won by Even with strategy str1
-            V = G;
-            V -= W0;
-            V -= W1;
-            W0 |= V;
-            for (auto v = V.find_first(); v != bitset::npos; v = V.find_next(v)) {
+            if (trace) logger << "No (possible) improvements - Even wins remainder." << std::endl;
+            W0 |= G;
+            for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
                 str0[v] = str1[v];
             }
-            if (trace) logger << "No improvements - Even wins remainder." << std::endl;
             break;
         }
         if (trace) logger << "Improving Even's strategy..." << std::endl;
         compute_vals_ll(0);
         if (switch_sym_strategy(0) == 0) {
             // Now all vertices not in a winning region are won by Odd with strategy str0
-            V = G;
-            V -= W0;
-            V -= W1;
-            W1 |= V;
-            for (auto v = V.find_first(); v != bitset::npos; v = V.find_next(v)) {
+            if (trace) logger << "No (possible) improvements - Odd wins remainder." << std::endl;
+            W1 |= G;
+            for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
                 str1[v] = str0[v];
             }
-            if (trace) logger << "No improvements - Odd wins remainder." << std::endl;
             break;
         }
     }
 
-    // Now set dominions and derive strategy for odd.
-    for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
-#ifndef NDEBUG
-        if (W0[v] == W1[v]) LOGIC_ERROR; // in both winning regions?
-#endif
-        if (W0[v]) {
-            oink->solve(v, 0, owner(v) == 0 ? str0[v] : -1);
-        } else {
-            oink->solve(v, 1, owner(v) == 1 ? str1[v] : -1);
-        }
+    for (auto v = W0.find_first(); v != bitset::npos; v = W0.find_next(v)) {
+        oink->solve(v, 0, owner(v) == 0 ? str0[v] : -1);
+    }
+
+    for (auto v = W1.find_first(); v != bitset::npos; v = W1.find_next(v)) {
+        oink->solve(v, 1, owner(v) == 1 ? str1[v] : -1);
     }
 
     delete[] val;
     delete[] first_in;
     delete[] next_in;
+    delete[] str0;
+    delete[] str1;
 
     logger << "solved with " << major << " major iterations, " << minor << " minor iterations." << std::endl;
 }
