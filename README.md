@@ -1,4 +1,6 @@
 # Oink
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![CI testing](https://github.com/trolando/oink/actions/workflows/ci-build.yml/badge.svg)](https://github.com/trolando/oink/actions/workflows/ci-build.yml)
 
 Oink is an modern implementation of parity game solvers written in C++.
 Oink aims to provide high-performance implementations of state-of-the-art
