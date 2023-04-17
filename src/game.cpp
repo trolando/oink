@@ -86,7 +86,7 @@ Game::Game(int vcount, int ecount) : _owner(vcount), solved(vcount), winner(vcou
     e_size = 0;
 
     _priority = (int*)malloc(sizeof(int[v_allocated]));
-    _label = (string**)calloc(sizeof(string*), v_allocated);
+    _label = (string**)calloc(v_allocated, sizeof(string*));
     strategy = (int*)malloc(sizeof(int[v_allocated]));
     _firstouts = (int*)malloc(sizeof(int[v_allocated]));
     _outcount = (int*)malloc(sizeof(int[v_allocated]));
@@ -165,10 +165,10 @@ skip_whitespace(std::streambuf *rd)
     // read whitespace
     while (true) {
         int ch;
-        if ((ch=rd->sbumpc()) == EOF) return;
+        if ((ch=rd->sgetc()) == EOF) return;
         if (ch != ' ' and ch != '\n' and ch != '\t' and ch != '\r') break;
+        rd->sbumpc();
     }
-    rd->sungetc();
 }
 
 static void
@@ -186,12 +186,13 @@ read_uint64(std::streambuf *rd, uint64_t *res)
 {
     uint64_t r = 0;
     int ch;
-    if ((ch=rd->sbumpc()) == EOF) return false;
-    if (ch < '0' or ch > '9') { rd->sungetc(); return false; }
+    if ((ch=rd->sgetc()) == EOF) return false;
+    if (ch < '0' or ch > '9') { return false; }
     while (true) {
+        rd->sbumpc();
         r = (10*r)+(ch-'0');
-        if ((ch=rd->sbumpc()) == EOF) break;
-        if (ch < '0' or ch > '9') { rd->sungetc(); break; }
+        if ((ch=rd->sgetc()) == EOF) break;
+        if (ch < '0' or ch > '9') { break; }
     }
     *res = r;
     return true;
@@ -380,7 +381,6 @@ Game::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 
     char buf[64];
     uint64_t n;
-    char ch;
 
     /**
      * Read header line...
@@ -395,15 +395,13 @@ Game::parse_pgsolver(std::istream &inp, bool removeBadLoops)
     if (!read_uint64(rd, &n)) throw "missing number of nodes";
 
     skip_whitespace(rd);
-    while ((inp >> ch) and ch != ';') continue;
-    if (ch != ';') throw "missing ';'";
+    if (rd->sbumpc() != ';') throw "missing ';'";
 
     // check if next token is 'start'
     {
         skip_whitespace(rd);
-        int ch = rd->sbumpc();
+        int ch = rd->sgetc();
         if (ch == 's') skip_line(rd);
-        else rd->sungetc();
     }
 
     /**
