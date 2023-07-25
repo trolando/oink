@@ -15,10 +15,20 @@
  */
 
 #include <iostream>
+#include <memory>
 
 #include "game.hpp"
 
 using namespace pg;
+
+template<typename ... Args>
+std::string string_format(const std::string& format, Args ... args)
+{
+    size_t size = snprintf(nullptr, 0, format.c_str(), args ...) + 1; // Extra space for '\0'
+    std::unique_ptr<char[]> buf(new char[ size ]);
+    snprintf(buf.get(), size, format.c_str(), args ...);
+    return std::string(buf.get(), buf.get() + size - 1); // We don't want the '\0' inside
+}
 
 int
 main(int argc, char** argv)
@@ -47,20 +57,20 @@ main(int argc, char** argv)
         int k = 10*i+7;
         int h = 10*i+8;
         int l = 10*i+9;
-        /* a */ game.init_vertex(a, N+2*i-1, 0);    
-        /* d */ game.init_vertex(d, N+2*i,   1);
-        /* c */ game.init_vertex(c, 14*i+1,  0);
-        /* e */ game.init_vertex(e, 14*i+4,  1);
-        /* m */ game.init_vertex(m, 14*i+3,  0);
-        /* f */ game.init_vertex(f, 14*i+6,  1);
-        /* g */ game.init_vertex(g, 14*i+8,  1);
-        /* k */ game.init_vertex(k, 14*i+11, 0);
-        /* h */ game.init_vertex(h, 14*i+10, 1);
-        /* l */ game.init_vertex(l, 14*i+13, 0);
+        /* a */ game.init_vertex(a, N+2*i-1, 0, string_format("a_%d", i+1));    
+        /* d */ game.init_vertex(d, N+2*i,   1, string_format("d_%d", i+1));
+        /* c */ game.init_vertex(c, 14*i+1,  0, string_format("c_%d", i+1));
+        /* e */ game.init_vertex(e, 14*i+4,  1, string_format("e_%d", i+1));
+        /* m */ game.init_vertex(m, 14*i+3,  0, string_format("m_%d", i+1));
+        /* f */ game.init_vertex(f, 14*i+6,  1, string_format("f_%d", i+1));
+        /* g */ game.init_vertex(g, 14*i+8,  1, string_format("g_%d", i+1));
+        /* k */ game.init_vertex(k, 14*i+11, 0, string_format("k_%d", i+1));
+        /* h */ game.init_vertex(h, 14*i+10, 1, string_format("h_%d", i+1));
+        /* l */ game.init_vertex(l, 14*i+13, 0, string_format("l_%d", i+1));
     }
 
-    game.init_vertex(10*n,   1,       0);
-    game.init_vertex(10*n+1, N+2*n+2, 1);
+    game.init_vertex(10*n,   1,       0, string_format("a_%d", n+1));
+    game.init_vertex(10*n+1, N+2*n+2, 1, string_format("d_%d", n+1));
 
     /* connect the pieces */
     for (int i=0; i<n; i++) {
