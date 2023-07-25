@@ -80,23 +80,23 @@ main(int argc, char** argv)
         game.vec_add_edge(c, e);
         game.vec_add_edge(c, m);
         game.vec_add_edge(c, 0);
-        game.vec_add_edge(m, f);
         game.vec_add_edge(m, c);
+        game.vec_add_edge(m, f);
         game.vec_add_edge(m, 0);
-        game.vec_add_edge(g, k);
         game.vec_add_edge(g, h);
+        game.vec_add_edge(g, k);
         game.vec_add_edge(g, 1);
         game.vec_add_edge(h, l);
         game.vec_add_edge(h, g);
         game.vec_add_edge(h, 1);
-        game.vec_add_edge(e, m);
         game.vec_add_edge(e, a+10);
-        game.vec_add_edge(f, c);
+        game.vec_add_edge(e, m);
         game.vec_add_edge(f, d+10);
-        game.vec_add_edge(k, h);
+        game.vec_add_edge(f, c);
         game.vec_add_edge(k, a+10);
-        game.vec_add_edge(l, g);
+        game.vec_add_edge(k, h);
         game.vec_add_edge(l, d+10);
+        game.vec_add_edge(l, g);
     }
 
     game.vec_add_edge(10*n,   10*n);
