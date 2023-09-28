@@ -21,6 +21,7 @@
 #include <random>
 #include <sstream>
 #include <sys/time.h>
+#include <optional>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
@@ -49,6 +50,7 @@ bool opt_wcwc = false;
 bool opt_sort = false;
 int opt_workers = 0;
 int opt_trace = -1;
+std::optional<std::string> opt_solver_opts = {};
 
 static double
 wctime()
@@ -102,6 +104,7 @@ test_solver(Game &game, int solverid, double &time, std::ostream &log)
     solver.setSolver(solverid);
     if (opt_trace >= 0) solver.setTrace(opt_trace);
     else solver.setTrace(0);
+    if (opt_solver_opts.has_value()) solver.setSolverOptions(*opt_solver_opts);
 
     double begin = wctime();
     try {
@@ -124,7 +127,7 @@ test_solver(Game &game, int solverid, double &time, std::ostream &log)
 
     return 0;
 }
- 
+
 
 int
 main(int argc, char **argv)
@@ -158,6 +161,7 @@ main(int argc, char **argv)
     }
     opts.add_options("Solving")
         ("t,trace", "Write trace with given level (0-3) to stdout", cxxopts::value<int>())
+        ("c,configure", "Additional configuration options for the solver", cxxopts::value<std::string>())
         ("w,workers", "Number of workers for parallel algorithms, or -1 for sequential, 0 for autodetect", cxxopts::value<int>()->default_value("-1"))
         ;
     opts.allow_unrecognised_options();
@@ -217,6 +221,14 @@ main(int argc, char **argv)
         return 0;
     } else {
         std::cout << std::endl;
+    }
+
+    if (options.count("configure")) {
+        if (solver_count > 1) {
+            std::cout << std::endl << "Solver configuration options (--configure, -c) cannot be used with multiple solvers at the same time" << std::endl;
+            return 0;
+        }
+        opt_solver_opts = { options["configure"].as<std::string>() };
     }
 
     setsighandlers();
