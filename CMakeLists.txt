@@ -12,7 +12,8 @@ include(FetchContent)
 FetchContent_Declare(
     lace
     GIT_REPOSITORY https://github.com/trolando/lace.git
-    GIT_TAG        v1.3.1
+    GIT_TAG        v1.4.1
+    FIND_PACKAGE_ARGS
 )
 FetchContent_MakeAvailable(lace)
 
@@ -22,18 +23,37 @@ find_package(Boost REQUIRED filesystem iostreams regex system random)
 add_library(oink)
 add_library(oink::oink ALIAS oink)
 set_target_properties(oink PROPERTIES VERSION ${oink_VERSION} SOVERSION ${oink_VERSION_MAJOR})
+
+set(OINK_HDRS
+    src/oink.hpp
+    src/error.hpp
+    src/game.hpp
+    src/bitset.hpp
+    src/uintqueue.hpp
+)
+
 target_compile_features(oink PUBLIC c_std_11 cxx_std_11)
-target_compile_options(oink PRIVATE -Wall -Wextra)
+
+target_compile_options(oink PRIVATE
+    $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:GNU>>:
+        -pipe
+        $<$<CONFIG:Debug>:-O0 -Wall -Wextra>>
+    $<$<CXX_COMPILER_ID:MSVC>:
+        $<$<CONFIG:Debug>:/Od /Wall /Zi>>
+)
+
 target_include_directories(oink
   PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/src
   PUBLIC
-    $<BUILD_INTERFACE:src ${Boost_INCLUDE_DIRS}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>
+    $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
     $<INSTALL_INTERFACE:include/oink>
 )
+
 target_link_libraries(oink pthread lace::lace)
 
-option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" OFF)
+option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" ON)
 if(OINK_BUILD_NATIVE)
     target_compile_options(oink PRIVATE "-march=native")
 endif()
@@ -69,16 +89,10 @@ target_sources(oink
     src/zlkpp.cpp
     src/ptl.cpp
     src/dtl.cpp
-  PUBLIC
-    src/oink.hpp
-    src/error.hpp
-    src/game.hpp
-    src/bitset.hpp
-    src/uintqueue.hpp
+    ${OINK_HDRS}
 )
 
-get_target_property(oink_PUBLIC_HEADERS oink INTERFACE_SOURCES)
-set_target_properties(oink PROPERTIES PUBLIC_HEADER "${oink_PUBLIC_HEADERS}")
+set_target_properties(oink PROPERTIES PUBLIC_HEADER "${OINK_HDRS}")
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     option(OINK_BUILD_TOOLS "Build basic Oink tools" ON)
@@ -213,3 +227,52 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         #add_test(NAME TestSolver COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --)
     endif()
 endif()
+
+set_target_properties(oink PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin
+)
+
+include(GNUInstallDirs)
+
+install(TARGETS oink solve
+    EXPORT oink-targets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
+)
+
+install(EXPORT oink-targets
+    FILE oink-targets.cmake
+    NAMESPACE oink::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/oink
+)
+
+include(CMakePackageConfigHelpers)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/oink-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/oink
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config-version.cmake
+    VERSION ${oink_VERSION}
+    COMPATIBILITY SameMinorVersion
+)
+
+install(
+    FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/oink
+)
+
+export(EXPORT oink-targets
+    FILE ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-targets.cmake
+    NAMESPACE oink::
+)

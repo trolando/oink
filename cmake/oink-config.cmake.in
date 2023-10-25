@@ -1,0 +1,5 @@
+@PACKAGE_INIT@
+
+if(NOT TARGET oink::oink)
+    include(${CMAKE_CURRENT_LIST_DIR}/oink-targets.cmake)
+endif()
