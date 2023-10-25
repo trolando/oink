@@ -18,9 +18,9 @@ jobs:
         - Debug
         cc:
         - { cc: gcc, v: 9, cxx: g++}
-        - { cc: gcc, v: 11, cxx: g++}
-        - { cc: clang, v: 7, cxx: clang++ }
+        - { cc: gcc, v: 13, cxx: g++}
         - { cc: clang, v: 11, cxx: clang++ }
+        - { cc: clang, v: 15, cxx: clang++ }
     env:
       cc: ${{matrix.cc.cc}}-${{matrix.cc.v}}
       cxx: ${{matrix.cc.cxx}}-${{matrix.cc.v}}
@@ -61,9 +61,9 @@ jobs:
         - RelWithDebInfo
         - Debug
         cc:
-        - { cc: gcc, v: 11, cxx: g++, xcode: latest }
-        - { cc: clang, cxx: clang++, xcode: 10.0 }
+        - { cc: gcc, v: 12, cxx: g++, xcode: latest }
         - { cc: clang, cxx: clang++, xcode: 12.0 }
+        - { cc: clang, cxx: clang++, xcode: 14.0 }
     env:
       cc: ${{matrix.cc.cc}}-${{matrix.cc.v}}
       cxx: ${{matrix.cc.cxx}}-${{matrix.cc.v}}
