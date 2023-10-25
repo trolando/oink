@@ -20,7 +20,7 @@
 #include <iostream>
 #include <ctime>
 
-#include "game.hpp"
+#include "oink/game.hpp"
 
 #define USE_MMAP 1
 

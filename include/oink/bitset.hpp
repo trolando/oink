@@ -17,7 +17,7 @@
 #ifndef BITSET_HPP
 #define BITSET_HPP
 
-#include <libpopcnt.h>
+#include <oink/libpopcnt.h>
 
 namespace pg
 {

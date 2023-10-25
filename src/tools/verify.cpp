@@ -18,7 +18,7 @@
 #include <fstream>
 #include <sys/time.h>
 
-#include "game.hpp"
+#include "oink/game.hpp"
 #include "verifier.hpp"
 
 using namespace std;

@@ -22,8 +22,8 @@
 #include <iostream>
 #include <chrono>
 
-#include "oink.hpp"
-#include "solvers.hpp"
+#include "oink/oink.hpp"
+#include "oink/solvers.hpp"
 #include "solver.hpp"
 #include "lace.h"
 

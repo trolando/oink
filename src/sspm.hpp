@@ -17,9 +17,7 @@
 #ifndef SSPM_HPP
 #define SSPM_HPP
 
-#include "oink.hpp"
 #include "solver.hpp"
-#include "uintqueue.hpp"
 
 namespace pg {
 

@@ -20,9 +20,9 @@
 #include <iostream>
 #include <vector>
 
-#include "error.hpp"
-#include "game.hpp"
-#include "uintqueue.hpp"
+#include "oink/error.hpp"
+#include "oink/game.hpp"
+#include "oink/uintqueue.hpp"
 
 namespace pg {
 

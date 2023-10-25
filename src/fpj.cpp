@@ -20,7 +20,6 @@
 #include <stack>
 
 #include "fpj.hpp"
-#include "uintqueue.hpp"
 
 namespace pg {
 

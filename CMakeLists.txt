@@ -25,11 +25,13 @@ add_library(oink::oink ALIAS oink)
 set_target_properties(oink PROPERTIES VERSION ${oink_VERSION} SOVERSION ${oink_VERSION_MAJOR})
 
 set(OINK_HDRS
-    src/oink.hpp
-    src/error.hpp
-    src/game.hpp
-    src/bitset.hpp
-    src/uintqueue.hpp
+    include/oink/oink.hpp
+    include/oink/error.hpp
+    include/oink/game.hpp
+    include/oink/solvers.hpp
+    include/oink/bitset.hpp
+    include/oink/uintqueue.hpp
+    include/oink/libpopcnt.h
 )
 
 target_compile_features(oink PUBLIC c_std_11 cxx_std_11)
@@ -47,8 +49,9 @@ target_include_directories(oink
     ${CMAKE_CURRENT_LIST_DIR}/src
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
     $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
-    $<INSTALL_INTERFACE:include/oink>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(oink pthread lace::lace)

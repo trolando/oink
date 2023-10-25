@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "solvers.hpp"
+#include "oink/solvers.hpp"
 
 #include "zlk.hpp"
 #include "pp.hpp"

@@ -27,9 +27,8 @@
 #include <boost/iostreams/filter/gzip.hpp>
 
 #include "cxxopts.hpp" 
-#include "game.hpp"
-#include "oink.hpp"
-#include "solvers.hpp"
+#include "oink/oink.hpp"
+#include "oink/solvers.hpp"
 #include "verifier.hpp"
 #include "tools/getrss.h"
 

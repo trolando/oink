@@ -20,8 +20,6 @@
 #include <queue>
 
 #include "solver.hpp"
-#include "lace.h"
-#include "uintqueue.hpp"
 
 namespace pg {
 

@@ -21,9 +21,7 @@
 #include <deque>
 #include <vector>
 
-#include "oink.hpp"
 #include "solver.hpp"
-#include "uintqueue.hpp"
 
 namespace pg
 {

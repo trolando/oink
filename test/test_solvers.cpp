@@ -29,9 +29,8 @@
 #include <boost/random/random_device.hpp>
 
 #include "tools/cxxopts.hpp"
-#include "game.hpp"
-#include "oink.hpp"
-#include "solvers.hpp"
+#include "oink/oink.hpp"
+#include "oink/solvers.hpp"
 #include "verifier.hpp"
 #include "lace.h"
 

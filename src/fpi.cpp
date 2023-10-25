@@ -19,7 +19,6 @@
 #include <unistd.h>
 
 #include "fpi.hpp"
-#include "uintqueue.hpp"
 
 namespace pg {
 

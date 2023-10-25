@@ -19,7 +19,7 @@
 #include <random>
 #include <cstring>
 
-#include "game.hpp"
+#include "oink/game.hpp"
 
 using namespace std;
 

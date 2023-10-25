@@ -18,7 +18,6 @@
 #define QPT_HPP
 
 #include "solver.hpp"
-#include "uintqueue.hpp"
 
 namespace pg {
 

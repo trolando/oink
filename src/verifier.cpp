@@ -24,7 +24,6 @@
 #include <deque>
 #include <stack>
 
-#include "game.hpp"
 #include "verifier.hpp"
 
 using namespace std;

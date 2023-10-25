@@ -16,7 +16,7 @@
 
 #include <fstream>
 
-#include "oink.hpp"
+#include "oink/oink.hpp"
 
 int
 main(int argc, char** argv)

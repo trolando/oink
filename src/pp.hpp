@@ -19,7 +19,6 @@
 
 #include <queue>
 
-#include "oink.hpp"
 #include "solver.hpp"
 
 namespace pg {

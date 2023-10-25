@@ -18,7 +18,7 @@
 #define VERIFIER_HPP
 
 #include <istream>
-#include "game.hpp"
+#include "oink/game.hpp"
 
 namespace pg {
 

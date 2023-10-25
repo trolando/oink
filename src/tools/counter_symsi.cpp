@@ -17,7 +17,7 @@
 #include <iostream>
 #include <memory>
 
-#include "game.hpp"
+#include "oink/game.hpp"
 
 using namespace pg;
 

@@ -20,7 +20,7 @@
 #include <random>
 
 #include "cxxopts.hpp"
-#include "game.hpp"
+#include "oink/game.hpp"
 
 using namespace std;
 using namespace pg;

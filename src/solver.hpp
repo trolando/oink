@@ -17,9 +17,9 @@
 #ifndef SOLVER_HPP
 #define SOLVER_HPP
 
-#include "game.hpp"
-#include "oink.hpp"
-#include "error.hpp"
+#include "oink/game.hpp"
+#include "oink/oink.hpp"
+#include "oink/error.hpp"
 
 namespace pg {
 

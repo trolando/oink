@@ -19,7 +19,7 @@
 #include <deque>
 #include <stack>
 #include <cstring> // for memset
-#include "oink.hpp"
+#include "oink/oink.hpp"
 
 namespace pg {
 
