@@ -20,7 +20,7 @@ FetchContent_MakeAvailable(lace)
 find_package(Boost REQUIRED filesystem iostreams regex system random)
 
 # Main library target
-add_library(oink)
+add_library(oink STATIC)
 add_library(oink::oink ALIAS oink)
 set_target_properties(oink PROPERTIES VERSION ${oink_VERSION} SOVERSION ${oink_VERSION_MAJOR})
 
@@ -54,7 +54,7 @@ target_include_directories(oink
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(oink pthread lace::lace)
+target_link_libraries(oink PUBLIC pthread lace)
 
 option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" ON)
 if(OINK_BUILD_NATIVE)
