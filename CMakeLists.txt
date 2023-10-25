@@ -97,26 +97,26 @@ target_sources(oink
 
 set_target_properties(oink PROPERTIES PUBLIC_HEADER "${OINK_HDRS}")
 
+# Common target properties
+macro(set_target_props NAME)
+    target_compile_features(${NAME} PUBLIC c_std_11 cxx_std_11)
+    target_compile_options(${NAME} PRIVATE -Wall -Wextra)
+    target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${Boost_INCLUDE_DIRS})
+    target_link_libraries(${NAME} oink::oink pthread)
+endmacro(set_target_props)
+
+add_executable(solve)
+target_sources(solve PRIVATE src/tools/solve.cpp src/tools/getrss.c)
+set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
+set_target_props(solve)
+target_link_libraries(solve Boost::iostreams Boost::random)
+
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     option(OINK_BUILD_TOOLS "Build basic Oink tools" ON)
     option(OINK_BUILD_EXTRA_TOOLS "Build extra Oink tools" OFF)
     option(OINK_BUILD_TESTS "Build tests" ON)
 
-    # Common target properties
-    macro(set_target_props NAME)
-        target_compile_features(${NAME} PUBLIC c_std_11 cxx_std_11)
-        target_compile_options(${NAME} PRIVATE -Wall -Wextra)
-        target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${Boost_INCLUDE_DIRS})
-        target_link_libraries(${NAME} oink::oink pthread)
-    endmacro(set_target_props)
-
     if(OINK_BUILD_TOOLS)
-        add_executable(solve)
-        target_sources(solve PRIVATE src/tools/solve.cpp src/tools/getrss.c)
-        set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
-        set_target_props(solve)
-        target_link_libraries(solve Boost::iostreams Boost::random)
-
         add_executable(test_solvers)
         target_sources(test_solvers PRIVATE test/test_solvers.cpp)
         set_target_props(test_solvers)
