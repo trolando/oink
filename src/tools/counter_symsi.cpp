@@ -70,7 +70,7 @@ main(int argc, char** argv)
     }
 
     game.init_vertex(10*n,   1,       0, string_format("a_%d", n+1));
-    game.init_vertex(10*n+1, N+2*n+2, 1, string_format("d_%d", n+1));
+    game.init_vertex(10*n+1, 2, 1, string_format("d_%d", n+1));
 
     /* connect the pieces */
     for (int i=0; i<n; i++) {
@@ -110,7 +110,9 @@ main(int argc, char** argv)
     }
 
     game.vec_add_edge(10*n,   10*n);
-    game.vec_add_edge(10*n+1, 10*n);
+    game.vec_add_edge(10*n+1, 10*n+1);
+    game.vec_add_edge(10*n, 0);
+    game.vec_add_edge(10*n+1,1);
 
     game.vec_finish();
     game.write_pgsolver(std::cout);
