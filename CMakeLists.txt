@@ -54,7 +54,7 @@ target_include_directories(oink
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(oink PUBLIC pthread lace)
+target_link_libraries(oink PUBLIC pthread lace::lace)
 
 option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" ON)
 if(OINK_BUILD_NATIVE)
