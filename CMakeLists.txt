@@ -9,13 +9,17 @@ project(oink
 
 # Dependencies
 include(FetchContent)
-FetchContent_Declare(
-    lace
-    GIT_REPOSITORY https://github.com/trolando/lace.git
-    GIT_TAG        v1.4.1
-    FIND_PACKAGE_ARGS
-)
-FetchContent_MakeAvailable(lace)
+if(NOT TARGET lace)
+  find_package(lace QUIET)
+  if(NOT lace_FOUND)
+    FetchContent_Declare(
+        lace
+        GIT_REPOSITORY https://github.com/trolando/lace.git
+        GIT_TAG        v1.4.1
+    )
+    FetchContent_MakeAvailable(lace)
+  endif()
+endif()
 
 find_package(Boost REQUIRED filesystem iostreams regex system random)
 
