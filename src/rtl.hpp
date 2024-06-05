@@ -71,9 +71,9 @@ protected:
 
     bool onesided = false;
 
-    void attractVertices(const int pl, int v, bitset &R, bitset &Z, int maxpr);
-    bool attractTangle(const int t, const int pl, bitset &R, bitset &Z, int maxpr);
-    inline void attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr);
+    void attractVertices(int pl, int v, bitset &R, bitset &Z, bitset &G, int maxpr);
+    bool attractTangle(int t, int pl, bitset &R, bitset &Z, bitset &G, int maxpr);
+    void attractTangles(int pl, int v, bitset &R, bitset &Z, bitset &G, int maxpr);
     bool extractTangles(int startvertex, bitset &R);
     bool rtl(bitset &R, int only_player, int depth);
 };

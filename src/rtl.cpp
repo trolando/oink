@@ -16,6 +16,7 @@
 
 #include "rtl.hpp"
 
+#define RECURSIVE_CLOSED_REGIONS 1
 
 namespace pg {
 
@@ -33,7 +34,7 @@ RTLSolver::~RTLSolver()
  * Update <str> with the obtained attractor strategy.
  */
 void
-RTLSolver::attractVertices(const int pl, int v, bitset &R, bitset &Z, int maxpr)
+RTLSolver::attractVertices(int pl, int v, bitset &R, bitset &Z, bitset &G, int maxpr)
 {
     // attract vertices with an edge to <v>
     for (auto curedge = ins(v); *curedge != -1; curedge++) {
@@ -41,14 +42,13 @@ RTLSolver::attractVertices(const int pl, int v, bitset &R, bitset &Z, int maxpr)
         if (Z[from]) {
             // already in Z, maybe set strategy (for vertices in the original target set)
             if (owner(from) == pl and str[from] == -1) str[from] = v;
-        } else if (R[from]) {
-            if (priority(from) > maxpr) continue;
+        } else if (R[from] && priority(from) <= maxpr) {
             if (owner(from) != pl) {
                 // check if opponent can escape
                 bool escapes = false;
                 for (auto curedge = outs(from); *curedge != -1; curedge++) {
                     int to = *curedge;
-                    if (R[to] and !Z[to]) {
+                    if (G[to] and !Z[to]) {
                         escapes = true;
                         break;
                     }
@@ -79,7 +79,7 @@ RTLSolver::attractVertices(const int pl, int v, bitset &R, bitset &Z, int maxpr)
  * Update <str> with the obtained attractor strategy
  */
 bool
-RTLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int maxpr)
+RTLSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G, int maxpr)
 {
     /**
      * Check if tangle is won by player <pl> and not deleted
@@ -87,51 +87,54 @@ RTLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int ma
     {
         const int tangle_pr = tpr[t];
         if (tangle_pr == -1) return false; // deleted tangle
-        if (tangle_pr > maxpr) return false;
+        // if (tangle_pr > maxpr) return false; // contains vertices above maxpr
         if (pl != (tangle_pr&1)) return false; // not of desired parity
     }
 
     /**
-     * Check if the tangle can escape to R\Z.
+     * Check if tangle is contained in Z+R and if any vertices are not already in Z
+     * We require at least one vertex in Z\R. Otherwise, don´t attract.
      */
     {
-        int *ptr, x;
-        ptr = tout[t];
-        while ((x=*ptr++) != -1) {
-            if (R[x] and !Z[x]) return false;
+        bool can_attract_new = false;
+        int *ptr = tv[t];
+        for (;;) {
+            const int v = *ptr++;
+            if (v == -1) break;
+            ptr++; // skip strategy
+            if (!this->G[v]) {
+                // on-the-fly detect out-of-game tangles
+                tpr[t] = -1; // delete the tangle
+                return false; // is now a deleted tangle
+            } else if (Z[v]) {
+                continue; // already attracted
+            } else if (!R[v]) {
+                return false; // not contained in Z+R
+            } else if (priority(v) > maxpr) {
+                return false;
+            } else {
+                can_attract_new = true; // has vertices not yet attracted
+            }
         }
+        if (!can_attract_new) return false; // either no vertices in R\Z or strategy leaves R+Z
     }
 
     /**
-     * Check if tangle is contained in Z+R.
-     * We require at least one vertex in Z\R.
+     * Check if the tangle can escape to G\Z.
      */
     {
-        bool can_attract = false;
-        int *ptr, x;
-        ptr = tv[t];
-        while ((x=*ptr++) != -1) {
-            ptr++;
-            if (disabled[x]) {
-                // on-the-fly detect disabled tangles
-                // now mark permanently as disabled and break
-                tpr[t] = -1;
-                return false;
-            } else if (Z[x]) {
-                continue; // already attracted
-            } else if (R[x]) {
-                can_attract = true; // has vertices not yet attracted
-            } else {
-                return false; // not contained in Z+R
-            }
+        int *ptr = tout[t];
+        int v;
+        while ((v=*ptr++) != -1) {
+            if (Z[v]) continue;
+            if (G[v]) return false; // opponent escapes
         }
-        if (!can_attract) return false; // either no vertices in R\Z or strategy leaves R+Z
     }
 
-    if (maxpr == INT_MAX) {
+    //if (maxpr == INT_MAX) {
         // attracted to a dominion, so delete the tangle
-        tpr[t] = -1;
-    }
+    //    tpr[t] = -1;
+    //}
 
     /**
      * Attract!
@@ -142,7 +145,7 @@ RTLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int ma
             const int v = *ptr++;
             if (v == -1) break;
             const int s = *ptr++;
-            if (Z[v]) continue;
+            if (Z[v]) continue; // already in <Z>
             Z[v] = true;
             str[v] = s;
             Q.push(v);
@@ -170,11 +173,11 @@ RTLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int ma
  * Attracting for player <pl>.
  * (for trace) Attracting to region with priority <pr>.
  */
-__attribute__((always_inline)) inline void
-RTLSolver::attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr)
+void
+RTLSolver::attractTangles(int pl, int v, bitset &R, bitset &Z, bitset &G, int maxpr)
 {
     const auto &in_cur = tin[v];
-    for (int from : in_cur) attractTangle(from, pl, R, Z, maxpr);
+    for (int from : in_cur) attractTangle(from, pl, R, Z, G, maxpr);
 }
 
 
@@ -445,8 +448,8 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
             while (Q.nonempty()) {
                 const int v = Q.pop();
                 R[v] = false; // remove from <R>
-                attractVertices(pl, v, R, Z, pr);
-                attractTangles(pl, v, R, Z, pr);
+                attractVertices(pl, v, R, Z, R, pr);
+                attractTangles(pl, v, R, Z, R, pr);
             }
         }
 
@@ -493,24 +496,12 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
             while (Q.nonempty()) {
                 const int v = Q.pop();
                 Z[v] = false; // remove from <Z>
-                attractVertices(1-pl, v, Z, W, pr);
-                attractTangles(1-pl, v, Z, W, pr);
+                attractVertices(1-pl, v, Z, W, Z, pr);
+                attractTangles(1-pl, v, Z, W, Z, pr);
             }
         }
 
-        if (leaks) {
-            V.reset();
-            W.reset();
-
-            // Go recursive... 
-            if (Z.any()) {
-                const auto D = dominions;
-                if (rtl(Z, only_player, depth+1)) new_tangles = true;
-                if (D != dominions) return true; // full restart
-            }
-
-            Z.reset();
-        } else {
+        if (!leaks) {
             /**
              * Extract tangles by computing bottom SCCs starting at each top vertex.
              * Note: each bottom SCC must contain a top vertex.
@@ -525,9 +516,6 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
                 if (extractTangles(v, Z)) new_tangles = true;
             }
 
-            V.reset();
-            Z.reset();
-
             // Extend any dominions that were found.
             // (Any solved vertices are now in <S>.)
             if (D != dominions) {
@@ -535,8 +523,8 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
 
                 while (Q.nonempty()) {
                     const int v = Q.pop();
-                    attractVertices(pl, v, G, S, INT_MAX);
-                    attractTangles(pl, v, G, S, INT_MAX);
+                    attractVertices(pl, v, G, S, G, INT_MAX);
+                    attractTangles(pl, v, G, S, G, INT_MAX);
                 }
 
                 for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) {
@@ -546,10 +534,45 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
                 G -= S; // remove from G
                 S.reset();
                 V.reset();
-                Z.reset();
                 return true; // end tl so that we can restart...
             }
         }
+
+        if (RECURSIVE_CLOSED_REGIONS || leaks) {
+            for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
+                if (trace >= 2) {
+                    logger << "attracting to head " << label_vertex(v) << std::endl;
+                }
+                if (Z[v]) {
+                    W[v] = true;
+                    Z[v] = false;
+                    Q.push(v);
+                }
+            }
+
+            while (Q.nonempty()) {
+                const int v = Q.pop();
+                Z[v] = false; // remove from <Z>
+                attractVertices(1-pl, v, Z, W, Z, pr);
+                attractTangles(1-pl, v, Z, W, Z, pr);
+            }
+
+            V.reset();
+            W.reset();
+
+            if (Z.any()) {
+                const auto D = dominions;
+                if (rtl(Z, only_player, depth+1)) {
+                    new_tangles = true;
+                    //if (!leaks) LOGIC_ERROR;
+                }
+                if (D != dominions) return true; // full restart
+            }
+        } else {
+            V.reset();
+        }
+
+        Z.reset();
     }
 
     return new_tangles;
