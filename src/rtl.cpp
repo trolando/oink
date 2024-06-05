@@ -469,7 +469,7 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
 
         bool leaks = false;
 
-        if (only_player != -1 or top != bitset::npos) { // if not lowest region
+        if (!(only_player == -1 and top == bitset::npos)) { // if not lowest region
             // figure out what are good heads.
             for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
                 // check if open
@@ -536,27 +536,35 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
                 V.reset();
                 return true; // end tl so that we can restart...
             }
+
+            // now if we want to recursively decompose closed regions,
+            // we need to remove some top part of the region.
+            // the fact that we attract to multiple tops makes this a bit awkward, though.
+            // TODO: a better method might be to simply check all newly learned tangles, and
+            // then avoid the top vertices of those new tangles?
+            if (RECURSIVE_CLOSED_REGIONS) {
+                for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
+                    if (Z[v]) {
+                        if (trace >= 2) {
+                            logger << "\033[1;37mattracting to top vertex \033[36m" << label_vertex(v) << "\033[m" << std::endl;
+                        }
+                        W[v] = true;
+                        Z[v] = false;
+                        Q.push(v);
+                        break; // only pick one highest-priority vertex to avoid
+                    }
+                }
+
+                while (Q.nonempty()) {
+                    const int v = Q.pop();
+                    Z[v] = false; // remove from <Z>
+                    attractVertices(1-pl, v, Z, W, Z, pr);
+                    attractTangles(1-pl, v, Z, W, Z, pr);
+                }
+            }
         }
 
         if (RECURSIVE_CLOSED_REGIONS || leaks) {
-            for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
-                if (trace >= 2) {
-                    logger << "attracting to head " << label_vertex(v) << std::endl;
-                }
-                if (Z[v]) {
-                    W[v] = true;
-                    Z[v] = false;
-                    Q.push(v);
-                }
-            }
-
-            while (Q.nonempty()) {
-                const int v = Q.pop();
-                Z[v] = false; // remove from <Z>
-                attractVertices(1-pl, v, Z, W, Z, pr);
-                attractTangles(1-pl, v, Z, W, Z, pr);
-            }
-
             V.reset();
             W.reset();
 
@@ -564,7 +572,6 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
                 const auto D = dominions;
                 if (rtl(Z, only_player, depth+1)) {
                     new_tangles = true;
-                    //if (!leaks) LOGIC_ERROR;
                 }
                 if (D != dominions) return true; // full restart
             }
