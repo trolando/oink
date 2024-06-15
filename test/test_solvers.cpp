@@ -18,6 +18,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <sstream>
 #include <sys/time.h>
 
@@ -247,10 +248,14 @@ main(int argc, char **argv)
                 files.push_back(p);
             }
         }
-        if (opt_sort) sort(files.begin(), files.end());
-        else std::random_shuffle(files.begin(), files.end());
+        if (opt_sort) {
+            sort(files.begin(), files.end());
+        } else {
+            std::mt19937 rng(std::time(nullptr));
+            std::shuffle(files.begin(), files.end(), rng);
+        }
         for (auto &cp : files) {
-            std::string filename = cp.leaf().string();
+            std::string filename = cp.filename().string();
             std::cout << filename << ": " << std::flush;
             io::filtering_istream in;
             if (boost::algorithm::ends_with(filename, ".bz2")) in.push(io::bzip2_decompressor());
