@@ -31,7 +31,7 @@ main(int argc, char** argv)
     const int n = std::stoi(argv[1]);  // index of game
     const int piv = 2+2*n;             // pivot priority
 
-    Game game(8 + 4*n);
+    Game game(8 + 6*n);
 
     game.vec_init();
 
@@ -57,13 +57,15 @@ main(int argc, char** argv)
     game.vec_add_edge(7, 5);        // dominant -> distracted vertex
 
     for (int i=0; i<n; i++) {
-        int c = 8+4*i;
+        int c = 8+6*i;
         int d = piv+8+2*i;
         int e = piv-2*i;
         game.init_vertex(c+0, e, 0);    // distracted vertex for first tangle
         game.init_vertex(c+1, e, 0);    // distracted vertex for second tangle
         game.init_vertex(c+2, d, 0);    // distraction
         game.init_vertex(c+3, d+1, 0);  // dominant
+        game.init_vertex(c+4, 1, 0);    // tangle in front of dominant
+        game.init_vertex(c+5, 1, 0);    // tangle in front of dominant
 
         game.vec_add_edge(1, c+0);      // first tangle -> distracted vertex 1
         game.vec_add_edge(c+0, 1);      // distracted vertex 1 -> first tangle
@@ -71,8 +73,11 @@ main(int argc, char** argv)
         game.vec_add_edge(c+1, 3);      // distracted vertex 2 -> second tangle
         game.vec_add_edge(c+0, c+2);    // distracted vertex 1 -> distraction
         game.vec_add_edge(c+1, c+2);    // distracted vertex 2 -> distraction
-        game.vec_add_edge(c+2, c+3);    // distraction -> dominant
+        game.vec_add_edge(c+2, c+4);    // distraction -> dominant
         game.vec_add_edge(c+3, c+1);    // dominant -> distracted vertex 2
+        game.vec_add_edge(c+4, c+5);    // tangle
+        game.vec_add_edge(c+5, c+4);    // tangle
+        game.vec_add_edge(c+4, c+3);    // dominant -> distracted vertex 2
     }
 
     game.vec_finish();
