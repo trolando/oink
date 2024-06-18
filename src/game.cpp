@@ -272,8 +272,7 @@ Game::set_priority(int node, int priority)
     _priority[node] = priority;
     if (is_ordered) {
         if (node > 0 and _priority[node-1] > _priority[node]) is_ordered = false;
-        // just assume we get vertices in-order...
-        // else if (node < (n_vertices-1) and _priority[node] > _priority[node+1]) is_ordered = false;
+        else if (node < (n_vertices-1) and _priority[node] > _priority[node+1]) is_ordered = false;
     }
 }
 

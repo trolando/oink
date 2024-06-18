@@ -300,6 +300,14 @@ public:
     }
 
     /**
+     * Get the owner bitset
+     */
+    inline const bitset& owner() const
+    {
+        return _owner;
+    }
+
+    /**
      * Get the "real" label of a vertex
      */
     inline std::string* rawlabel(const int vertex) const
