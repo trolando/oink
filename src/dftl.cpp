@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Tom van Dijk
+ * Copyright 2020-2024 Tom van Dijk
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,17 +22,20 @@ namespace pg {
  * The "distraction-free" tangle learning algorithm.
  *
  * PROCEDURE iteration(player)
- * 1. Take <player>-priority vertices V as targets
+ * 1. Take all remaining vertices V as targets
  * 2. Tangle-attract to V from top to bottom.
- * 3. Closed regions become tangles
- * 4. Repeat 2-3 until no more closed regions
- * 5. Remove lowest region top from V
- * 6. Repeat 2-5 until V is empty
+ * 3. Closed regions of <player> become tangles
+ * 4. (Optional: Repeat 2-3 until no more closed regions.)
+ * 5. Remove the lowest <player>'s region top from V if that region was open.
+ * 6. Repeat 2-5 until there are no more regions of <player>, or no vertices of <player> in V
+ *
+ * Here, player==0 or player==1 or player==-1 meaning both players.
  *
  * Possible executions:
  * A. Run iteration(even) until no new tangles found; then iteration(odd) until game is solved
  * B. Run iteration(odd) until no new tangles found; then iteration(even) until game is solved
  * C. Run iteration(even) once then iteration(odd) once; repeat until game is solved
+ * D. Run iterations for both players simultaneously until the game is solved.
  *
  * Each iteration of this algorithm runs in polynomial time and consists of O(n²) many "steps".
  * Each "step" (2-3) is simply one iteration of single-player tangle learning.
@@ -49,15 +52,9 @@ namespace pg {
  * Every step thus either removes a vertex from V, or learns new tangles (removing a region).
  * Hence each iteration has at most O(n²) steps and resuilts in at most O(n²) new tangles.
  * 
- * For the possible executiong A, B, C, the counter_dftl generator is a lower bound that requires
- * exponentially many steps.
- *
- * When the ``prepartition'' flag is set to True, this lower bound does not work anymore. It is
- * yet unclear whether the counterexample can be adapted to deal with the prepartition variation.
- * The prepartition variation modifies step 1 of iteration, by first computing a partition of the
- * game into even regions and odd regions, and only considering all even/odd vertices in even/odd
- * regions. In a way, this combines the "standard" mechanism of distraction removal (attract to
- * opponent) with the remove-lowest-open-top mechanism.
+ * For executions A (and B), the counter_dftl generator is an exponential lower bound.
+ * For execution D, the tc+ generator is an exponential lower bound.
+ * For execution C, no lower bound is yet known.
  */
 
 
@@ -378,6 +375,8 @@ pearce_again:
             }
             for (const int v : tangle) {
                 // if not yet added to solve queue, mark and add it
+                auto &S = pl == 0 ? S0 : S1;
+                auto &dom_vector = pl == 0 ? dom_vector_0 : dom_vector_1;
                 if (S[v] == false) {
                     S[v] = true;
                     dom_vector.push_back(v);
@@ -438,6 +437,82 @@ pearce_again:
 
     pea_S.clear();
     return new_tangles;
+}
+
+/**
+ * Two-player tangle learning.
+ * Find new tangles for <player> given a set of vertices <V> in the subgame <R>.
+ * <R> is typically the full remaining game.
+ */
+bool
+DFTLSolver::tl(bitset &V, bitset &R, const int player, int &lowest_open_0, int &lowest_open_1)
+{
+    bool changes = false;
+    lowest_open_0 = -2;
+    lowest_open_1 = -2;
+
+    for (auto top = V.find_last(); top != bitset::npos; top = V.find_prev(top)) {
+        if (!R[top]) continue;
+
+        Z[top] = true; // add to <Z>
+        str[top] = -1;
+        Q.push(top);
+
+        const int pl = priority(top) & 1;
+        (pl == 0 ? lowest_open_0 : lowest_open_1) = top;
+
+        while (Q.nonempty()) {
+            const int v = Q.pop();
+            R[v] = false; // remove from <R>
+            attractVertices(pl, v, R, Z, R, priority(top));
+            attractTangles(pl, v, R, Z, R, priority(top));
+        }
+
+#ifndef NDEBUG
+        if (trace >= 2) {
+            // report region
+            logger << "\033[1;33mregion\033[m \033[1;36m" << priority(top) << "\033[m";
+            for (auto v = Z.find_last(); v != bitset::npos; v = Z.find_prev(v)) {
+                logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
+                if (str[v] != -1) logger << "->" << label_vertex(str[v]);
+            }
+            logger << std::endl;
+        }
+#endif
+
+        bool closed_region = true;
+
+        if (owner(top) == pl) {
+            closed_region = (str[top] != -1);
+        } else {
+            for (auto curedge = outs(top); *curedge != -1; curedge++) {
+                if (R[*curedge]) {
+                    closed_region = false;
+                    break;
+                }
+            }
+        }
+
+        if (closed_region) {
+            (pl == 0 ? lowest_open_0 : lowest_open_1) = -1;
+
+            if (player == -1 or pl == player) {
+                /**
+                 * Extract tangles by computing bottom SCCs starting at each top vertex.
+                 * Note: each bottom SCC must contain a top vertex.
+                 */
+
+                std::fill(pea_vidx, pea_vidx+nodecount(), '\0');
+                pea_curidx = 1;
+
+                if (extractTangles(top, Z, str)) changes = true;
+            }
+        }
+
+        Z.reset();
+    }
+
+    return changes;
 }
 
 
@@ -560,75 +635,67 @@ DFTLSolver::search(const int player)
 
     // just start with V is all <player>'s vertices
     V = G;
-    if (player == 0) V -= Parity;
-    else V &= Parity;
+    bitset U(V);
+    if (player == 0) U -= Parity;
+    if (player == 1) U &= Parity;
 
-    // if we restrict V based on partition, do that now
-    if (prepartition) {
-#ifndef NDEBUG
-        if (trace) {
-            logger << "\033[1;38;5;33mcomputing initial partition\033[m " << std::endl;
-        }
-#endif
-
-        CurG = G;
-        Even.reset();
-        Odd.reset();
-        partition(CurG, nodecount()-1, Even, Odd);
-
-        if (player == 0) V &= Even;
-        else V &= Odd;
-
-#ifndef NDEBUG
-        if (trace) {
-            logger << "\033[1;38;5;33mselected vertices\033[m:";
-            for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
-                logger << " \033[1;38;5;15m" << label_vertex(v) << "\033[m";
-            }
-            logger << std::endl;
-            logger << "\033[1;38;5;33mrunning SPTL steps\033[m " << std::endl;
-        }
-#endif
-    }
-
-    while (V.any()) {
+    while (U.any()) {
         steps++;
 
         CurG = G;
-        int lowest_top;
-        if (sptl(V, CurG, player, lowest_top)) {
+        int lowest_open_0, lowest_open_1;
+        if (tl(V, CurG, player, lowest_open_0, lowest_open_1)) {
             // Extend any dominions that were found.
             // (Any solved vertices are now in <S> and <dom_vector>.)
-            if (!dom_vector.empty()) {
-                for (unsigned i = 0; i<dom_vector.size(); i+=2) {
-                    int v = dom_vector[i];
-                    int s = dom_vector[i+1];
-                    str[v] = s;
-                    Q.push(v);
-                }
-                dom_vector.clear();
+            for (int pl = 0; pl < 2; pl++) {
+                auto &S = pl == 0 ? S0 : S1;
+                auto &dom_vector = pl == 0 ? dom_vector_0 : dom_vector_1;
+                if (!dom_vector.empty()) {
+                    for (unsigned i = 0; i<dom_vector.size(); i+=2) {
+                        int v = dom_vector[i];
+                        int s = dom_vector[i+1];
+                        str[v] = s;
+                        Q.push(v);
+                    }
+                    dom_vector.clear();
 
-                while (Q.nonempty()) {
-                    const int v = Q.pop();
-                    oink->solve(v, player, str[v]);
-                    attractVertices(player, v, G, S, G, -1);
-                    attractTangles(player, v, G, S, G, -1);
-                }
+                    while (Q.nonempty()) {
+                        const int v = Q.pop();
+                        oink->solve(v, pl, str[v]);
+                        attractVertices(pl, v, G, S, G, -1);
+                        attractTangles(pl, v, G, S, G, -1);
+                    }
 
-                V -= S; // remove from V
-                G -= S; // remove from G
-                S.reset();
+                    V -= S; // remove from V
+                    U -= S; // remove from U
+                    G -= S; // remove from G
+                    S.reset();
+                }
             }
-        } else {
-            // No new tangles, so remove the lowest top
-            // We assume it is a distraction
-            V[lowest_top] = false;
+            // continue; // uncomment to repeat TL until no new tangles are found
+                         // otherwise: remove lowest open even if higher regions are closed
+        }
+        // logger << "lowest open 0 is " << lowest_open_0 << " and lowest open 1 is " << lowest_open_1 << std::endl;
+        if (lowest_open_0 >= 0 && player != 1) {
+            V[lowest_open_0] = false;
+            U[lowest_open_0] = false;
 #ifndef NDEBUG
             if (trace >= 1) {
-                logger << "\033[1;38;5;33mremoving \033[36m" << label_vertex(lowest_top) << "\033[m" << std::endl;
+                logger << "\033[1;38;5;33mremoving \033[36m" << label_vertex(lowest_open_0) << "\033[m" << std::endl;
             }
 #endif
         }
+        if (lowest_open_1 >= 0 && player != 0) {
+            V[lowest_open_1] = false;
+            U[lowest_open_1] = false;
+#ifndef NDEBUG
+            if (trace >= 1) {
+                logger << "\033[1;38;5;33mremoving \033[36m" << label_vertex(lowest_open_1) << "\033[m" << std::endl;
+            }
+#endif
+        }
+        if (player == 0 && lowest_open_0 == -2) break; // no more regions of player Even
+        if (player == 1 && lowest_open_1 == -2) break; // no more regions of player Odd
     }
 
     return tangles != T or dominions != D;
@@ -642,7 +709,8 @@ DFTLSolver::run()
     str = new int[nodecount()];
 
     Z.resize(nodecount());
-    S.resize(nodecount());
+    S0.resize(nodecount());
+    S1.resize(nodecount());
     G = disabled;
     G.flip();
     CurG.resize(nodecount());
@@ -651,11 +719,6 @@ DFTLSolver::run()
 
     Parity.resize(nodecount());
     for (int v=0; v<nodecount(); v++) Parity[v] = priority(v)&1;
-
-    if (prepartition) {
-        Even.resize(nodecount());
-        Odd.resize(nodecount());
-    }
 
     Q.resize(nodecount());
 
@@ -668,7 +731,15 @@ DFTLSolver::run()
     pea_vidx = new unsigned int[nodecount()];
     pea_root.resize(nodecount());
 
-    if (interleaved) {
+    // it turns out that doing DFTL for both players SIMULTANEOUSLY results in TC+ being a counterexample!!
+    /*if (!oneplayer) {
+        while (G.any()) {
+            if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "\033[m\n";
+            iterations++;
+            if (!search(-1)) THROW_ERROR("solver stuck");
+        }
+    } else*/
+    if (!oneplayer) {
         // Interleave solving for player Even and player Odd
 
         int first_dominion = -1;
@@ -703,14 +774,6 @@ DFTLSolver::run()
         int first_dominion = -1;
 
         while (G.any()) {
-            if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-odd\033[m\n";
-            iterations++;
-            odd_iterations++;
-            if (!search(1)) break;
-            if (dominions != 0 && first_dominion == -1) first_dominion = odd_iterations;
-        }
-
-        while (G.any()) {
             if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-even\033[m\n";
             iterations++;
             even_iterations++;
@@ -718,13 +781,21 @@ DFTLSolver::run()
             if (dominions != 0 && first_dominion == -1) first_dominion = even_iterations;
         }
 
-        logger << "odd iterations: " << odd_iterations << std::endl;
+        while (G.any()) {
+            if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-odd\033[m\n";
+            iterations++;
+            odd_iterations++;
+            if (!search(1)) break;
+            if (dominions != 0 && first_dominion == -1) first_dominion = odd_iterations;
+        }
+
         logger << "even iterations: " << even_iterations << std::endl;
+        logger << "odd iterations: " << odd_iterations << std::endl;
         logger << "first dominion: " << first_dominion << std::endl;
     }
 
     logger << "found " << dominions << " dominions and "<< tangles << " tangles.\n";
-    logger << "solved in " << iterations << " iterations and " << steps << " SPTL steps.\n";
+    logger << "solved in " << iterations << " iterations and " << steps << " TL steps.\n";
 
 #ifndef NDEBUG
     // Check if the whole game is now solved

@@ -30,9 +30,7 @@ public:
     virtual void run();
 
 protected:
-    bool prepartition = false; // occasionally may result in MORE iterations
     bool oneplayer = false; // like ORTL, only consider vertices of one player
-    bool interleaved = true;
 
     int iterations = 0;
     int dominions = 0;
@@ -45,7 +43,8 @@ protected:
     std::vector<int> tpr; // priority of a tangle
 
     uintqueue Q; // main queue when attracting vertices
-    std::vector<int> dom_vector; // stores the solved vertices (in dominions)
+    std::vector<int> dom_vector_0; // stores the solved vertices (in dominions)
+    std::vector<int> dom_vector_1; // stores the solved vertices (in dominions)
 
     int *str; // stores currently assigned strategy of each vertex
 
@@ -62,15 +61,14 @@ protected:
 
     bitset Z; // current region (in sptl)
     bitset G; // the unsolved game
-    bitset S; // solved vertices (in queue Q)
+    bitset S0; // solved vertices (in dom_vector_0)
+    bitset S1; // solved vertices (in dom_vector_1)
     bitset CurG; // in search
 
     bitset V;
     bitset W;
 
     bitset Parity; // vertices of parity 0/1
-    bitset Even; // for partition
-    bitset Odd; // for partition
 
     inline void attractVertices(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
     bool attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitset &G, const int max_prio);
@@ -78,6 +76,7 @@ protected:
 
     bool search(const int player);
     void partition(bitset &R, int top, bitset &Even, bitset &Odd);
+    bool tl(bitset &V, bitset &R, const int player, int &lowest_open_0, int &lowest_open_1);
     bool sptl(bitset &V, bitset &R, const int player, int &lowest_top);
     bool extractTangles(int i, bitset &R, int *str);
 };
