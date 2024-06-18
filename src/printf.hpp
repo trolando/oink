@@ -1,5 +1,5 @@
 /* 
-   Copyright (c) 2015, 2016 Andreas F. Borchert
+   Copyright (c) 2015, 2016, 2020, 2023, 2024 Andreas F. Borchert
    All rights reserved.
 
    Permission is hereby granted, free of charge, to any person obtaining
@@ -92,7 +92,7 @@
       Note that he used one setformat per placeholder as
       C++ at that time did not support variadic templates.
       This paper is available at
-	 http://horstmann.com/cpp/iostreams.html
+	 https://horstmann.com/cpp/iostreams.html
 
     - The Boost Format library has created an approach
       that does not depend on variadic templates. The
@@ -100,17 +100,17 @@
 
       std::cout << boost::format("(x, y) = (%4f, %4f)\n" % x % y;
 
-      See http://www.boost.org/doc/libs/1_59_0/libs/format/doc/format.html
+      See https://www.boost.org/doc/libs/1_59_0/libs/format/doc/format.html
 
     - There is a proposal by Zhihao Yuan for a printf-like interface for the
       C++ streams library:
 
       std::cout << std::putf("(x, y) = (%4f, %4f)\n", x, y);
 
-      See http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2013/n3506.html
+      See https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2013/n3506.html
       and https://github.com/lichray/formatxx
 
-    - http://codereview.stackexchange.com/questions/63578/printf-like-formatting-for-stdostream-not-exactly-boostformat
+    - https://codereview.stackexchange.com/questions/63578/printf-like-formatting-for-stdostream-not-exactly-boostformat
 */
 
 #ifndef FMT_PRINTF_HPP
@@ -140,16 +140,32 @@ ISO C++ 2011 standard.
 #include <tuple>
 #include <type_traits>
 
+/* avoid warnings for fallthroughs */
+#if __cplusplus >= 201703L
+   #define FMT_PRINTF_FALLTHROUGH [[fallthrough]];
+#else
+   #if defined(__GNUC__)
+      #define FMT_PRINTF_FALLTHROUGH __attribute__ ((fallthrough));
+   #else
+      #define FMT_PRINTF_FALLTHROUGH
+   #endif
+   #if defined(__clang__)
+      #pragma clang diagnostic ignored "-Wimplicit-fallthrough"
+   #endif
+#endif
+
 namespace fmt {
 
 namespace impl {
 
-/* type trait to recognize char types which can be distinguished
-   from regular numerical types, see also
-   http://stackoverflow.com/questions/20958262/char16-t-and-char32-t-types-in-c11
+/* type trait to recognize encoded character types which can be distinguished
+   from regular numerical types, see also [iosfwd.syn]
 */
 template<typename T> struct is_char : public std::false_type {};
 template<> struct is_char<char> : public std::true_type {};
+#if __cplusplus >= 202002L
+template<> struct is_char<char8_t> : public std::true_type {};
+#endif
 template<> struct is_char<wchar_t> : public std::true_type {};
 template<> struct is_char<char16_t> : public std::true_type {};
 template<> struct is_char<char32_t> : public std::true_type {};
@@ -161,7 +177,7 @@ template<typename CharT, typename Traits = std::char_traits<CharT>>
 class counting_ostreambuf : public std::basic_streambuf<CharT, Traits> {
    public:
       counting_ostreambuf(std::basic_streambuf<CharT, Traits>& sbuf) :
-	 sbuf(sbuf), nbytes(0) {
+	 sbuf(sbuf) {
       }
       std::streamsize get_count() const {
 	 return nbytes;
@@ -180,7 +196,7 @@ class counting_ostreambuf : public std::basic_streambuf<CharT, Traits> {
       }
       virtual int_type overflow(int_type ch) {
 	 /* modeled after
-	    http://stackoverflow.com/questions/10921761/extending-c-ostream */
+	    https://stackoverflow.com/questions/10921761/extending-c-ostream */
 	 if (ch == traits_type::eof()) {
 	    return traits_type::eof();
 	 } else {
@@ -193,7 +209,7 @@ class counting_ostreambuf : public std::basic_streambuf<CharT, Traits> {
       }
    private:
       std::basic_streambuf<CharT, Traits>& sbuf;
-      std::streamsize nbytes;
+      std::streamsize nbytes = 0;
 };
 
 template<typename CharT, typename Traits = std::char_traits<CharT>>
@@ -306,6 +322,28 @@ inline void reset_format(std::basic_ios<CharT, Traits>& s) {
    s.copyfmt(dflt);
 }
 
+/* some compilers like icpc or nvcc deliver a warning even
+   for template parameters that we have a "pointless comparison
+   of unsigned with zero"; the function is_negative is used
+   to circumvent this */
+template<typename Value>
+typename std::enable_if<
+      std::is_integral<typename std::remove_reference<Value>::type>::value &&
+      std::is_signed<typename std::remove_reference<Value>::type>::value,
+      bool>::type
+is_negative(Value value) {
+   return value < 0;
+}
+
+template<typename Value>
+typename std::enable_if<
+      std::is_integral<typename std::remove_reference<Value>::type>::value &&
+      !std::is_signed<typename std::remove_reference<Value>::type>::value,
+      bool>::type
+is_negative(Value) {
+   return false;
+}
+
 /* internal signed integer type which is used for indices and byte counts */
 using integer = std::make_signed<std::size_t>::type;
 
@@ -313,16 +351,17 @@ using flagset = unsigned short;
 constexpr flagset is_pointer = 1<<0;
 constexpr flagset is_charval = 1<<1;
 constexpr flagset is_integer = 1<<2;
-constexpr flagset toupper = 1<<3; // when std::uppercase won't cut it
-constexpr flagset space_flag = 1<<4; // add space, if non-negative
-constexpr flagset plus_flag = 1<<5;
-constexpr flagset dyn_width = 1<<6;
-constexpr flagset precision = 1<<7; // precision was given
-constexpr flagset dyn_precision = 1<<8;
-constexpr flagset zero_fill = 1<<9;
-constexpr flagset minus_flag = 1<<10;
-constexpr flagset special_flag = 1<<11;
-constexpr flagset grouping_flag = 1<<12;
+constexpr flagset is_unsigned = 1<<3;
+constexpr flagset toupper = 1<<4; // when std::uppercase won't cut it
+constexpr flagset space_flag = 1<<5; // add space, if non-negative
+constexpr flagset plus_flag = 1<<6;
+constexpr flagset dyn_width = 1<<7;
+constexpr flagset precision = 1<<8; // precision was given
+constexpr flagset dyn_precision = 1<<9;
+constexpr flagset zero_fill = 1<<10;
+constexpr flagset minus_flag = 1<<11;
+constexpr flagset special_flag = 1<<12;
+constexpr flagset grouping_flag = 1<<13;
 
 /* this structure represents a segment of a format string
    up to and including at most one placeholder */
@@ -523,9 +562,11 @@ parse_format_segment(const CharT* format, integer arg_index) {
    /* conversion operation */
    result.conversion = ch;
    switch (ch) {
+      case 'u':
+	 result.flags |= is_unsigned;
+	 FMT_PRINTF_FALLTHROUGH
       case 'd':
       case 'i':
-      case 'u':
 	 result.flags |= is_integer;
 	 result.base = 10;
 	 break;
@@ -631,7 +672,7 @@ template<> struct gen_seq<0> {
 };
 
 /* idea taken from
-   http://stackoverflow.com/questions/21062864/optimal-way-to-access-stdtuple-element-in-runtime-by-index
+   https://stackoverflow.com/questions/21062864/optimal-way-to-access-stdtuple-element-in-runtime-by-index
 */
 
 /* apply f on the n-th element of a tuple for compile-time n */
@@ -718,9 +759,11 @@ inline typename std::enable_if<
       !std::is_integral<
 	 typename std::remove_reference<Value>::type>::value &&
       !std::is_floating_point<
+	 typename std::remove_reference<Value>::type>::value &&
+      !std::is_pointer<
 	 typename std::remove_reference<Value>::type>::value, bool>::type
 print_value(std::basic_ostream<CharT, Traits>& out,
-      const format_segment<CharT>& fseg, Value&& value) {
+      const format_segment<CharT>&, Value&& value) {
    out << value;
    return !!out;
 }
@@ -781,7 +824,7 @@ print_char_value(std::basic_ostream<CharT, Traits>& out,
    without conversion */
 template<typename CharT, typename Traits>
 inline bool print_char_value(std::basic_ostream<CharT, Traits>& out,
-      const format_segment<CharT>& fseg, CharT value) {
+      const format_segment<CharT>&, CharT value) {
    out << value;
    return !!out;
 }
@@ -792,13 +835,13 @@ template<typename CharT, typename Traits>
 inline typename std::enable_if<!std::is_same<char, CharT>::value,
       bool>::type
 print_char_value(std::basic_ostream<CharT, Traits>& out,
-      const format_segment<CharT>& fseg, char value) {
+      const format_segment<CharT>&, char value) {
    out << out.widen(value);
    return !!out;
 }
 
 /* formatted output of character values (in case of %c)
-   where we got a non-char-type numerical value */
+   that need to be converted */
 template<typename CharT, typename Traits, typename Value>
 inline typename std::enable_if<
       is_char<Value>::value &&
@@ -806,7 +849,7 @@ inline typename std::enable_if<
       !std::is_same<Value, CharT>::value,
       bool>::type
 print_char_value(std::basic_ostream<CharT, Traits>& out,
-      const format_segment<CharT>& fseg, Value value) {
+      const format_segment<CharT>&, Value value) {
    auto& f = std::use_facet<std::codecvt<Value, CharT, std::mbstate_t>>(
       out.getloc());
    std::mbstate_t state{};
@@ -842,7 +885,7 @@ print_value(std::basic_ostream<CharT, Traits>& out,
 	 out << std::internal << std::setfill(out.widen('0'));
       } else if (fseg.flags & precision) {
 	 integer digits = count_digits(value, fseg.base);
-	 integer signwidth = (value < 0) ||
+	 integer signwidth = is_negative(value) ||
 	    (fseg.flags & (plus_flag | space_flag));
 	 integer extra = signwidth;
 	 if (value != 0 && (fseg.flags & special_flag) && fseg.base == 16) {
@@ -870,7 +913,7 @@ print_value(std::basic_ostream<CharT, Traits>& out,
 	       std::setw(fseg.precision + extra);
 	 }
       }
-      if ((fseg.flags & space_flag) && value >= 0) {
+      if ((fseg.flags & space_flag) && !is_negative(value)) {
 	 if (!out.put(' ')) return false;
 	 auto width = out.width(0);
 	 if (width > 0) {
@@ -892,6 +935,14 @@ print_value(std::basic_ostream<CharT, Traits>& out,
    return !!out;
 }
 
+/* special case for bool
+   which helps to suppress -Wbool-compare warnings of gcc */
+template<typename CharT, typename Traits>
+bool print_value(std::basic_ostream<CharT, Traits>& out,
+      const format_segment<CharT>& fseg, bool value) {
+   return print_value(out, fseg, static_cast<unsigned int>(value));
+}
+
 /* formatted output of CharT strings;
    precision is honoured */
 template<typename CharT, typename Traits>
@@ -900,6 +951,12 @@ inline bool print_value(std::basic_ostream<CharT, Traits>& out,
    if (fseg.flags & is_pointer) {
       /* %p given: print pointer value */
       out << static_cast<const void*>(value);
+   } else if (fseg.flags & is_unsigned) {
+      /* print it as an unsigned integer value */
+      print_value(out, fseg, reinterpret_cast<std::uintptr_t>(value));
+   } else if (fseg.flags & is_integer) {
+      /* print it as a signed integer value */
+      print_value(out, fseg, reinterpret_cast<std::intptr_t>(value));
    } else {
       if (fseg.flags & precision) {
 	 integer precision = fseg.precision;
@@ -943,8 +1000,16 @@ inline bool print_value(std::basic_ostream<CharT, Traits>& out,
       /* %p given: print pointer value */
       out << static_cast<const void*>(value);
       return !!out;
+   } else if (fseg.flags & is_unsigned) {
+      /* print it as an unsigned integer value */
+      print_value(out, fseg, reinterpret_cast<std::uintptr_t>(value));
+      return !!out;
+   } else if (fseg.flags & is_integer) {
+      /* print it as a signed integer value */
+      print_value(out, fseg, reinterpret_cast<std::intptr_t>(value));
+      return !!out;
    } else {
-      /* fail this if %p is not given */
+      /* fail otherwise */
       return false;
    }
 }
@@ -958,6 +1023,12 @@ print_value(std::basic_ostream<CharT, Traits>& out,
    if (fseg.flags & is_pointer) {
       /* %p given: print pointer value */
       out << static_cast<const void*>(value);
+   } else if (fseg.flags & is_unsigned) {
+      /* print it as an unsigned integer value */
+      print_value(out, fseg, reinterpret_cast<std::uintptr_t>(value));
+   } else if (fseg.flags & is_integer) {
+      /* print it as a signed integer value */
+      print_value(out, fseg, reinterpret_cast<std::intptr_t>(value));
    } else {
       integer padding = 0;
       integer len = 0;
@@ -1004,6 +1075,12 @@ print_value(std::basic_ostream<CharT, Traits>& out,
    if (fseg.flags & is_pointer) {
       /* %p given: print pointer value */
       out << static_cast<const void*>(value);
+   } else if (fseg.flags & is_unsigned) {
+      /* print it as an unsigned integer value */
+      print_value(out, fseg, reinterpret_cast<std::uintptr_t>(value));
+   } else if (fseg.flags & is_integer) {
+      /* print it as a signed integer value */
+      print_value(out, fseg, reinterpret_cast<std::intptr_t>(value));
    } else {
       integer len = 0;
       if (fseg.flags & precision) {
@@ -1044,6 +1121,12 @@ print_value(std::basic_ostream<CharT, Traits>& out,
    if (fseg.flags & is_pointer) {
       /* print the value of the pointer */
       out << static_cast<const void*>(value);
+   } else if (fseg.flags & is_unsigned) {
+      /* print it as an unsigned integer value */
+      print_value(out, fseg, reinterpret_cast<std::uintptr_t>(value));
+   } else if (fseg.flags & is_integer) {
+      /* print it as a signed integer value */
+      print_value(out, fseg, reinterpret_cast<std::intptr_t>(value));
    } else {
       out << value;
    }
@@ -1094,7 +1177,7 @@ set_value(Value* ptr, std::streamsize value) {
 }
 
 template<typename Value>
-inline bool set_value(Value ptr, std::streamsize value) {
+inline bool set_value(Value, std::streamsize) {
    return false;
 }
 
@@ -1105,7 +1188,6 @@ inline int printf(std::basic_ostream<CharT, Traits>& out,
       const CharT* format) {
    impl::counting_ostream<CharT, Traits> cout(out);
 
-   impl::format_segment<CharT> fseg;
    while (format) {
       auto fseg = impl::parse_format_segment(format, 0);
       if (!fseg.valid) return -1;
@@ -1190,12 +1272,12 @@ inline int snprintf(char* s, std::size_t n,
    if (nbytes < 0) return nbytes;
    if (n == 0) return nbytes;
    std::string result(os.str());
-   if (nbytes + 1 <= n) {
+   if (static_cast<std::size_t>(nbytes) + 1 <= n) {
       std::strcpy(s, result.c_str());
       return nbytes;
    } else {
       std::strcpy(s, result.substr(0, n-1).c_str());
-      s[n] = 0;
+      s[n-1] = 0;
       return n-1;
    }
 }
@@ -1208,7 +1290,7 @@ inline int snprintf(wchar_t* s, std::size_t n,
    if (nbytes < 0) return nbytes;
    if (n == 0) return nbytes;
    std::wstring result(os.str());
-   if (nbytes + 1 <= n) {
+   if (static_cast<std::size_t>(nbytes) + 1 <= n) {
       std::wcscpy(s, result.c_str());
       return nbytes;
    } else {
