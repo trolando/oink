@@ -75,7 +75,7 @@ Solvers::Solvers()
     add("dtl", "distance tangle learning", 0, [] (Oink* oink, Game* game) { return new DTLSolver(oink, game); });
     add("idtl", "interleaved distance tangle learning", 0, [] (Oink* oink, Game* game) { return new IDTLSolver(oink, game); });
     add("dftl", "distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new DFTLSolver(oink, game); });
-    add("pdftl", "prepartition distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new PDFTLSolver(oink, game); });
+    add("odftl", "one-player distraction-free tangle learning", 0, [] (Oink* oink, Game* game) { return new ODFTLSolver(oink, game); });
     add("rtl", "recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new RTLSolver(oink, game); });
     add("ortl", "one-sided recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new ORTLSolver(oink, game); });
     add("tl", "tangle learning", 0, [] (Oink* oink, Game* game) { return new TLSolver(oink, game); });

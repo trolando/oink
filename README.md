@@ -46,8 +46,8 @@ PTL             | Progressive Tangle Learning (research variant)
 SPPTL           | Single-player Progressive Tangle Learning (research variant)
 DTL             | Distance Tangle Learning (research variant based on 'good path length')
 IDTL            | Interleaved Distance Tangle Learning (interleaved variant of DTL)
-DFTL            | Distraction-Free Tangle Learning (research variant)
-PDFTL           | Prepartition Distraction-Free Tangle Learning (DFTL, prepartition variant)
+DFTL            | Distraction-Free Tangle Learning (two-player variant)
+ODFTL           | One-player Distraction-Free Tangle Learning
 
 ### Fixpoint algorithms
 

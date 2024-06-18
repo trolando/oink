@@ -31,6 +31,7 @@ public:
 
 protected:
     bool prepartition = false; // occasionally may result in MORE iterations
+    bool oneplayer = false; // like ORTL, only consider vertices of one player
     bool interleaved = true;
 
     int iterations = 0;
@@ -81,11 +82,11 @@ protected:
     bool extractTangles(int i, bitset &R, int *str);
 };
 
-class PDFTLSolver : public DFTLSolver
+class ODFTLSolver : public DFTLSolver
 {
 public:
-    PDFTLSolver(Oink *oink, Game *game) : DFTLSolver(oink, game) { prepartition = true; }
-    virtual ~PDFTLSolver() { }
+    ODFTLSolver(Oink *oink, Game *game) : DFTLSolver(oink, game) { oneplayer = true; }
+    virtual ~ODFTLSolver() { }
 };
 
 
