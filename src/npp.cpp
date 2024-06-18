@@ -571,7 +571,7 @@ void NPPSolver::run()
     Heads.push_back(new uideque());
     Exits.push_back(new bitset(nodecount()));
     Entries.push_back(new uidlist());
-    Entries[0]->push_front(std::move(uideque()));
+    Entries[0]->push_front(uideque());
     /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 
     /* vv Initialization of pos and maxprio vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv */
@@ -643,7 +643,7 @@ void NPPSolver::run()
         Heads[0]->clear();
         Exits[0]->reset();
         Entries[0]->clear();
-        Entries[0]->push_front(std::move(uideque()));
+        Entries[0]->push_front(uideque());
         R.reset();
         // /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 
