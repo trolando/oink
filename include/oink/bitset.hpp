@@ -35,6 +35,7 @@ public:
         friend class bitset;
 
         reference(uint64_t &b, unsigned int pos) : _block(b), _mask(uint64_t(1)<<pos) { }
+        reference(const reference& other) = delete;
 
         void operator&(); // left undefined
 
