@@ -33,12 +33,13 @@ protected:
     const unsigned int line;
     std::string thewhat;
 public:
-    Error(const char *msg, const char *file, const unsigned int line) : msg(msg), file(file), line(line) { }
-    ~Error() throw() { }
-    const char *what() throw() {
+    Error(const char *msg, const char *file, const unsigned int line) : msg(msg), file(file), line(line) {
         std::ostringstream o;
         o << msg << " (at " << file << ":" << line << ")";
         thewhat = o.str();
+    }
+    ~Error() throw() { }
+    const char *what() const noexcept {
         return thewhat.c_str();
     }
 };
