@@ -84,7 +84,7 @@ Solvers::Solvers()
     _add("pmtl", "progress measures and tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game); });
     _add("gpm", "generic progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game); });
     _add("dftl", "distraction-free tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<DFTLSolver>(oink, game); });
-    _add("pdftl", "prepartition distraction-free tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PDFTLSolver>(oink, game); });
+    _add("odftl", "one-player distraction-free tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<ODFTLSolver>(oink, game); });
 }
 
 void
