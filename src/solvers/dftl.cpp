@@ -459,7 +459,6 @@ DFTLSolver::tl(bitset &V, bitset &R, const int player, int &lowest_open_0, int &
         Q.push(top);
 
         const int pl = priority(top) & 1;
-        (pl == 0 ? lowest_open_0 : lowest_open_1) = top;
 
         while (Q.nonempty()) {
             const int v = Q.pop();
@@ -494,19 +493,20 @@ DFTLSolver::tl(bitset &V, bitset &R, const int player, int &lowest_open_0, int &
         }
 
         if (closed_region) {
+            // comment the following line for a variation that removes
+            // top vertices of the lowest region that is open, instead of
+            // the lowest region *if* it is open
             (pl == 0 ? lowest_open_0 : lowest_open_1) = -1;
 
             if (player == -1 or pl == player) {
-                /**
-                 * Extract tangles by computing bottom SCCs starting at each top vertex.
-                 * Note: each bottom SCC must contain a top vertex.
-                 */
-
+                // Extract tangles by computing bottom SCCs starting at each top vertex.
+                // Note: each bottom SCC must contain a top vertex.
                 std::fill(pea_vidx, pea_vidx+nodecount(), '\0');
                 pea_curidx = 1;
-
                 if (extractTangles(top, Z, str)) changes = true;
             }
+        } else {
+            (pl == 0 ? lowest_open_0 : lowest_open_1) = top;
         }
 
         Z.reset();
@@ -568,14 +568,10 @@ DFTLSolver::sptl(bitset &V, bitset &R, const int player, int &lowest_top)
         }
 
         if (closed_region) {
-            /**
-             * Extract tangles by computing bottom SCCs starting at each top vertex.
-             * Note: each bottom SCC must contain a top vertex.
-             */
-
+            // Extract tangles by computing bottom SCCs starting at each top vertex.
+            // Note: each bottom SCC must contain a top vertex.
             std::fill(pea_vidx, pea_vidx+nodecount(), '\0');
             pea_curidx = 1;
-
             if (extractTangles(top, Z, str)) changes = true;
         }
 
@@ -732,13 +728,20 @@ DFTLSolver::run()
     pea_root.resize(nodecount());
 
     // it turns out that doing DFTL for both players SIMULTANEOUSLY results in TC+ being a counterexample!!
-    /*if (!oneplayer) {
+    // this is the case if we remove the top of the lowest region if it is open because both players
+    // have the lowest region closed in every single step
+    // this is the case if we remove the top of the lowest region that is open as well
+    // therefore, there is no point in doing DFTL simultaneously for both players, the interleaved
+    // variant does not have this weakness
+#if 0
+    if (!oneplayer) {
         while (G.any()) {
             if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "\033[m\n";
             iterations++;
             if (!search(-1)) THROW_ERROR("solver stuck");
         }
-    } else*/
+    } else
+#endif
     if (!oneplayer) {
         // Interleave solving for player Even and player Odd
 
