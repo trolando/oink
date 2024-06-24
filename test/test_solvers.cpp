@@ -238,7 +238,7 @@ main(int argc, char **argv)
     int final_res = 0;
     std::stringstream log;
     double time;
-    long total=0, good=0;
+    long total=0;
 
     double times[solvers.count()];
     for (unsigned i=0; i<solvers.count(); i++) times[i] = 0.0;
@@ -286,7 +286,6 @@ main(int argc, char **argv)
                         int res = test_solver(game, id, time, opt_trace == -1 ? log : std::cout);
                         if (res == 0) {
                             sgood[id]++;
-                            good++;
                             std::cout << "\033[38;5;82m" << solvers.label(id) << "\033[m";
                         } else {
                             final_res = res;
@@ -341,7 +340,6 @@ main(int argc, char **argv)
                     int res = test_solver(g, id, time, opt_trace == -1 ? log : std::cout);
                     if (res == 0) {
                         sgood[id]++;
-                        good++;
                         std::cout << "\033[38;5;82m" << solvers.label(id) << "\033[m";
                     } else {
                         final_res = res;

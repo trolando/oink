@@ -170,14 +170,16 @@ setsighandlers(void)
 
 /*------------------------------------------------------------------------*/
 
-static char*
-to_h(double size, char *buf)
-{
+std::string to_h(double size) {
     const char* units[] = {"B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"};
     int i = 0;
-    for (;size>1024;size/=1024) i++;
-    sprintf(buf, "%.*f %s", i, size, units[i]);
-    return buf;
+    while (size > 1024 && i < 8) {
+        size /= 1024;
+        i++;
+    }
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(i) << size << " " << units[i];
+    return oss.str();
 }
 
 /*------------------------------------------------------------------------*/
@@ -377,11 +379,8 @@ int main(int argc, char **argv)
         }
     }
 
-    char buf[32];
-    to_h(getCurrentRSS(), buf);
-    out << "current memory usage: " << buf << std::endl;
-    to_h(getPeakRSS(), buf);
-    out << "peak memory usage: " << buf << std::endl;
+    out << "current memory usage: " << to_h(getCurrentRSS()) << std::endl;
+    out << "peak memory usage: " << to_h(getPeakRSS()) << std::endl;
 
     /**
      * STEP 8

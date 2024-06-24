@@ -107,7 +107,7 @@ macro(set_target_props NAME)
     target_compile_features(${NAME} PUBLIC c_std_17 cxx_std_17)
     target_compile_options(${NAME} PRIVATE -Wall -Wextra)
     target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${Boost_INCLUDE_DIRS})
-    target_link_libraries(${NAME} oink::oink pthread)
+    target_link_libraries(${NAME} oink::oink)
 endmacro(set_target_props)
 
 add_executable(solve)
@@ -149,42 +149,33 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
         add_executable(counter_rr src/tools/counter_rr.cpp)
         set_target_props(counter_rr)
-        target_link_libraries(counter_rr oink)
 
         add_executable(counter_dp src/tools/counter_dp.cpp)
         set_target_props(counter_dp)
-        target_link_libraries(counter_dp oink)
 
         add_executable(counter_m src/tools/counter_m.cpp)
         set_target_props(counter_m)
-        target_link_libraries(counter_m oink)
 
         add_executable(counter_core src/tools/counter_core.cpp)
         set_target_props(counter_core)
-        target_link_libraries(counter_core oink)
 
         add_executable(counter_rob src/tools/counter_rob.cpp)
         set_target_props(counter_rob)
-        target_link_libraries(counter_rob oink)
 
         add_executable(counter_symsi src/tools/counter_symsi.cpp)
         set_target_props(counter_symsi)
-        target_link_libraries(counter_symsi oink)
 
         add_executable(counter_ortl src/tools/counter_ortl.cpp)
         set_target_props(counter_ortl)
-        target_link_libraries(counter_ortl oink)
 
         add_executable(counter_qpt src/tools/counter_qpt.cpp)
         set_target_props(counter_qpt)
 
         add_executable(tc src/tools/tc.cpp)
         set_target_props(tc)
-        target_link_libraries(tc oink)
 
         add_executable(tc+ src/tools/tc+.cpp)
         set_target_props(tc+)
-        target_link_libraries(tc+ oink)
     endif()
 
     if(OINK_BUILD_TESTS)
