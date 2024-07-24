@@ -217,9 +217,8 @@ int main(int argc, char **argv)
         ;
 
     /* Add solvers */
-    Solvers solvers;
-    for (unsigned id=0; id<solvers.count(); id++) {
-        opts.add_options()(solvers.label(id), solvers.desc(id));
+    for (const auto & id : Solvers::getSolverIDs()) {
+        opts.add_options()(id, Solvers::desc(id));
     }
 
     /* Parse command line */
@@ -232,7 +231,7 @@ int main(int argc, char **argv)
     }
 
     if (options.count("solvers")) {
-        solvers.list(std::cout);
+        Solvers::list(std::cout);
         return 0;
     }
 
@@ -326,11 +325,11 @@ int main(int argc, char **argv)
 
     // solver
     if (options.count("solver")) {
-        en.setSolver(solvers.id(options["solver"].as<std::string>()));
+        en.setSolver(options["solver"].as<std::string>());
     } else {
         en.setSolver("tl"); // default solver
-        for (unsigned id=0; id<solvers.count(); id++) {
-            if (options.count(solvers.label(id))) en.setSolver(id);
+        for (const auto& id : Solvers::getSolverIDs()) {
+            if (options.count(id)) en.setSolver(id);
         }
     }
 

@@ -17,7 +17,7 @@
 #ifndef SSPM_HPP
 #define SSPM_HPP
 
-#include "solver.hpp"
+#include "oink/solver.hpp"
 
 namespace pg {
 

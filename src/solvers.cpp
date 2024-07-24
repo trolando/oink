@@ -44,66 +44,48 @@ namespace pg {
 
 Solvers::Solvers()
 {
-    add("zlkq", "qpt Zielonka", 0, [] (Oink* oink, Game* game) { return new ZLKQSolver(oink, game); });
-    add("zlk", "parallel Zielonka", 1, [] (Oink* oink, Game* game) { return new ZLKSolver(oink, game); });
-    add("uzlk", "unoptimized Zielonka", 0, [] (Oink* oink, Game* game) { return new UnoptimizedZLKSolver(oink, game); });
-    add("zlkpp-std", "Zielonka (implementation by Paweł Parys)", 0, [] (Oink* oink, Game* game) { return new ZLKPPSolver(oink, game, ZLK_STANDARD); });
-    add("zlkpp-waw", "Warsaw quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink* oink, Game* game) { return new ZLKPPSolver(oink, game, ZLK_WARSAW); });
-    add("zlkpp-liv", "Liverpool quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink* oink, Game* game) { return new ZLKPPSolver(oink, game, ZLK_LIVERPOOL); });
-    add("npp", "priority promotion NPP", 0, [] (Oink* oink, Game* game) { return new NPPSolver(oink, game); });
-    add("pp", "priority promotion PP", 0, [] (Oink* oink, Game* game) { return new PPSolver(oink, game); });
-    add("ppp", "priority promotion PP+", 0, [] (Oink* oink, Game* game) { return new PPPSolver(oink, game); });
-    add("rr", "priority promotion RR", 0, [] (Oink* oink, Game* game) { return new RRSolver(oink, game); });
-    add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink* oink, Game* game) { return new DPSolver(oink, game); });
-    add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink* oink, Game* game) { return new RRDPSolver(oink, game); });
-    add("ppq", "qpt Zielonka accelerated by priority promotion", 0, [] (Oink* oink, Game* game) { return new PPQSolver(oink, game); });
-    add("fpi", "fixpoint iteration", 1, [] (Oink* oink, Game* game) { return new FPISolver(oink, game); });
-    add("fpj", "fixpoint iteration with justifications", 0, [] (Oink* oink, Game* game) { return new FPJSolver(oink, game); });
-    add("fpjg", "greedy fixpoint iteration with justifications", 1, [] (Oink* oink, Game* game) { return new FPJGSolver(oink, game); });
-    add("psi", "parallel strategy improvement", 1, [] (Oink* oink, Game* game) { return new PSISolver(oink, game); });
-    add("ssi", "symmetric strategy improvement", 0, [] (Oink* oink, Game* game) { return new SSISolver(oink, game); });
-    add("spm", "accelerated small progress measures", 0, [] (Oink* oink, Game* game) { return new SPMSolver(oink, game); });
-    add("tspm", "traditional small progress measures", 0, [] (Oink* oink, Game* game) { return new TSPMSolver(oink, game); });
-    add("mspm", "Maciej' modified small progress measures", 0, [] (Oink* oink, Game* game) { return new MSPMSolver(oink, game); });
-    add("sspm", "succinct small progress measures", 0, [] (Oink* oink, Game* game) { return new SSPMSolver(oink, game); });
-    add("bsspm", "bounded succinct small progress measures", 0, [] (Oink* oink, Game* game) { return new BoundedSSPMSolver(oink, game); });
-    add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game) { return new QPTSolver(oink, game); });
-    add("bqpt", "bounded quasi-polynomial time progress measures", 0, [] (Oink* oink, Game* game) { return new BoundedQPTSolver(oink, game); });
-    add("ptl", "progressive tangle learning", 0, [] (Oink* oink, Game* game) { return new PTLSolver(oink, game); });
-    add("spptl", "single-player progressive tangle learning", 0, [] (Oink* oink, Game* game) { return new SPPTLSolver(oink, game); });
-    add("dtl", "distance tangle learning", 0, [] (Oink* oink, Game* game) { return new DTLSolver(oink, game); });
-    add("idtl", "interleaved distance tangle learning", 0, [] (Oink* oink, Game* game) { return new IDTLSolver(oink, game); });
-    add("rtl", "recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new RTLSolver(oink, game); });
-    add("ortl", "one-sided recursive tangle learning", 0, [] (Oink* oink, Game* game) { return new ORTLSolver(oink, game); });
-    add("tl", "tangle learning", 0, [] (Oink* oink, Game* game) { return new TLSolver(oink, game); });
+    _add("zlkq", "qpt Zielonka", 0, [] (Oink& oink, Game& game) { return new ZLKQSolver(&oink, &game); });
+    _add("zlk", "parallel Zielonka", 1, [] (Oink& oink, Game& game) { return new ZLKSolver(&oink, &game); });
+    _add("uzlk", "unoptimized Zielonka", 0, [] (Oink& oink, Game& game) { return new UnoptimizedZLKSolver(&oink, &game); });
+    _add("zlkpp-std", "Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return new ZLKPPSolver(&oink, &game, ZLK_STANDARD); });
+    _add("zlkpp-waw", "Warsaw quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return new ZLKPPSolver(&oink, &game, ZLK_WARSAW); });
+    _add("zlkpp-liv", "Liverpool quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return new ZLKPPSolver(&oink, &game, ZLK_LIVERPOOL); });
+    _add("npp", "priority promotion NPP", 0, [] (Oink& oink, Game& game) { return new NPPSolver(&oink, &game); });
+    _add("pp", "priority promotion PP", 0, [] (Oink& oink, Game& game) { return new PPSolver(&oink, &game); });
+    _add("ppp", "priority promotion PP+", 0, [] (Oink& oink, Game& game) { return new PPPSolver(&oink, &game); });
+    _add("rr", "priority promotion RR", 0, [] (Oink& oink, Game& game) { return new RRSolver(&oink, &game); });
+    _add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink& oink, Game& game) { return new DPSolver(&oink, &game); });
+    _add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink& oink, Game& game) { return new RRDPSolver(&oink, &game); });
+    _add("ppq", "qpt Zielonka accelerated by priority promotion", 0, [] (Oink& oink, Game& game) { return new PPQSolver(&oink, &game); });
+    _add("fpi", "fixpoint iteration", 1, [] (Oink& oink, Game& game) { return new FPISolver(&oink, &game); });
+    _add("fpj", "fixpoint iteration with justifications", 0, [] (Oink& oink, Game& game) { return new FPJSolver(&oink, &game); });
+    _add("fpjg", "greedy fixpoint iteration with justifications", 1, [] (Oink& oink, Game& game) { return new FPJGSolver(&oink, &game); });
+    _add("psi", "parallel strategy improvement", 1, [] (Oink& oink, Game& game) { return new PSISolver(&oink, &game); });
+    _add("ssi", "symmetric strategy improvement", 0, [] (Oink& oink, Game& game) { return new SSISolver(&oink, &game); });
+    _add("spm", "accelerated small progress measures", 0, [] (Oink& oink, Game& game) { return new SPMSolver(&oink, &game); });
+    _add("tspm", "traditional small progress measures", 0, [] (Oink& oink, Game& game) { return new TSPMSolver(&oink, &game); });
+    _add("mspm", "Maciej' modified small progress measures", 0, [] (Oink& oink, Game& game) { return new MSPMSolver(&oink, &game); });
+    _add("sspm", "succinct small progress measures", 0, [] (Oink& oink, Game& game) { return new SSPMSolver(&oink, &game); });
+    _add("bsspm", "bounded succinct small progress measures", 0, [] (Oink& oink, Game& game) { return new BoundedSSPMSolver(&oink, &game); });
+    _add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return new QPTSolver(&oink, &game); });
+    _add("bqpt", "bounded quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return new BoundedQPTSolver(&oink, &game); });
+    _add("ptl", "progressive tangle learning", 0, [] (Oink& oink, Game& game) { return new PTLSolver(&oink, &game); });
+    _add("spptl", "single-player progressive tangle learning", 0, [] (Oink& oink, Game& game) { return new SPPTLSolver(&oink, &game); });
+    _add("dtl", "distance tangle learning", 0, [] (Oink& oink, Game& game) { return new DTLSolver(&oink, &game); });
+    _add("idtl", "interleaved distance tangle learning", 0, [] (Oink& oink, Game& game) { return new IDTLSolver(&oink, &game); });
+    _add("rtl", "recursive tangle learning", 0, [] (Oink& oink, Game& game) { return new RTLSolver(&oink, &game); });
+    _add("ortl", "one-sided recursive tangle learning", 0, [] (Oink& oink, Game& game) { return new ORTLSolver(&oink, &game); });
+    _add("tl", "tangle learning", 0, [] (Oink& oink, Game& game) { return new TLSolver(&oink, &game); });
 }       
-
-void
-Solvers::add(std::string the_label, std::string the_desc, int the_ispar, std::function<Solver*(Oink*, Game*)> the_cons)
-{
-    labels.push_back(the_label);
-    descriptions.push_back(the_desc);
-    ispar.push_back(the_ispar);
-    constructors.push_back(the_cons);
-}
-
-int
-Solvers::id(std::string lbl)
-{
-    int id = 0;
-    for (auto s : labels) {
-        if (s == lbl) return id;
-        id++;
-    }
-    return -1;
-}
 
 void
 Solvers::list(std::ostream &out)
 {
     out << "List of solvers:" << std::endl;
-    for (unsigned i=0; i<count(); i++) {
-        out << "* " << label(i) << ":\t" << desc(i) << std::endl;
+    for (const auto& entry : instance().solvers) {
+        const auto& label = entry.first;
+        const auto& info = entry.second;
+        out << "* " << label << ":\t" << info.description << std::endl;
     }
 }
 

@@ -17,7 +17,7 @@
 #ifndef PTL_HPP
 #define PTL_HPP
 
-#include "solver.hpp"
+#include "oink/solver.hpp"
 
 namespace pg {
 

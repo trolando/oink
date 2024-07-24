@@ -40,8 +40,6 @@ using namespace pg;
 namespace fs = boost::filesystem;
 namespace io = boost::iostreams;
 
-Solvers solvers;
-
 bool opt_inflate = false;
 bool opt_compress = false;
 bool opt_single = false;
@@ -86,7 +84,7 @@ setsighandlers(void)
 
 
 int
-test_solver(Game &game, int solverid, double &time, std::ostream &log)
+test_solver(Game &game, const std::string& solverid, double &time, std::ostream &log)
 {
     game.reset_solution();
     game.ensure_sorted();
@@ -156,8 +154,8 @@ main(int argc, char **argv)
     opts.add_options("Solvers")
         ("all", "Run all solvers")
         ;
-    for (unsigned id=0; id<solvers.count(); id++) {
-        opts.add_options("Solvers")(solvers.label(id), solvers.desc(id));
+    for (const auto& id : Solvers::getSolverIDs()) {
+        opts.add_options("Solvers")(id, Solvers::desc(id));
     }
     opts.add_options("Solving")
         ("t,trace", "Write trace with given level (0-3) to stdout", cxxopts::value<int>())
@@ -204,14 +202,15 @@ main(int argc, char **argv)
 
     std::cout << "Selected solvers:";
 
-    int solver_count = 0;
-    for (unsigned id=0; id<solvers.count(); id++) {
-        if (options.count("all") or options.count(solvers.label(id))) {
-            solver_count++;
-            std::cout << " " << solvers.label(id);
+    std::vector<std::string> solvers;
+
+    for (const auto& id : Solvers::getSolverIDs()) {
+        if (options.count("all") or options.count(id)) {
+            solvers.push_back(id);
+            std::cout << " " << id;
         }
     }
-    if (solver_count == 0) {
+    if (solvers.size() == 0) {
         std::cout << " (none)" << std::endl << std::endl;
         std::cout << "Use --help for program options." << std::endl << std::endl;
         std::cout << "- Select one or more solvers" << std::endl;
@@ -224,7 +223,7 @@ main(int argc, char **argv)
     }
 
     if (options.count("configure")) {
-        if (solver_count > 1) {
+        if (solvers.size() > 1) {
             std::cout << std::endl << "Solver configuration options (--configure, -c) cannot be used with multiple solvers at the same time" << std::endl;
             return 0;
         }
@@ -240,10 +239,12 @@ main(int argc, char **argv)
     double time;
     long total=0;
 
-    double times[solvers.count()];
-    for (unsigned i=0; i<solvers.count(); i++) times[i] = 0.0;
-    int sgood[solvers.count()];
-    for (unsigned i=0; i<solvers.count(); i++) sgood[i] = 0;
+    std::map<std::string, double> times;
+    std::map<std::string, int> sgood;
+    for (auto& id : solvers) {
+        times[id] = 0.0;
+        sgood[id] = 0;
+    }
 
     if (unmatched.size() > 0) {
         // obtain the list of files
@@ -279,21 +280,19 @@ main(int argc, char **argv)
                 game.parse_pgsolver(in, opt_loops);
                 inp.close();
                 total++;
-                for (unsigned id=0; id<solvers.count(); id++) {
-                    if (options.count("all") or options.count(solvers.label(id))) {
-                        std::cout << std::flush;
-                        log.str("");
-                        int res = test_solver(game, id, time, opt_trace == -1 ? log : std::cout);
-                        if (res == 0) {
-                            sgood[id]++;
-                            std::cout << "\033[38;5;82m" << solvers.label(id) << "\033[m";
-                        } else {
-                            final_res = res;
-                            std::cout << "\033[38;5;196m" << solvers.label(id) << "\033[m";
-                        }
-                        std::cout << " \033[38;5;8m(" << std::fixed << std::setprecision(0) << (1000.0*time) << ")\033[m ";
-                        times[id] += time;
+                for (const auto& id : solvers) {
+                    std::cout << std::flush;
+                    log.str("");
+                    int res = test_solver(game, id, time, opt_trace == -1 ? log : std::cout);
+                    if (res == 0) {
+                        sgood[id]++;
+                        std::cout << "\033[38;5;82m" << id << "\033[m";
+                    } else {
+                        final_res = res;
+                        std::cout << "\033[38;5;196m" << id << "\033[m";
                     }
+                    std::cout << " \033[38;5;8m(" << std::fixed << std::setprecision(0) << (1000.0*time) << ")\033[m ";
+                    times[id] += time;
                 }
                 std::cout << std::endl;
             } catch (const char *s) {
@@ -333,33 +332,31 @@ main(int argc, char **argv)
             std::cout << "game " << i << " (gameseed=" << seed << " size=" << g.vertexcount() << "," << g.edgecount() << "): ";
             std::cout << std::endl << std::flush;
             total++;
-            for (unsigned id=0; id<solvers.count(); id++) {
-                if (options.count("all") or options.count(solvers.label(id))) {
-                    std::cout << std::flush;
-                    log.str("");
-                    int res = test_solver(g, id, time, opt_trace == -1 ? log : std::cout);
-                    if (res == 0) {
-                        sgood[id]++;
-                        std::cout << "\033[38;5;82m" << solvers.label(id) << "\033[m";
-                    } else {
-                        final_res = res;
-                        std::cout << "\033[38;5;196m" << solvers.label(id) << "\033[m";
+            for (const auto& id : solvers) {
+                std::cout << std::flush;
+                log.str("");
+                int res = test_solver(g, id, time, opt_trace == -1 ? log : std::cout);
+                if (res == 0) {
+                    sgood[id]++;
+                    std::cout << "\033[38;5;82m" << id << "\033[m";
+                } else {
+                    final_res = res;
+                    std::cout << "\033[38;5;196m" << id << "\033[m";
 
-                        std::ostringstream fn;
-                        fn << "bad_" << solvers.label(id) << "_" << i << ".pg";
-                        std::ofstream fout(fn.str());
-                        g.write_pgsolver(fout);
-                        fout.close();
+                    std::ostringstream fn;
+                    fn << "bad_" << id << "_" << i << ".pg";
+                    std::ofstream fout(fn.str());
+                    g.write_pgsolver(fout);
+                    fout.close();
 
-                        fn.str("");
-                        fn << "bad_" << solvers.label(id) << "_" << i << ".pg.log";
-                        std::ofstream flog(fn.str());
-                        flog << log.str();
-                        flog.close();
-                    }
-                    std::cout << " \033[38;5;8m(" << std::fixed << std::setprecision(0) << (1000.0*time) << ")\033[m ";
-                    times[id] += time;
+                    fn.str("");
+                    fn << "bad_" << id << "_" << i << ".pg.log";
+                    std::ofstream flog(fn.str());
+                    flog << log.str();
+                    flog.close();
                 }
+                std::cout << " \033[38;5;8m(" << std::fixed << std::setprecision(0) << (1000.0*time) << ")\033[m ";
+                times[id] += time;
             }
             std::cout << std::endl;
         }
@@ -369,21 +366,17 @@ main(int argc, char **argv)
 
     std::cout << "\033[38;5;226msummary\033[m: " << total << " games" << std::endl;
     std::cout << "\033[38;5;226msolvers\033[m:";
-    for (unsigned id=0; id<solvers.count(); id++) {
-        if (options.count("all") or options.count(solvers.label(id))) {
-            if (sgood[id] == total) std::cout << " \033[38;5;82m";
-            else std::cout << " \033[38;5;196m";
-            std::cout << solvers.label(id) << "\033[m";
-            if (sgood[id] != total) std::cout << " (" << (total-sgood[id]) << " bad)";
-        }
+    for (const auto& id : solvers) {
+        if (sgood[id] == total) std::cout << " \033[38;5;82m";
+        else std::cout << " \033[38;5;196m";
+        std::cout << id << "\033[m";
+        if (sgood[id] != total) std::cout << " (" << (total-sgood[id]) << " bad)";
     }
     std::cout << std::endl;
     std::cout << "\033[38;5;226mtimes\033[m:  ";
-    for (unsigned id=0; id<solvers.count(); id++) {
-        if (options.count("all") or options.count(solvers.label(id))) {
-            std::cout << " \033[38;5;226m" << solvers.label(id) << "\033[m";
-            std::cout << " (" << std::fixed << std::setprecision(0) << (1000.0*times[id]) << " ms)\033[m";
-        }
+    for (const auto& id : solvers) {
+        std::cout << " \033[38;5;226m" << id << "\033[m";
+        std::cout << " (" << std::fixed << std::setprecision(0) << (1000.0*times[id]) << " ms)\033[m";
     }
     std::cout << std::endl;
 

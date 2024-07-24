@@ -19,10 +19,12 @@
 
 #include <iostream>
 #include <vector>
+#include <optional>
 
 #include "oink/error.hpp"
 #include "oink/game.hpp"
 #include "oink/uintqueue.hpp"
+#include "oink/solvers.hpp"
 
 namespace pg {
 
@@ -46,8 +48,7 @@ public:
     /**
      * Instruct Oink to use the given solver.
      */
-    void setSolver(int solverid);
-    void setSolver(std::string label);
+    void setSolver(std::string solver);
 
     /**
      * Instruct Oink to inflate as a preprocessing step.
@@ -158,7 +159,7 @@ protected:
 
     Game *game;              // game being solved
     std::ostream &logger;    // logger for trace/debug messages
-    int solver = -1;         // which solver to use
+    std::optional<std::string> solver; // which solver to use
     int workers = -1;        // number of workers, 0 = autodetect, -1 = use non parallel
     int trace = 0;           // verbosity (0 for normal, 1 for trace, 2 for debug)
     bool inflate = false;    // inflate the game before solving

@@ -17,6 +17,8 @@
 #include <iostream>
 #include <functional>
 #include <vector>
+#include <map>
+#include <set>
 
 #ifndef SOLVERS_HPP
 #define SOLVERS_HPP
@@ -30,49 +32,90 @@ class Solver;
 class Solvers
 {
 public:
-    Solvers();
+    using SolverConstructor = std::function<Solver*(Oink&, Game&)>;
+
+    Solvers(const Solvers&) = delete;
+    Solvers& operator=(const Solvers&) = delete;
 
     /**
      * Get number of solvers
      */
-    unsigned count() { return labels.size(); }
-
-    /**
-     * Get label of solver <id>
-     */
-    std::string label(int id) { return labels[id]; }
+    static unsigned count() { return instance().solvers.size(); }
 
     /**
      * Get description of solver <id>
      */
-    std::string desc(int id) { return descriptions[id]; }
+    static std::string desc(const std::string& id)
+    { 
+        return instance().solvers[id].description; 
+    }
 
     /**
      * Get whether solver <id> can be run in parallel
      */
-    bool isParallel(int id) { return ispar[id]; }
+    static bool isParallel(const std::string& id) 
+    {
+        return instance().solvers[id].isParallel; 
+    }
 
     /**
-     * Construct solver <id> with the given parameters
+     * Construct solver with the given parameters
      */
-    Solver* construct(int id, Oink* oink, Game* game) { return constructors[id](oink, game); }
-
-    /**
-     * Obtain the id matching the given solver label
-     */
-    int id(std::string label);
+    static Solver* construct(const std::string& id, Oink& oink, Game& game) 
+    {
+        return instance().solvers[id].constructor(oink, game); 
+    }
 
     /**
      * Write a formatted list of all solvers to the given ostream
      */
-    void list(std::ostream &out);
+    static void list(std::ostream &out);
 
-protected:
-    std::vector<std::string> labels;
-    std::vector<std::string> descriptions;
-    std::vector<bool> ispar;
-    std::vector<std::function<Solver*(Oink*, Game*)>> constructors;
-    void add(std::string, std::string, int, std::function<Solver*(Oink*, Game*)>);
+    /**
+     * Add a solver to the set of solvers
+     */
+    static void add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor) 
+    {
+        instance().solvers[id] = {description, isParallel, constructor};
+    }
+
+    static SolverConstructor get(const std::string& id) 
+    { 
+        return instance().solvers[id].constructor; 
+    }
+   
+    static std::set<std::string> getSolverIDs()
+    {
+        std::set<std::string> ids;
+        for (const auto& entry : instance().solvers) {
+            ids.insert(entry.first);
+        }
+        return ids;
+    }
+
+private:
+    struct SolverInfo {
+        std::string description;
+        bool isParallel;
+        SolverConstructor constructor;
+    };
+
+    std::map<std::string, SolverInfo> solvers;
+
+    Solvers();
+
+    static Solvers& instance() {
+        static Solvers instance;
+        return instance;
+    }
+
+    /**
+     * Add a solver to the set of solvers
+     */
+    void _add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor) 
+    {
+        solvers[id] = {description, isParallel, constructor};
+    }
 };
 
 }

@@ -17,7 +17,7 @@
 #ifndef FPJ_HPP
 #define FPJ_HPP
 
-#include "solver.hpp"
+#include "oink/solver.hpp"
 #include "lace.h"
 
 namespace pg {

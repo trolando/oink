@@ -33,6 +33,7 @@ set(OINK_HDRS
     include/oink/error.hpp
     include/oink/game.hpp
     include/oink/solvers.hpp
+    include/oink/solver.hpp
     include/oink/bitset.hpp
     include/oink/uintqueue.hpp
     include/oink/libpopcnt.h

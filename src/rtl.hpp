@@ -22,7 +22,7 @@
 #include <map>
 #include <tuple>
 
-#include "solver.hpp"
+#include "oink/solver.hpp"
 
 namespace pg {
 

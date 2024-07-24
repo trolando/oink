@@ -24,7 +24,7 @@
 
 #include "oink/oink.hpp"
 #include "oink/solvers.hpp"
-#include "solver.hpp"
+#include "oink/solver.hpp"
 #include "lace.h"
 
 namespace pg {
@@ -352,15 +352,9 @@ Oink::flush()
 }
 
 void
-Oink::setSolver(int solverid)
+Oink::setSolver(std::string solver)
 {
-    solver = solverid;
-}
-
-void
-Oink::setSolver(std::string label)
-{
-    solver = Solvers().id(label);
+    this->solver = solver;
 }
 
 void _solve_loop(Oink* s)
@@ -379,8 +373,6 @@ Oink::solveLoop()
     /**
      * Report chosen solver.
      */
-    Solvers solvers;
-
     if (bottomSCC) {
         do {
             // disable all solved vertices
@@ -397,7 +389,7 @@ Oink::solveLoop()
             logger << game->count_unsolved() << " nodes left)" << std::endl;
 
             // solve current subgame
-            Solver *s = solvers.construct(solver, this, game);
+            auto s = Solvers::construct(*solver, *this, *game);
             if (!s->parseOptions(options)) {
                 logger << "error parsing options: " << options << std::endl;
                 exit(-1);
@@ -414,7 +406,7 @@ Oink::solveLoop()
             disabled = game->solved;
 
             // solve current subgame
-            Solver *s = solvers.construct(solver, this, game);
+            auto s = Solvers::construct(*solver, *this, *game);
             bool fullSolver = s->isFullSolver();
             if (!s->parseOptions(options)) {
                 logger << "error parsing options: " << options << std::endl;
@@ -500,7 +492,7 @@ Oink::run()
         return;
     }
         
-    if (solver == -1) {
+    if (solver == std::nullopt) {
         logger << "no solver selected!" << std::endl;
         return;
     }
@@ -515,10 +507,9 @@ Oink::run()
      * - if sequential solver, run sequantial
      */
 
-    Solvers solvers;
-    logger << "solving using " << solvers.desc(solver) << std::endl;
+    logger << "solving using " << Solvers::desc(*solver) << std::endl;
 
-    if (solvers.isParallel(solver)) {
+    if (Solvers::isParallel(*solver)) {
         if (workers >= 0) {
             if (lace_workers() == 0) {
                 lace_start(workers, 0);
