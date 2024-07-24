@@ -73,6 +73,7 @@ target_sources(oink
     src/oink.cpp
     src/scc.cpp
     src/solvers.cpp
+    src/solver.cpp
     src/verifier.cpp
     # Solvers
     src/zlk.cpp

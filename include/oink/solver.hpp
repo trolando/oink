@@ -26,16 +26,7 @@ namespace pg {
 class Solver
 {
 public:
-    Solver(Oink *oink, Game *game) :
-            oink(oink), game(game), logger(oink->logger), trace(oink->trace),
-            disabled(oink->disabled)
-    {
-#ifndef NDEBUG
-        // sanity check if the game is properly sorted
-        for (int i=1; i<nodecount(); i++) assert(priority(i-1) <= priority(i));
-#endif
-    }
-
+    Solver(Oink *oink, Game *game);
     virtual ~Solver() { }
 
     /**
