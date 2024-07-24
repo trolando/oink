@@ -29,16 +29,19 @@
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/random/random_device.hpp>
+#include <boost/process.hpp>
 
 #include "tools/cxxopts.hpp"
 #include "oink/oink.hpp"
 #include "oink/solvers.hpp"
+#include "oink/solver.hpp"
 #include "verifier.hpp"
 #include "lace.h"
 
 using namespace pg;
 namespace fs = boost::filesystem;
 namespace io = boost::iostreams;
+namespace bp = boost::process;
 
 bool opt_inflate = false;
 bool opt_compress = false;
@@ -81,6 +84,68 @@ setsighandlers(void)
 }
 
 /*------------------------------------------------------------------------*/
+
+class ExternalSolver : public Solver {
+public:
+    ExternalSolver(Oink& oink, Game& game, std::string cmd) : Solver(oink, game), cmd(cmd) {}
+
+    void run() {
+        // TODO: handle partial files (where some nodes are disabled / only solving a subgame)
+
+        /*
+        // Extract the subgame if necessary
+        if (disabled.any()) {
+            // only keep the ones that are not disabled
+            bitset selected(disabled);
+            selected.flip();
+            auto g = game->extract_subgame(selected);
+        }
+        */
+
+        // Obtain temporary filenames
+        auto path1 = fs::unique_path();
+        auto path2 = fs::unique_path();
+
+        // Write parity game to temporary file
+        std::ofstream file(path1.native());
+        game.write_pgsolver(file);
+        file.close();
+
+        // Replace %I with input filename and %O with output filename
+        replaceAll(cmd, "%I", path1.native());
+        replaceAll(cmd, "%O", path2.native());
+
+        // Run the external program (no timeout)
+        bp::ipstream out;
+        bp::ipstream err;
+        bp::system("/bin/sh", "-c", cmd, bp::std_out > out, bp::std_err > err);
+
+        // Send any stdout/stderr contents to the logger
+        std::string line;
+        while (std::getline(out, line)) logger << line << std::endl;
+        while (std::getline(err, line)) logger << line << std::endl;
+
+        // Read solution from temporary file
+        std::ifstream solution(path2.native());
+        game.parse_solution(solution);
+        solution.close();
+
+        // Delete temporary files
+        fs::remove(path1);
+        fs::remove(path2);
+    }
+
+private:
+    std::string cmd;
+
+    static void replaceAll(std::string& str, const std::string& from, const std::string& to) {
+        size_t start_pos = 0;
+        while((start_pos = str.find(from, start_pos)) != std::string::npos) {
+            str.replace(start_pos, from.length(), to);
+            start_pos += to.length(); // Move past the replaced substring
+        }
+    }
+};
 
 
 int
@@ -157,6 +222,7 @@ main(int argc, char **argv)
     for (const auto& id : Solvers::getSolverIDs()) {
         opts.add_options("Solvers")(id, Solvers::desc(id));
     }
+    opts.add_options("Solvers")("e,external", "External solver, e.g., 'python solver.py %I %O'", cxxopts::value<std::vector<std::string>>());
     opts.add_options("Solving")
         ("t,trace", "Write trace with given level (0-3) to stdout", cxxopts::value<int>())
         ("c,configure", "Additional configuration options for the solver", cxxopts::value<std::string>())
@@ -208,6 +274,15 @@ main(int argc, char **argv)
         if (options.count("all") or options.count(id)) {
             solvers.push_back(id);
             std::cout << " " << id;
+        }
+    }
+    if (options.count("external")) {
+        for (auto& e : options["external"].as<std::vector<std::string>>()) {
+            Solvers::add(e, "external tool", 0, [&](Oink& oink, Game& game) {
+                return std::make_unique<ExternalSolver>(oink, game, e);
+            });
+            solvers.push_back(e);
+            std::cout << " '" << e << "'";
         }
     }
     if (solvers.size() == 0) {
