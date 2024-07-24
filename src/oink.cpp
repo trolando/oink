@@ -395,7 +395,6 @@ Oink::solveLoop()
                 exit(-1);
             }
             s->run();
-            delete s;
 
             // flush the todo buffer
             flush();
@@ -413,7 +412,6 @@ Oink::solveLoop()
                 exit(-1);
             }
             s->run();
-            delete s;
 
             if (fullSolver) {
                 // trash the todo buffer

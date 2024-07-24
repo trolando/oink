@@ -19,6 +19,7 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <memory>
 
 #ifndef SOLVERS_HPP
 #define SOLVERS_HPP
@@ -29,42 +30,45 @@ class Oink;
 class Game;
 class Solver;
 
-class Solvers
+class Solvers final
 {
 public:
-    using SolverConstructor = std::function<Solver*(Oink&, Game&)>;
+    using SolverConstructor = std::function<std::unique_ptr<Solver>(Oink&, Game&)>;
 
+    ~Solvers() = default;
     Solvers(const Solvers&) = delete;
+    Solvers(const Solvers&&) = delete;
     Solvers& operator=(const Solvers&) = delete;
+    Solvers& operator=(const Solvers&&) = delete;
 
     /**
      * Get number of solvers
      */
-    static unsigned count() { return instance().solvers.size(); }
+    static unsigned count()
+    {
+        return instance().solvers.size();
+    }
 
     /**
      * Get description of solver <id>
      */
     static std::string desc(const std::string& id)
-    { 
-        return instance().solvers[id].description; 
+    {
+        return instance().solvers[id].description;
     }
 
     /**
      * Get whether solver <id> can be run in parallel
      */
-    static bool isParallel(const std::string& id) 
+    static bool isParallel(const std::string& id)
     {
-        return instance().solvers[id].isParallel; 
+        return instance().solvers[id].isParallel;
     }
 
     /**
      * Construct solver with the given parameters
      */
-    static Solver* construct(const std::string& id, Oink& oink, Game& game) 
-    {
-        return instance().solvers[id].constructor(oink, game); 
-    }
+    static std::unique_ptr<Solver> construct(const std::string& id, Oink& oink, Game& game);
 
     /**
      * Write a formatted list of all solvers to the given ostream
@@ -74,16 +78,8 @@ public:
     /**
      * Add a solver to the set of solvers
      */
-    static void add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor) 
-    {
-        instance().solvers[id] = {description, isParallel, constructor};
-    }
+    static void add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor);
 
-    static SolverConstructor get(const std::string& id) 
-    { 
-        return instance().solvers[id].constructor; 
-    }
-   
     static std::set<std::string> getSolverIDs()
     {
         std::set<std::string> ids;
@@ -112,7 +108,7 @@ private:
     /**
      * Add a solver to the set of solvers
      */
-    void _add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor) 
+    void _add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor)
     {
         solvers[id] = {description, isParallel, constructor};
     }
@@ -120,4 +116,4 @@ private:
 
 }
 
-#endif 
+#endif
