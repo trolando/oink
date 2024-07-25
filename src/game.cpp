@@ -814,8 +814,8 @@ Game::minmax()
     }
 }
 
-Game *
-Game::extract_subgame(std::vector<int> &selection)
+std::unique_ptr<Game>
+Game::extract_subgame(const std::vector<int>& selection)
 {
     // translate to a bitmask
     bitset sel(n_vertices);
@@ -823,8 +823,15 @@ Game::extract_subgame(std::vector<int> &selection)
     return extract_subgame(sel);
 }
 
-Game *
-Game::extract_subgame(bitset mask)
+std::unique_ptr<Game>
+Game::extract_subgame(const bitset& mask)
+{
+    std::vector<int> mapping;
+    return extract_subgame(mask, mapping);
+}
+
+std::unique_ptr<Game>
+Game::extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game)
 {
     // check if there are any dead ends (not allowed)
     // also count the number of edges in the subgame
@@ -852,23 +859,21 @@ Game::extract_subgame(bitset mask)
         }
     }
 
-    Game *res = new Game(nv, ne);
+    auto res = std::make_unique<Game>(nv, ne);
 
     // create mapping from game to subgame
-    // our v is their invmap[v]
-    // their w is our mapping[w]
     // also count the number of vertices in the subgame
-    int *mapping = new int[n_vertices];
-    int *invmap = new int[nv];
+    std::map<int, int> game_to_subgame;
+    subgame_to_game.assign(n_vertices, 0);
 
     int vertices = 0;
     for (int v=0; v<n_vertices; v++) {
         if (!mask[v]) continue;
 
-        // update mapping and invmapping
+        // update game_to_subgame and subgame_to_game
         int w = vertices++;
-        invmap[w] = v;
-        mapping[v] = w;
+        subgame_to_game[w] = v;
+        game_to_subgame[v] = w;
 
         // initialize most stuff (except edges)
         if (_label[v] != 0) res->init_vertex(w, _priority[v], _owner[v], *_label[v]);
@@ -878,16 +883,13 @@ Game::extract_subgame(bitset mask)
     // now add all edges
 
     for (int w=0; w<nv; w++) {
-        int v = invmap[w];
+        int v = subgame_to_game[w];
         res->e_start(w);
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
-            if (mask[*curedge]) res->e_add(w, mapping[*curedge]);
+            if (mask[*curedge]) res->e_add(w, game_to_subgame[*curedge]);
         }
         res->e_finish();
     }
-
-    delete[] mapping;
-    delete[] invmap;
 
     // TODO: fix is_ordered?
 

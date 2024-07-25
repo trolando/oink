@@ -21,6 +21,7 @@
 #include <sstream>
 #include <vector>
 #include <map>
+#include <memory>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
 
@@ -260,8 +261,19 @@ public:
     /**
      * Create a new Game of the subgame of the vertices given in <selection>.
      */
-    Game *extract_subgame(std::vector<int> &selection);
-    Game *extract_subgame(bitset mask);
+    std::unique_ptr<Game> extract_subgame(const std::vector<int> &selection);
+
+    /**
+     * Create a new Game of the subgame of the vertices given in the mask.
+     */
+    std::unique_ptr<Game> extract_subgame(const bitset& mask);
+
+    /**
+     * Create a new Game of the subgame of the vertices given in the mask.
+     * The parameter <subgame_to_game> will be filled with the vertex ids of the original game.
+     * That is, if vertex 5 here is mapped to vertex 2 in the subgame, then subgame_to_game[2] == 5.
+     */
+    std::unique_ptr<Game> extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game);
 
     /**
      * Reset <solved>, <winner> and <strategy>.
