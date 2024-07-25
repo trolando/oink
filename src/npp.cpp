@@ -654,7 +654,7 @@ void NPPSolver::run()
     for (pos = 0; pos < nodecount(); ++pos)
     {
         if (disabled[pos]) continue;
-        oink->solve(pos, !winzero[pos], strategy[pos]);
+        Solver::solve(pos, !winzero[pos], strategy[pos]);
     }
     /* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
 

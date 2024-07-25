@@ -344,7 +344,7 @@ pearce_again:
                     // if not yet added to solve queue, mark and add it
                     if (S0[v] == false) {
                         S0[v] = true;
-                        oink->solve(v, 0, str[v]);
+                        Solver::solve(v, 0, str[v]);
                         SolvedQ0.push(v);
                     }
                 }
@@ -354,7 +354,7 @@ pearce_again:
                     // if not yet added to solve queue, mark and add it
                     if (S1[v] == false) {
                         S1[v] = true;
-                        oink->solve(v, 1, str[v]);
+                        Solver::solve(v, 1, str[v]);
                         SolvedQ1.push(v);
                     }
                 }
@@ -758,7 +758,7 @@ PTLSolver::solve()
                     Q.swap(SolvedQ0);
                     while (Q.nonempty()) {
                         const int v = Q.pop();
-                        if (!game->solved[v]) oink->solve(v, 0, str[v]);
+                        if (!game->solved[v]) Solver::solve(v, 0, str[v]);
                         G[v] = false; // remove from Game
                         attractVertices(0, v, G, S0, G);
                         attractTangles(0, v, G, S0, G);
@@ -782,7 +782,7 @@ PTLSolver::solve()
             Q.swap(SolvedQ0);
             while (Q.nonempty()) {
                 const int v = Q.pop();
-                if (!game->solved[v]) oink->solve(v, 0, str[v]);
+                if (!game->solved[v]) Solver::solve(v, 0, str[v]);
                 G[v] = false; // remove from Game
                 attractVertices(0, v, G, S0, G);
                 attractTangles(0, v, G, S0, G);
@@ -793,7 +793,7 @@ PTLSolver::solve()
             Q.swap(SolvedQ1);
             while (Q.nonempty()) {
                 const int v = Q.pop();
-                if (!game->solved[v]) oink->solve(v, 1, str[v]);
+                if (!game->solved[v]) Solver::solve(v, 1, str[v]);
                 G[v] = false; // remove from Game
                 attractVertices(1, v, G, S1, G);
                 attractTangles(1, v, G, S1, G);

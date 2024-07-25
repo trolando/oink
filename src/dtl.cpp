@@ -1031,7 +1031,7 @@ DTLSolver::search(const int player)
 
         while (Q.nonempty()) {
             const int v = Q.pop();
-            oink->solve(v, player, str[v]);
+            Solver::solve(v, player, str[v]);
             G[v] = false; // remove from Game
             attractVertices(player, v, G, S, G, -1);
             attractTangles(player, v, G, S, G, -1);

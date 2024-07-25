@@ -616,10 +616,10 @@ SSPMSolver::run(int n_bits, int depth, int player)
 
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
-        if (pm_d[l*v] != -1) oink->solve(v, 1-player, game->strategy[v]);
+        if (pm_d[l*v] != -1) Solver::solve(v, 1-player, game->strategy[v]);
     }
 
-    oink->flush();
+    Solver::flush();
 
     /*
     {

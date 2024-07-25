@@ -528,7 +528,7 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
                 }
 
                 for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) {
-                    oink->solve(v, pl, str[v]);
+                    Solver::solve(v, pl, str[v]);
                 }
 
                 G -= S; // remove from G

@@ -244,7 +244,7 @@ MSPMSolver::solve(int node, int str)
     std::queue<int> q;
 
     // solve <node>
-    oink->solve(node, pl, owner(node) == pl ? str : -1);
+    Solver::solve(node, pl, owner(node) == pl ? str : -1);
     // if (pl == (priority(node)&1)) counts[priority(node)]--;
     cover[node] = -1;
     q.push(node);
@@ -271,7 +271,7 @@ MSPMSolver::solve(int node, int str)
                 }
                 if (escapes) continue;
             }
-            oink->solve(from, pl, owner(from) == pl ? n : -1);
+            Solver::solve(from, pl, owner(from) == pl ? n : -1);
             // if (winner == (priority(from)&1)) counts[priority(from)]--;
             cover[from] = -1;
             pms[k*from+pl] = -1;
@@ -441,7 +441,7 @@ MSPMSolver::run()
                     if (cover[to] == -2) continue;
                     if (game->solved[to]) {
                         if (game->winner[to] == pl) {
-                            oink->solve(n, pl, to);
+                            Solver::solve(n, pl, to);
                             cover[n] = -1;
                             pms[k*n+pl] = -1;
                             q.push(n);
@@ -454,7 +454,7 @@ MSPMSolver::run()
                 }
                 if (cover[n] == -1) continue;
                 if (!escapes) {
-                    oink->solve(n, 1-pl, -1);
+                    Solver::solve(n, 1-pl, -1);
                     cover[n] = -1;
                     pms[k*n+(1-pl)] = -1;
                     q.push(n);
@@ -489,7 +489,7 @@ MSPMSolver::run()
                         }
                         if (escapes) continue;
                     }
-                    oink->solve(from, pl, owner(from) == pl ? n : -1);
+                    Solver::solve(from, pl, owner(from) == pl ? n : -1);
                     // counts[priority(node)]--;
                     cover[from] = -1;
                     pms[k*from+pl] = -1;
@@ -515,7 +515,7 @@ MSPMSolver::run()
         int *pm = pms + k*i;
         if ((pm[0] == -1) == (pm[1] == -1)) LOGIC_ERROR;
         const int winner = pm[0] == -1 ? 0 : 1;
-        oink->solve(i, winner, game->owner(i) == winner ? strategy[i] : -1);
+        Solver::solve(i, winner, game->owner(i) == winner ? strategy[i] : -1);
     }
 
     delete[] pms;

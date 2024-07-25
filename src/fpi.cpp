@@ -32,24 +32,30 @@ FPISolver::~FPISolver()
 
 TASK_3(int, update_block_rec, FPISolver*, solver, int, i, int, n)
 {
+    return solver->update_block_rec(__lace_worker, __lace_dq_head, i, n);
+}
+
+int
+FPISolver::update_block_rec(WorkerP* __lace_worker, Task* __lace_dq_head, int i, int n)
+{
     if (n>128) {
         // because dynamic bitset is not thread safe, work in blocks of 64...
         if (i&127) {
             // start not yet aligned
             int N = 128 - (i&127);
-            SPAWN(update_block_rec, solver, i+N, n-N);
-            int a = solver->updateBlock(i, N);
+            SPAWN(update_block_rec, this, i+N, n-N);
+            int a = this->updateBlock(i, N);
             int b = SYNC(update_block_rec);
             return a+b;
         } else {
             int N = (n/128)*64;
-            SPAWN(update_block_rec, solver, i+N, n-N);
-            int a = CALL(update_block_rec, solver, i, N);
+            SPAWN(update_block_rec, this, i+N, n-N);
+            int a = CALL(update_block_rec, this, i, N);
             int b = SYNC(update_block_rec);
             return a+b;
         }
     } else {
-        return solver->updateBlock(i, n);
+        return this->updateBlock(i, n);
     }
 }
 
@@ -172,7 +178,13 @@ FPISolver::freezeThawReset(int i, int n, int p)
 
 VOID_TASK_1(fpi_run_par, FPISolver*, _this)
 {
-    int d = _this->priority(_this->nodecount()-1);
+    _this->run_par(__lace_worker, __lace_dq_head);
+}
+
+void
+FPISolver::run_par(WorkerP* __lace_worker, Task* __lace_dq_head)
+{
+    int d = this->priority(this->nodecount()-1);
     int *p_start = new int[d+1];
     int *p_len = new int[d+1];
 
@@ -180,10 +192,10 @@ VOID_TASK_1(fpi_run_par, FPISolver*, _this)
     {
         int v=0;
         for (int p=0; p<=d; p++) {
-            if (_this->priority(v) == p) {
+            if (this->priority(v) == p) {
                 p_start[p] = v;
-                while (v < _this->nodecount() and _this->priority(v) == p) {
-                    _this->parity[v] = p&1;
+                while (v < this->nodecount() and this->priority(v) == p) {
+                    this->parity[v] = p&1;
                     v++;
                 }
                 p_len[p] = v - p_start[p];
@@ -194,20 +206,20 @@ VOID_TASK_1(fpi_run_par, FPISolver*, _this)
         }
     }
 
-    _this->iterations = 1;
+    this->iterations = 1;
     int p = 0;
     while (p <= d) {
         if (p_len[p] == 0) {
             p++;
-        } else if (CALL(update_block_rec, _this, p_start[p], p_len[p])) {
+        } else if (CALL(update_block_rec, this, p_start[p], p_len[p])) {
             // something changed, freeze and reset
             if (p != 0) {
-                CALL(freeze_thaw_reset_rec, _this, 0, p_start[p], p);
+                CALL(freeze_thaw_reset_rec, this, 0, p_start[p], p);
                 p = 0;
             }
-            _this->iterations++;
+            this->iterations++;
 #ifndef NDEBUG
-            if (_this->trace >= 2) _this->logger << "restarting after finding distractions" << std::endl;
+            if (this->trace >= 2) this->logger << "restarting after finding distractions" << std::endl;
 #endif
         } else {
             // nothing changed
@@ -242,7 +254,7 @@ FPISolver::runPar()
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        oink->solve(v, winner, winner == owner(v) ? strategy[v] : -1);
+        Solver::solve(v, winner, winner == owner(v) ? strategy[v] : -1);
     }
 
     // free allocated data structures
@@ -315,7 +327,7 @@ FPISolver::runSeq()
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        oink->solve(v, winner, winner == owner(v) ? strategy[v] : -1);
+        Solver::solve(v, winner, winner == owner(v) ? strategy[v] : -1);
     }
 
     /**

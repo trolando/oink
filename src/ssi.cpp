@@ -490,11 +490,11 @@ SSISolver::run()
     }
 
     for (auto v = W0.find_first(); v != bitset::npos; v = W0.find_next(v)) {
-        oink->solve(v, 0, owner(v) == 0 ? str0[v] : -1);
+        Solver::solve(v, 0, owner(v) == 0 ? str0[v] : -1);
     }
 
     for (auto v = W1.find_first(); v != bitset::npos; v = W1.find_next(v)) {
-        oink->solve(v, 1, owner(v) == 1 ? str1[v] : -1);
+        Solver::solve(v, 1, owner(v) == 1 ? str1[v] : -1);
     }
 
     delete[] val;

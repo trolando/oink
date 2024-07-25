@@ -174,7 +174,7 @@ FPJSolver::runSeqGreedy()
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        oink->solve(v, winner, winner == owner(v) ? strategy[v] : -1);
+        Solver::solve(v, winner, winner == owner(v) ? strategy[v] : -1);
     }
 
     // free allocated data structures
@@ -337,7 +337,7 @@ FPJSolver::runSeq()
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        oink->solve(v, winner, winner == owner(v) ? strategy[v] : -1);
+        Solver::solve(v, winner, winner == owner(v) ? strategy[v] : -1);
     }
 
     // free allocated data structures

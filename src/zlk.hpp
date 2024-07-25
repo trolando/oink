@@ -18,6 +18,7 @@
 #define ZLK_HPP
 
 #include <queue>
+#include <lace.h>
 
 #include "oink/solver.hpp"
 
@@ -47,9 +48,8 @@ public:
 
     int attractExt(int i, int r, std::vector<int> *R);
     int attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R);
-
-    // friend void attractParT_WORK(WorkerP*, Task*, int, int, int, ZLKSolver*);
-    // friend int attractPar_WORK(WorkerP*, Task*, int, int, std::vector<int>*, ZLKSolver*);
+    void attractParT(WorkerP*, Task*, int pl, int cur, int r);
+    int attractPar(WorkerP*, Task*, int i, int r, std::vector<int>* R);
     // friend void updateOutcount_WORK(WorkerP*, Task*, int, int, ZLKSolver*);
 };
 

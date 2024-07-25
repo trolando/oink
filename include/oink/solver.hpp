@@ -26,7 +26,7 @@ namespace pg {
 class Solver
 {
 public:
-    Solver(Oink *oink, Game *game);
+    Solver(Oink* oink, Game* game);
     virtual ~Solver() { }
 
     /**
@@ -45,8 +45,8 @@ public:
      */
     virtual bool parseOptions(std::string&) { return true; }
 
-    Oink *oink;
-    Game *game;
+protected:
+    Game* game;
     std::ostream &logger;
     int trace = 0;
 
@@ -60,6 +60,12 @@ public:
     inline const int* outs(const int vertex) { return game->outedges() + game->firstout(vertex); }
     inline const int* ins(const int vertex) { return game->inedges() + game->firstin(vertex); }
     inline Game::_label_vertex label_vertex(int v) { return game->label_vertex(v); }
+
+    void solve(int node, int winner, int strategy) { oink->solve(node, winner, strategy); }
+    void flush(void) { oink->flush(); }
+
+private:
+    Oink* oink;
 };
 
 }

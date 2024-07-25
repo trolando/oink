@@ -262,7 +262,7 @@ void ZLKPPSolver::run() {
             win.pop_back();
         } else
             who = !player;
-        oink->solve(v, who, strategy[v]);
+        Solver::solve(v, who, strategy[v]);
         if (v == cur_first_node)
             break;
         v = cur_nodes_prev[v];

@@ -466,11 +466,11 @@ QPTSolver::liftloop()
 
         if (pm[0] == -1 or (pm[0]&1) != pl) {
             if (owner(v) != pl and strategy[v] == -1) LOGIC_ERROR;
-            oink->solve(v, 1-pl, owner(v) != pl ? strategy[v] : -1);
+            Solver::solve(v, 1-pl, owner(v) != pl ? strategy[v] : -1);
         }
     }
 
-    oink->flush();
+    Solver::flush();
 }
 
 

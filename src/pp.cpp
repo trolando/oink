@@ -220,10 +220,10 @@ PPSolver::setDominion(int p)
 #ifndef NDEBUG
         if (trace >= 2) logger << " " << i;
 #endif
-        oink->solve(i, pl, owner(i) == pl ? strategy[i] : -1);
+        Solver::solve(i, pl, owner(i) == pl ? strategy[i] : -1);
     }
     if (trace) logger << std::endl;
-    oink->flush();
+    Solver::flush();
 }
 
 int

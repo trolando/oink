@@ -30,18 +30,22 @@ public:
     FPISolver(Oink *oink, Game *game);
     virtual ~FPISolver();
 
+    virtual void run();
+
     int updateBlock(int i, int n);
     void freezeThawReset(int i, int n, int p);
     void runPar(void);
     void runSeq(void);
 
+    int update_block_rec(WorkerP*, Task*, int i, int n);
+    void run_par(WorkerP*, Task*);
+
+private:
     unsigned long long iterations = 0;
     int *frozen;
     int *strategy;
     bitset parity;
     bitset distraction;
-
-    virtual void run();
 };
 
 }

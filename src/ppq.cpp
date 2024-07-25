@@ -582,8 +582,8 @@ PPQSolver::run()
 
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
-        if (W0[v]) oink->solve(v, 0, str[v]);
-        if (W1[v]) oink->solve(v, 1, str[v]);
+        if (W0[v]) Solver::solve(v, 0, str[v]);
+        if (W1[v]) Solver::solve(v, 1, str[v]);
     }
 
     logger << "solved with " << iterations << " iterations." << std::endl;

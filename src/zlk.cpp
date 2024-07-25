@@ -50,42 +50,48 @@ par_helper** pvec;
 
 VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
 {
+    s->attractParT(__lace_worker, __lace_dq_head, pl, cur, r);
+}
+
+void
+ZLKSolver::attractParT(WorkerP* __lace_worker, Task* __lace_dq_head, int pl, int cur, int r)
+{
     int c = 0;
     par_helper* ours = pvec[LACE_WORKER_ID];
 
     // attract to <cur>
-    for (auto curedge = s->ins(cur); *curedge != -1; curedge++) {
+    for (auto curedge = ins(cur); *curedge != -1; curedge++) {
         int from = *curedge;
-        int _r = s->region[from];
+        int _r = region[from];
         if (_r == DIS or _r >= 0) continue; // not in subgame, or attracted
 
-        if (s->owner(from) == pl) {
+        if (owner(from) == pl) {
             // owned by same parity, use CAS to claim it
             while (true) {
-                if (__sync_bool_compare_and_swap(&s->region[from], _r, r)) {
-                    s->winning[from] = pl;
-                    s->strategy[from] = cur;
+                if (__sync_bool_compare_and_swap(&region[from], _r, r)) {
+                    winning[from] = pl;
+                    strategy[from] = cur;
                     ours->items[ours->count++] = from;
-                    SPAWN(attractParT, pl, from, r, s);
+                    SPAWN(attractParT, pl, from, r, this);
                     c++;
                     break;
                 }
-                _r = *(volatile int*)&s->region[from];
+                _r = *(volatile int*)&region[from];
                 if (_r >= 0) break;
             }
         } else {
             // owned by other parity
-            volatile int* ptr = &s->region[from];
+            volatile int* ptr = &region[from];
             bool attracted = false;
 
             _r = __sync_add_and_fetch(ptr, 1); // update _r
             if (_r == (BOT+1)) {
                 // we are the first, do add_and_fetch with the count
                 int count = 0;
-                for (auto curedge = s->outs(from); *curedge != -1; curedge++) {
+                for (auto curedge = outs(from); *curedge != -1; curedge++) {
                     int to = *curedge;
-                    if (s->region[to] == DIS) continue; // do not count disabled
-                    if (s->region[to] >= 0 and s->region[to] < r) continue; // do not count supgame
+                    if (region[to] == DIS) continue; // do not count disabled
+                    if (region[to] >= 0 and region[to] < r) continue; // do not count supgame
                     count--; // count to negative
                 }
                 // now set count (in a CAS loop)
@@ -107,10 +113,10 @@ VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
                 if (__sync_bool_compare_and_swap(ptr, -1, r)) attracted = true;
             }
             if (attracted) {
-                s->winning[from] = pl;
-                s->strategy[from] = -1;
+                winning[from] = pl;
+                strategy[from] = -1;
                 ours->items[ours->count++] = from;
-                SPAWN(attractParT, pl, from, r, s);
+                SPAWN(attractParT, pl, from, r, this);
                 c++;
             }
         }
@@ -121,7 +127,13 @@ VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
 
 TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
 {
-    const int pr = s->priority(i);
+    return s->attractPar(__lace_worker, __lace_dq_head, i, r, R);
+}
+
+int
+ZLKSolver::attractPar(WorkerP* __lace_worker, Task* __lace_dq_head, int i, int r, std::vector<int>* R)
+{
+    const int pr = priority(i);
     const int pl = pr & 1;
 
     // initialize pvec (set count to 0) for all workers
@@ -132,10 +144,10 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
     int spawn_count = 0;
 
     for (; i>=0; i--) {
-        int _r = s->region[i];
+        int _r = region[i];
         if (_r == DIS or _r >= 0) continue; // not in subgame or attracted
-        if (!s->to_inversion and s->priority(i) != pr) break;
-        if ((s->priority(i)&1) != pl) { // search until parity inversion
+        if (!to_inversion and priority(i) != pr) break;
+        if ((priority(i)&1) != pl) { // search until parity inversion
             // first SYNC on all children, who knows this node may be attracted
             while (spawn_count) { SYNC(attractParT); spawn_count--; }
             // after SYNC, check if node <i> is now attracted.
@@ -145,15 +157,15 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
 
         // if c != 0, then we compete with attractParT and must use compare and swap
         if (spawn_count == 0) {
-            s->region[i] = r; // just set, no competing threads
+            region[i] = r; // just set, no competing threads
         } else {
             // competing threads! use compare and swap [in a loop]
             while (true) {
-                if (__sync_bool_compare_and_swap(&s->region[i], _r, r)) {
+                if (__sync_bool_compare_and_swap(&region[i], _r, r)) {
                     _r = r;
                     break;
                 }
-                _r = *(volatile int*)&s->region[i];
+                _r = *(volatile int*)&region[i];
                 if (_r < 0) continue;
                 _r = BOT;
                 break;
@@ -161,10 +173,10 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
             if (_r == BOT) continue; // someone else claimed!
         }
 
-        s->winning[i] = pl;
-        s->strategy[i] = -1; // head nodes have no strategy (for now)
+        winning[i] = pl;
+        strategy[i] = -1; // head nodes have no strategy (for now)
         ours->items[ours->count++] = i;
-        SPAWN(attractParT, pl, i, r, s);
+        SPAWN(attractParT, pl, i, r, this);
         spawn_count++;
     }
 
@@ -180,7 +192,7 @@ TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
         par_helper* x = pvec[j];
         for (int k=0; k<x->count; k++) {
 #ifndef NDEBUG
-            if (s->trace >= 2) s->logger << "attracted " << x->items[k] << " (" << s->priority(x->items[k]) << ")" << std::endl;
+            if (trace >= 2) logger << "attracted " << x->items[k] << " (" << priority(x->items[k]) << ")" << std::endl;
 #endif
             R->push_back(x->items[k]);
         }
@@ -685,7 +697,7 @@ ZLKSolver::run()
 #ifndef NDEBUG
         if (winning[i] == -1) LOGIC_ERROR;
 #endif
-        oink->solve(i, winning[i], strategy[i]);
+        Solver::solve(i, winning[i], strategy[i]);
     }
 
     delete[] region;
