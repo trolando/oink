@@ -181,7 +181,7 @@ test_solver(Game &game, const std::string& solverid, double &time, std::ostream 
     game.copy_solution(copy);
 
     try {
-        Verifier v(&game, log);
+        Verifier v(game, log);
         v.verify(true, true, true);
     } catch (const char *err) {
         log << "verification error: " << err << std::endl;

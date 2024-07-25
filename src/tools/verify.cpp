@@ -54,7 +54,7 @@ main(int argc, const char **argv)
 
         pg.sort();
 
-        Verifier v(&pg, std::cout);
+        Verifier v(pg, std::cout);
         auto begin = wctime();
         v.verify(true);
         auto end = wctime();

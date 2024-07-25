@@ -25,15 +25,22 @@ namespace pg {
 class Verifier
 {
 public:
-    Verifier(Game* pg, std::ostream &lgr) : game(pg), logger(lgr) { }
+    Verifier(Game& game, std::ostream &logger) : game(game), logger(logger) { }
 
+    /**
+     * Verify the game strategy.
+     */
     void verify(bool fullgame=true, bool even=true, bool odd=true);
 
-    int n_strategies = 0;
+    /**
+     * Return the number of checked strategies in the game.
+     */
+    int numberOfStrategies(void) { return n_strategies; }
 
 protected:
-    Game *game;
+    Game& game; // TODO: this should be "const"
     std::ostream &logger;
+    int n_strategies = 0;
 };
 
 }

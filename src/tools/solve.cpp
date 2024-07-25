@@ -366,11 +366,11 @@ int main(int argc, char **argv)
     if (options.count("v")) {
         try {
             out << "verifying solution..." << std::endl;
-            Verifier v(&pg, out);
+            Verifier v(pg, out);
             double vbegin = wctime();
             v.verify(true, true, true);
             double vend = wctime();
-            out << "solution verified (" << v.n_strategies << " strategies)." << std::endl;
+            out << "solution verified (" << v.numberOfStrategies() << " strategies)." << std::endl;
             out << "verification took " << std::fixed << (vend - vbegin) << " sec." << std::endl;
         } catch (const char *err) {
             out << "verification error: " << err << std::endl;
