@@ -12,7 +12,7 @@
 
 namespace pg {
 
-ZLKPPSolver::ZLKPPSolver(Oink *oink, Game *game, int variant) : Solver(oink, game), variant(variant) {}
+ZLKPPSolver::ZLKPPSolver(Oink& oink, Game& game, int variant) : Solver(oink, game), variant(variant) {}
 
 bool ZLKPPSolver::get_attractor(int player, std::vector<int> &nodes) {
     // initially is_in_attractor[v] = 0 and num_successors[v] = -1 for all v

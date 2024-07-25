@@ -24,7 +24,7 @@
 
 namespace pg {
 
-PTLSolver::PTLSolver(Oink *oink, Game *game) : Solver(oink, game)
+PTLSolver::PTLSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -295,7 +295,7 @@ pearce_again:
 
         bool is_tangle = (tangle.size() > 1) or
             ((unsigned int)str[n] == n) or
-            (str[n] == -1 and game->has_edge(n, n));
+            (str[n] == -1 and game.has_edge(n, n));
         if (!is_tangle) {
             tangle.clear();
             continue;
@@ -758,7 +758,7 @@ PTLSolver::solve()
                     Q.swap(SolvedQ0);
                     while (Q.nonempty()) {
                         const int v = Q.pop();
-                        if (!game->solved[v]) Solver::solve(v, 0, str[v]);
+                        if (!game.solved[v]) Solver::solve(v, 0, str[v]);
                         G[v] = false; // remove from Game
                         attractVertices(0, v, G, S0, G);
                         attractTangles(0, v, G, S0, G);
@@ -782,7 +782,7 @@ PTLSolver::solve()
             Q.swap(SolvedQ0);
             while (Q.nonempty()) {
                 const int v = Q.pop();
-                if (!game->solved[v]) Solver::solve(v, 0, str[v]);
+                if (!game.solved[v]) Solver::solve(v, 0, str[v]);
                 G[v] = false; // remove from Game
                 attractVertices(0, v, G, S0, G);
                 attractTangles(0, v, G, S0, G);
@@ -793,7 +793,7 @@ PTLSolver::solve()
             Q.swap(SolvedQ1);
             while (Q.nonempty()) {
                 const int v = Q.pop();
-                if (!game->solved[v]) Solver::solve(v, 1, str[v]);
+                if (!game.solved[v]) Solver::solve(v, 1, str[v]);
                 G[v] = false; // remove from Game
                 attractVertices(1, v, G, S1, G);
                 attractTangles(1, v, G, S1, G);

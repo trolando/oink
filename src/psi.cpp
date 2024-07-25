@@ -35,7 +35,7 @@ static int *won;      // if won by primary player
 static int *first_in; // helper for linked-list style in-edges
 static int *next_in;  // helper for linked-list style in-edges
 
-PSISolver::PSISolver(Oink *oink, Game *game) : Solver(oink, game)
+PSISolver::PSISolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -562,7 +562,7 @@ PSISolver::run()
     for (int i=0; i<nodecount(); i++) {
         if (disabled[i]) continue;
         bool winner = won[i] ? 0 : 1;
-        Solver::solve(i, winner, game->owner(i) == winner ? str[i] : -1);
+        Solver::solve(i, winner, owner(i) == winner ? str[i] : -1);
     }
 
     delete[] val;

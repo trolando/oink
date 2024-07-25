@@ -27,7 +27,7 @@ namespace pg {
 class FPISolver : public Solver
 {
 public:
-    FPISolver(Oink *oink, Game *game);
+    FPISolver(Oink& oink, Game& game);
     virtual ~FPISolver();
 
     virtual void run();

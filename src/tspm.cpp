@@ -20,7 +20,7 @@
 
 namespace pg {
 
-TSPMSolver::TSPMSolver(Oink *oink, Game *game) : Solver(oink, game)
+TSPMSolver::TSPMSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -416,7 +416,7 @@ TSPMSolver::run()
         int *pm = pms + k*n;
         if ((pm[0] == -1) == (pm[1] == -1)) LOGIC_ERROR;
         const int winner = pm[0] == -1 ? 0 : 1;
-        Solver::solve(n, winner, game->owner(n) == winner ? strategy[n] : -1);
+        Solver::solve(n, winner, owner(n) == winner ? strategy[n] : -1);
     }
 
     delete[] pms;

@@ -24,7 +24,7 @@ namespace pg {
 class QPTSolver : public Solver
 {
 public:
-    QPTSolver(Oink *oink, Game *game);
+    QPTSolver(Oink& oink, Game& game);
     virtual ~QPTSolver();
 
     virtual void run();
@@ -72,7 +72,7 @@ protected:
 class BoundedQPTSolver : public QPTSolver
 {
 public:
-    BoundedQPTSolver(Oink *oink, Game *game) : QPTSolver(oink, game) { bounded = true; }
+    BoundedQPTSolver(Oink& oink, Game& game) : QPTSolver(oink, game) { bounded = true; }
     virtual ~BoundedQPTSolver() { }
 };
 

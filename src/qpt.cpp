@@ -22,7 +22,7 @@
 
 namespace pg {
 
-QPTSolver::QPTSolver(Oink *oink, Game *game) : Solver(oink, game)
+QPTSolver::QPTSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -561,7 +561,7 @@ QPTSolver::run()
         int i;
         for (i=1; i<=big_k; i++) {
             long _l = lift_count, _a = lift_attempt;
-            uint64_t _c = game->count_unsolved();
+            uint64_t _c = game.count_unsolved();
             uint64_t c = _c;
 
             /*if (i <= k0)*/ {
@@ -572,7 +572,7 @@ QPTSolver::run()
                 goal = goal0;
                 liftloop();
 
-                c = game->count_unsolved();
+                c = game.count_unsolved();
                 logger << "after even with k=" << k << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
                 if (c == 0) break;
 
@@ -588,7 +588,7 @@ QPTSolver::run()
                 goal = goal1;
                 liftloop();
 
-                c = game->count_unsolved();
+                c = game.count_unsolved();
                 logger << "after odd  with k=" << k << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
                 if (c == 0) break;
 
@@ -606,7 +606,7 @@ QPTSolver::run()
         goal = goal1;
         liftloop();
 
-        uint64_t c = game->count_unsolved();
+        uint64_t c = game.count_unsolved();
         logger << "after odd, " << lift_count << " lifts, " << lift_attempt << " lift attempts, " << c << " unsolved left." << std::endl;
 
         if (c != 0) {
@@ -629,7 +629,7 @@ QPTSolver::run()
         goal = goal0;
         liftloop();
 
-        uint64_t c = game->count_unsolved();
+        uint64_t c = game.count_unsolved();
         logger << "after even, " << lift_count << " lifts, " << lift_attempt << " lift attempts, " << c << " unsolved left." << std::endl;
 
         if (c != 0) {

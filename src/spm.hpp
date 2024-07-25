@@ -26,7 +26,7 @@ namespace pg {
 class SPMSolver : public Solver
 {
 public:
-    SPMSolver(Oink *oink, Game *game);
+    SPMSolver(Oink& oink, Game& game);
     virtual ~SPMSolver();
 
     virtual void run();

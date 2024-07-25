@@ -18,7 +18,7 @@
 
 namespace pg {
 
-SSISolver::SSISolver(Oink *oink, Game *game) : Solver(oink, game)
+SSISolver::SSISolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 

@@ -406,7 +406,7 @@ Oink::solveLoop()
 
             // solve current subgame
             auto s = Solvers::construct(*solver, *this, *game);
-            bool fullSolver = s->isFullSolver();
+            bool fullSolver = true; // every solver is actually a full solver
             if (!s->parseOptions(options)) {
                 logger << "error parsing options: " << options << std::endl;
                 exit(-1);

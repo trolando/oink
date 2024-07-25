@@ -27,14 +27,13 @@ namespace pg {
 class DPSolver : public PPPSolver
 {
 public:
-    DPSolver(Oink *oink, Game *game);
+    DPSolver(Oink& oink, Game& game);
 
     virtual void run();
 
-    int delayed = 0;
-
 protected:
     int *region_;
+    int delayed = 0;
 
     virtual int getRegionStatus(int index, int priority);
 };

@@ -24,7 +24,7 @@ namespace pg {
 class PTLSolver : public Solver
 {
 public:
-    PTLSolver(Oink *oink, Game *game);
+    PTLSolver(Oink& oink, Game& game);
     virtual ~PTLSolver();
 
     virtual void run();
@@ -80,7 +80,7 @@ protected:
 class SPPTLSolver : public PTLSolver
 {
 public:
-    SPPTLSolver(Oink *oink, Game *game) : PTLSolver(oink, game) { multiplayer = false; }
+    SPPTLSolver(Oink& oink, Game& game) : PTLSolver(oink, game) { multiplayer = false; }
     virtual ~SPPTLSolver() { }
 };
 

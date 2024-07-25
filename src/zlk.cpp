@@ -31,7 +31,7 @@ static const int BOT = 0x80000001; // bottom state for vertex
 
 #define KC "\033[36;1m"
 
-ZLKSolver::ZLKSolver(Oink *oink, Game *game) : Solver(oink, game), Q(game->nodecount())
+ZLKSolver::ZLKSolver(Oink& oink, Game& game) : Solver(oink, game), Q(game.nodecount())
 {
 }
 

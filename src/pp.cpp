@@ -25,7 +25,7 @@
 
 namespace pg {
 
-PPSolver::PPSolver(Oink *oink, Game *game) : Solver(oink, game), Z(game->nodecount()), Q(game->nodecount())
+PPSolver::PPSolver(Oink& oink, Game& game) : Solver(oink, game), Z(game.nodecount()), Q(game.nodecount())
 {
 }
 

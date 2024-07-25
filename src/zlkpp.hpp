@@ -18,7 +18,7 @@ namespace pg {
 class ZLKPPSolver : public Solver
 {
 public:
-    ZLKPPSolver(Oink *oink, Game *game, int variant);
+    ZLKPPSolver(Oink& oink, Game& game, int variant);
 
     virtual void run();
 

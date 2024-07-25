@@ -23,7 +23,7 @@
 
 namespace pg {
 
-SSPMSolver::SSPMSolver(Oink *oink, Game *game) : Solver(oink, game)
+SSPMSolver::SSPMSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -588,7 +588,7 @@ SSPMSolver::run(int n_bits, int depth, int player)
         if (disabled[v]) continue;
         if (pm_d[l*v] != -1) {
             if (owner(v) != player) {
-                if (lift(v, -1, game->strategy[v], player)) logger << "error: " << v << " is not progressive!" << std::endl;
+                if (lift(v, -1, game.strategy[v], player)) logger << "error: " << v << " is not progressive!" << std::endl;
             }
         }
     }
@@ -602,7 +602,7 @@ SSPMSolver::run(int n_bits, int depth, int player)
 
             if (pm_d[l*v] != -1) {
                 if (owner(v) != player) {
-                    logger << " => " << label_vertex(game->strategy[v]);
+                    logger << " => " << label_vertex(game.strategy[v]);
                 }
             }
 
@@ -616,7 +616,7 @@ SSPMSolver::run(int n_bits, int depth, int player)
 
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
-        if (pm_d[l*v] != -1) Solver::solve(v, 1-player, game->strategy[v]);
+        if (pm_d[l*v] != -1) Solver::solve(v, 1-player, game.strategy[v]);
     }
 
     Solver::flush();
@@ -664,12 +664,12 @@ SSPMSolver::run()
 
     for (; i<=ml; i++) {
         int _l = lift_count, _a = lift_attempt;
-        uint64_t _c = game->count_unsolved(), c;
+        uint64_t _c = game.count_unsolved(), c;
 
         if (ODDFIRST) {
             // run odd counters
             run(i, h1, 1);
-            c = game->count_unsolved();
+            c = game.count_unsolved();
             logger << "after odd  with k=" << i << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
 
             // if now solved, no need to run odd counters
@@ -677,12 +677,12 @@ SSPMSolver::run()
 
             // run even counters
             run(i, h0, 0);
-            c = game->count_unsolved();
+            c = game.count_unsolved();
             logger << "after even with k=" << i << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
         } else {
             // run even counters
             run(i, h0, 0);
-            c = game->count_unsolved();
+            c = game.count_unsolved();
             logger << "after even with k=" << i << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
 
             // if now solved, no need to run odd counters
@@ -690,7 +690,7 @@ SSPMSolver::run()
 
             // run odd counters
             run(i, h1, 1);
-            c = game->count_unsolved();
+            c = game.count_unsolved();
             logger << "after odd  with k=" << i << ", " << std::setw(9) << lift_count-_l << " lifts, " << std::setw(9) << lift_attempt-_a << " lift attempts, " << c << " unsolved left." << std::endl;
         }
 

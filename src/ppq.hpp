@@ -30,7 +30,7 @@ namespace pg {
 class PPQSolver : public Solver
 {
 public:
-    PPQSolver(Oink *oink, Game *game);
+    PPQSolver(Oink& oink, Game& game);
     virtual ~PPQSolver();
 
     virtual void run();

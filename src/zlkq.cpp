@@ -29,7 +29,7 @@ namespace pg {
  * Furthermore I added some optimizations, i.e., shortcuts in the tree
  */
 
-ZLKQSolver::ZLKQSolver(Oink *oink, Game *game) : Solver(oink, game)
+ZLKQSolver::ZLKQSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 

@@ -24,7 +24,7 @@ namespace pg {
 class DTLSolver : public Solver
 {
 public:
-    DTLSolver(Oink *oink, Game *game);
+    DTLSolver(Oink& oink, Game& game);
     virtual ~DTLSolver();
 
     virtual void run();
@@ -94,7 +94,7 @@ protected:
 class IDTLSolver : public DTLSolver
 {
 public:
-    IDTLSolver(Oink *oink, Game *game) : DTLSolver(oink, game) { interleaved = true; }
+    IDTLSolver(Oink& oink, Game& game) : DTLSolver(oink, game) { interleaved = true; }
     virtual ~IDTLSolver() { }
 };
 

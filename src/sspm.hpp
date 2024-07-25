@@ -24,7 +24,7 @@ namespace pg {
 class SSPMSolver : public Solver
 {
 public:
-    SSPMSolver(Oink *oink, Game *game);
+    SSPMSolver(Oink& oink, Game& game);
     virtual ~SSPMSolver();
 
     virtual void run();
@@ -121,7 +121,7 @@ protected:
 class BoundedSSPMSolver : public SSPMSolver
 {
 public:
-    BoundedSSPMSolver(Oink *oink, Game *game) : SSPMSolver(oink, game) { bounded = true; }
+    BoundedSSPMSolver(Oink& oink, Game& game) : SSPMSolver(oink, game) { bounded = true; }
     virtual ~BoundedSSPMSolver() { }
 };
 

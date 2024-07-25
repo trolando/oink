@@ -24,7 +24,7 @@ namespace pg {
 class SSISolver : public Solver
 {
 public:
-    SSISolver(Oink *oink, Game *game);
+    SSISolver(Oink& oink, Game& game);
     virtual ~SSISolver();
 
     virtual void run();

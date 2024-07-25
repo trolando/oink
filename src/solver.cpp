@@ -19,7 +19,7 @@
 
 namespace pg {
 
-Solver::Solver(Oink *oink, Game *game) : oink(oink), game(game), logger(oink->logger), trace(oink->trace), disabled(oink->disabled)
+Solver::Solver(Oink& oink, Game& game) : oink(oink), game(game), logger(oink.logger), trace(oink.trace), disabled(oink.disabled)
 {
 #ifndef NDEBUG
     // sanity check if the game is properly sorted

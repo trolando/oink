@@ -27,7 +27,7 @@ namespace pg {
 class ZLKSolver : public Solver
 {
 public:
-    ZLKSolver(Oink *oink, Game *game);
+    ZLKSolver(Oink& oink, Game& game);
     virtual ~ZLKSolver();
 
     virtual void run();
@@ -56,7 +56,7 @@ public:
 class UnoptimizedZLKSolver : public ZLKSolver
 {
 public:
-    UnoptimizedZLKSolver(Oink *oink, Game *game) : ZLKSolver(oink, game) { to_inversion = false; only_recompute_when_attracted = false; }
+    UnoptimizedZLKSolver(Oink& oink, Game& game) : ZLKSolver(oink, game) { to_inversion = false; only_recompute_when_attracted = false; }
     virtual ~UnoptimizedZLKSolver() { }
 };
 

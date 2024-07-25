@@ -22,7 +22,7 @@
 
 namespace pg {
 
-FPISolver::FPISolver(Oink *oink, Game *game) : Solver(oink, game)
+FPISolver::FPISolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 

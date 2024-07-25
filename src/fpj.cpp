@@ -23,7 +23,7 @@
 
 namespace pg {
 
-FPJSolver::FPJSolver(Oink *oink, Game *game) : Solver(oink, game)
+FPJSolver::FPJSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 

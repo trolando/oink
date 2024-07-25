@@ -21,7 +21,7 @@
 
 namespace pg {
 
-DPSolver::DPSolver(Oink *oink, Game *game) : PPPSolver(oink, game)
+DPSolver::DPSolver(Oink& oink, Game& game) : PPPSolver(oink, game)
 {
 }
 

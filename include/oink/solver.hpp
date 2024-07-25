@@ -23,11 +23,17 @@
 
 namespace pg {
 
+/**
+ * Base class for the parity game solvers.
+ * A derived class should implement the run method, and solve all vertices of the game.
+ * TODO: instead of having 'disabled' vertices, the constructor should simply get
+ *       a 'subgame' bitset that identifies the part of the game that we need to solve.
+ */
 class Solver
 {
 public:
-    Solver(Oink* oink, Game* game);
-    virtual ~Solver() { }
+    Solver(Oink& oink, Game& game);
+    virtual ~Solver() = default;
 
     /**
      * Run the solver.
@@ -35,37 +41,32 @@ public:
     virtual void run() = 0;
 
     /**
-     * Returns true if the solver always solves all enabled vertices
-     * before leaving run().
-     */
-    virtual bool isFullSolver() { return true; }
-
-    /**
      * Set solver options (via -c "...")
      */
     virtual bool parseOptions(std::string&) { return true; }
 
 protected:
-    Game* game;
+    Game& game;
     std::ostream &logger;
     int trace = 0;
 
-    const bitset &disabled; // TODO make function...
+    const bitset &disabled; // TODO change into subgame
+    //inline bool disabled(int vertex) { return oink.disabled[vertex]; }
 
-    inline long nodecount() { return game->nodecount(); }
-    inline long edgecount() { return game->edgecount(); }
+    inline long nodecount() { return game.nodecount(); }
+    inline long edgecount() { return game.edgecount(); }
 
-    inline int priority(const int vertex) { return game->priority(vertex); }
-    inline int owner(const int vertex) { return game->owner(vertex); }
-    inline const int* outs(const int vertex) { return game->outedges() + game->firstout(vertex); }
-    inline const int* ins(const int vertex) { return game->inedges() + game->firstin(vertex); }
-    inline Game::_label_vertex label_vertex(int v) { return game->label_vertex(v); }
+    inline int priority(const int vertex) { return game.priority(vertex); }
+    inline int owner(const int vertex) { return game.owner(vertex); }
+    inline const int* outs(const int vertex) { return game.outedges() + game.firstout(vertex); }
+    inline const int* ins(const int vertex) { return game.inedges() + game.firstin(vertex); }
+    inline Game::_label_vertex label_vertex(int v) { return game.label_vertex(v); }
 
-    void solve(int node, int winner, int strategy) { oink->solve(node, winner, strategy); }
-    void flush(void) { oink->flush(); }
+    void solve(int node, int winner, int strategy) { oink.solve(node, winner, strategy); }
+    void flush(void) { oink.flush(); }
 
 private:
-    Oink* oink;
+    Oink& oink;
 };
 
 }

@@ -26,7 +26,7 @@ namespace pg {
 class MSPMSolver : public Solver
 {
 public:
-    MSPMSolver(Oink *oink, Game *game);
+    MSPMSolver(Oink& oink, Game& game);
     virtual ~MSPMSolver();
 
     virtual void run();

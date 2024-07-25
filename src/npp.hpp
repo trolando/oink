@@ -35,7 +35,7 @@ public:
     /* Constructor and destructor                                                 */
     /******************************************************************************/
 
-    NPPSolver(Oink * oink, Game * game);
+    NPPSolver(Oink& oink, Game& game);
 
     virtual ~NPPSolver();
 

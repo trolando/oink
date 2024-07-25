@@ -31,7 +31,7 @@ namespace pg {
 class RTLSolver : public Solver
 {
 public:
-    RTLSolver(Oink *oink, Game *game);
+    RTLSolver(Oink& oink, Game& game);
     virtual ~RTLSolver();
 
     virtual void run();
@@ -81,7 +81,7 @@ protected:
 class ORTLSolver : public RTLSolver
 {
 public:
-    ORTLSolver(Oink *oink, Game *game) : RTLSolver(oink, game) { onesided = true; }
+    ORTLSolver(Oink& oink, Game& game) : RTLSolver(oink, game) { onesided = true; }
     virtual ~ORTLSolver() { }
 };
 

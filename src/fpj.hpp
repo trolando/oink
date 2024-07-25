@@ -25,7 +25,7 @@ namespace pg {
 class FPJSolver : public Solver
 {
 public:
-    FPJSolver(Oink *oink, Game *game);
+    FPJSolver(Oink& oink, Game& game);
     virtual ~FPJSolver();
 
     unsigned long long iterations = 0;
@@ -40,7 +40,7 @@ public:
 class FPJGSolver : public FPJSolver
 {
 public:
-    FPJGSolver(Oink *oink, Game *game) : FPJSolver(oink, game) { greedy = true; }
+    FPJGSolver(Oink& oink, Game& game) : FPJSolver(oink, game) { greedy = true; }
     virtual ~FPJGSolver() { }
 };
 

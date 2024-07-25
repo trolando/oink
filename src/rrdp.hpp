@@ -27,7 +27,7 @@ namespace pg {
 class RRDPSolver : public RRSolver
 {
 public:
-    RRDPSolver(Oink *oink, Game *game);
+    RRDPSolver(Oink& oink, Game& game);
 
     virtual void run();
 

@@ -21,7 +21,7 @@
 
 namespace pg {
 
-TLSolver::TLSolver(Oink *oink, Game *game) : Solver(oink, game)
+TLSolver::TLSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -288,7 +288,7 @@ pearce_again:
          */
 
         const bool is_not_tangle = (tangle.size() == 1) and
-            ((unsigned int)str[n] != n) and (str[n] != -1 or !game->has_edge(n, n));
+            ((unsigned int)str[n] != n) and (str[n] != -1 or !game.has_edge(n, n));
         if (is_not_tangle) {
             // std::cout << "not a tangle: " << pea_vidx[n] << std::endl;
             tangle.clear();

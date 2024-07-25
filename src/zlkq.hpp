@@ -34,7 +34,7 @@ namespace pg {
 class ZLKQSolver : public Solver
 {
 public:
-    ZLKQSolver(Oink *oink, Game *game);
+    ZLKQSolver(Oink& oink, Game& game);
     virtual ~ZLKQSolver();
 
     virtual void run();

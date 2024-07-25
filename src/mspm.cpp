@@ -21,7 +21,7 @@ static const bool use_queue = true;
 
 namespace pg {
 
-MSPMSolver::MSPMSolver(Oink *oink, Game *game) : Solver(oink, game)
+MSPMSolver::MSPMSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -439,8 +439,8 @@ MSPMSolver::run()
                 for (auto curedge = outs(n); *curedge != -1; curedge++) {
                     int to = *curedge;
                     if (cover[to] == -2) continue;
-                    if (game->solved[to]) {
-                        if (game->winner[to] == pl) {
+                    if (game.solved[to]) {
+                        if (game.winner[to] == pl) {
                             Solver::solve(n, pl, to);
                             cover[n] = -1;
                             pms[k*n+pl] = -1;
@@ -473,8 +473,8 @@ MSPMSolver::run()
             while (!q.empty()) {
                 int n = q.front();
                 q.pop();
-                if (!game->solved[n]) LOGIC_ERROR;
-                const bool pl = game->winner[n];
+                if (!game.solved[n]) LOGIC_ERROR;
+                const bool pl = game.winner[n];
                 for (auto curedge = ins(n); *curedge != -1; curedge++) {
                     int from = *curedge;
                     if (cover[from]) continue;
@@ -515,7 +515,7 @@ MSPMSolver::run()
         int *pm = pms + k*i;
         if ((pm[0] == -1) == (pm[1] == -1)) LOGIC_ERROR;
         const int winner = pm[0] == -1 ? 0 : 1;
-        Solver::solve(i, winner, game->owner(i) == winner ? strategy[i] : -1);
+        Solver::solve(i, winner, owner(i) == winner ? strategy[i] : -1);
     }
 
     delete[] pms;

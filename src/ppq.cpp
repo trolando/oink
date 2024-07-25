@@ -30,7 +30,7 @@ namespace pg {
  * In <solve>, the left/right sides of the universal tree follow from Lehtinen et al's version.
  */
 
-PPQSolver::PPQSolver(Oink *oink, Game *game) : Solver(oink, game)
+PPQSolver::PPQSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 

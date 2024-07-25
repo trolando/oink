@@ -24,7 +24,7 @@ namespace pg {
 class TLSolver : public Solver
 {
 public:
-    TLSolver(Oink *oink, Game *game);
+    TLSolver(Oink& oink, Game& game);
     virtual ~TLSolver();
 
     virtual void run();

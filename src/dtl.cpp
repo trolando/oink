@@ -24,7 +24,7 @@
 
 namespace pg {
 
-DTLSolver::DTLSolver(Oink *oink, Game *game) : Solver(oink, game)
+DTLSolver::DTLSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -314,7 +314,7 @@ pearce_again:
 
         const bool is_tangle = (tangle.size() > 1) or
             ((unsigned int)str[n] == n) or
-            (str[n] == -1 and game->has_edge(n, n));
+            (str[n] == -1 and game.has_edge(n, n));
         if (!is_tangle) {
             tangle.clear();
             continue;
