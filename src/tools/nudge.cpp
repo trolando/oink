@@ -154,9 +154,8 @@ nudge(Game *game, int profile)
         pg::bitset mask(game->vertexcount());
         mask.set();
         mask[n] = false;
-        Game *subgame = game->extract_subgame(mask);
+        auto subgame = game->extract_subgame(mask);
         game->swap(*subgame);
-        delete subgame;
         return true;
     } else if (action == 3) {
         // remove the vertex and forward incoming edges if it has only 1 outgoing edge
@@ -174,9 +173,8 @@ nudge(Game *game, int profile)
             pg::bitset mask(game->vertexcount());
             mask.set();
             mask[n] = false;
-            Game *subgame = game->extract_subgame(mask);
+            auto subgame = game->extract_subgame(mask);
             game->swap(*subgame);
-            delete subgame;
             return true;
         }
     } else if (action == 4) {
@@ -273,9 +271,8 @@ main(int argc, char **argv)
     if (options.count("b")) {
         std::vector<int> scc;
         tarjan(game, rng(0, game->vertexcount()-1), scc, true);
-        Game *sub = game->extract_subgame(scc);
-        delete game;
-        game = sub;
+        auto sub = game->extract_subgame(scc);
+        game->swap(*sub);
     }
 
     /**
