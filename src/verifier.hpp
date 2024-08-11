@@ -27,6 +27,8 @@ class Verifier
 public:
     Verifier(Game& game, std::ostream &logger) : game(game), logger(logger) { }
 
+    // TODO: make a std::exception class for verification exceptions?
+
     /**
      * Verify the game strategy.
      */

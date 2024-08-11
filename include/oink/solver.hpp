@@ -53,17 +53,16 @@ protected:
     const bitset &disabled; // TODO change into subgame
     //inline bool disabled(int vertex) { return oink.disabled[vertex]; }
 
-    inline long nodecount() { return game.nodecount(); }
-    inline long edgecount() { return game.edgecount(); }
-
-    inline int priority(const int vertex) { return game.priority(vertex); }
-    inline int owner(const int vertex) { return game.owner(vertex); }
-    inline const int* outs(const int vertex) { return game.outedges() + game.firstout(vertex); }
-    inline const int* ins(const int vertex) { return game.inedges() + game.firstin(vertex); }
-    inline Game::_label_vertex label_vertex(int v) { return game.label_vertex(v); }
+    [[nodiscard]] long nodecount() const { return game.nodecount(); }
+    [[nodiscard]] long edgecount() const { return game.edgecount(); }
+    [[nodiscard]] int priority(int vertex) const { return game.priority(vertex); }
+    [[nodiscard]] int owner(int vertex) const { return game.owner(vertex); }
+    [[nodiscard]] const int* outs(int vertex) const { return game.outedges() + game.firstout(vertex); }
+    [[nodiscard]] const int* ins(int vertex) const { return game.inedges() + game.firstin(vertex); }
+    [[nodiscard]] Game::_label_vertex label_vertex(int v) const { return game.label_vertex(v); }
 
     void solve(int node, int winner, int strategy) { oink.solve(node, winner, strategy); }
-    void flush(void) { oink.flush(); }
+    void flush() { oink.flush(); }
 
 private:
     Oink& oink;

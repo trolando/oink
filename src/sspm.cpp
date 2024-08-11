@@ -588,7 +588,8 @@ SSPMSolver::run(int n_bits, int depth, int player)
         if (disabled[v]) continue;
         if (pm_d[l*v] != -1) {
             if (owner(v) != player) {
-                if (lift(v, -1, game.strategy[v], player)) logger << "error: " << v << " is not progressive!" << std::endl;
+                // TODO: don't rely on the strategy array in the Game class
+                if (lift(v, -1, game.getStrategy()[v], player)) logger << "error: " << v << " is not progressive!" << std::endl;
             }
         }
     }
@@ -602,7 +603,7 @@ SSPMSolver::run(int n_bits, int depth, int player)
 
             if (pm_d[l*v] != -1) {
                 if (owner(v) != player) {
-                    logger << " => " << label_vertex(game.strategy[v]);
+                    logger << " => " << label_vertex(game.getStrategy(v));
                 }
             }
 
@@ -616,7 +617,7 @@ SSPMSolver::run(int n_bits, int depth, int player)
 
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
-        if (pm_d[l*v] != -1) Solver::solve(v, 1-player, game.strategy[v]);
+        if (pm_d[l*v] != -1) Solver::solve(v, 1-player, game.getStrategy(v));
     }
 
     Solver::flush();

@@ -29,7 +29,7 @@
 
 namespace pg {
 
-Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.vertexcount()), disabled(game.solved)
+Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.vertexcount()), disabled(game.getSolved())
 {
     // ensure the vertices are ordered properly
     game.ensure_sorted();
@@ -318,12 +318,10 @@ Oink::solve(int node, int win, int strategy)
     // */
 
 #ifndef NDEBUG
-    if (game->solved[node] or disabled[node]) LOGIC_ERROR;
+    if (game->isSolved(node) or disabled[node]) LOGIC_ERROR;
 #endif
 
-    game->solved[node] = true;
-    game->winner[node] = win;
-    game->strategy[node] = (win == game->owner(node)) ? strategy : -1;
+    game->solve(node, win, strategy);
     disabled[node] = true; // disable
     todo.push(node);
 }
@@ -335,17 +333,18 @@ Oink::flush()
 
     while (todo.nonempty()) {
         int v = todo.pop();
-        bool winner = game->winner[v];
+        bool winner = game->getWinner(v);
 
         for (auto curedge = game->ins(v); *curedge != -1; curedge++) {
             int from = *curedge;
-            if (game->solved[from] or disabled[from]) continue;
-            if (game->owner(from) == winner) {
-                // node of winner
-                solve(from, winner, v);
-            } else {
-                // node of loser
-                if (--outcount[from] == 0) solve(from, winner, -1);
+            if (!game->isSolved(from) and !disabled[from]) {
+                if (game->owner(from) == winner) {
+                    // node of winner
+                    solve(from, winner, v);
+                } else {
+                    // node of loser
+                    if (--outcount[from] == 0) solve(from, winner, -1);
+                }
             }
         }
     }
@@ -376,7 +375,7 @@ Oink::solveLoop()
     if (bottomSCC) {
         do {
             // disable all solved vertices
-            disabled = game->solved;
+            disabled = game->getSolved();  // copy assignment
 
             // solve bottom SCC
             std::vector<int> sel;
@@ -402,7 +401,7 @@ Oink::solveLoop()
     } else {
         do {
             // disable all solved vertices
-            disabled = game->solved;
+            disabled = game->getSolved();
 
             // solve current subgame
             auto s = Solvers::construct(*solver, *this, *game);
@@ -450,10 +449,11 @@ Oink::run()
 
     /**
      * Deal with partial solutions
+     * TODO: test this code, or maybe disable partial solutions and only accept full solutions for verification??
      */
-    if (game->solved.any()) {
+    if (game->getSolved().any()) {
         for (int v=0; v<game->vertexcount(); v++) {
-            todo.push(v);
+            if (game->isSolved(v)) todo.push(v);
         }
         flush();
     }

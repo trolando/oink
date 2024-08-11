@@ -758,7 +758,8 @@ PTLSolver::solve()
                     Q.swap(SolvedQ0);
                     while (Q.nonempty()) {
                         const int v = Q.pop();
-                        if (!game.solved[v]) Solver::solve(v, 0, str[v]);
+                        // TODO: should we need the check?
+                        if (!game.isSolved(v)) Solver::solve(v, 0, str[v]);
                         G[v] = false; // remove from Game
                         attractVertices(0, v, G, S0, G);
                         attractTangles(0, v, G, S0, G);
@@ -782,7 +783,7 @@ PTLSolver::solve()
             Q.swap(SolvedQ0);
             while (Q.nonempty()) {
                 const int v = Q.pop();
-                if (!game.solved[v]) Solver::solve(v, 0, str[v]);
+                if (!game.isSolved(v)) Solver::solve(v, 0, str[v]);
                 G[v] = false; // remove from Game
                 attractVertices(0, v, G, S0, G);
                 attractTangles(0, v, G, S0, G);
@@ -793,7 +794,7 @@ PTLSolver::solve()
             Q.swap(SolvedQ1);
             while (Q.nonempty()) {
                 const int v = Q.pop();
-                if (!game.solved[v]) Solver::solve(v, 1, str[v]);
+                if (!game.isSolved(v)) Solver::solve(v, 1, str[v]);
                 G[v] = false; // remove from Game
                 attractVertices(1, v, G, S1, G);
                 attractTangles(1, v, G, S1, G);

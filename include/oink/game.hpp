@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2018 Tom van Dijk, Johannes Kepler University Linz
+ * Copyright 2017-2024 Tom van Dijk
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -376,23 +376,107 @@ public:
         return _outvec[vertex];
     }
 
-    class _label_vertex;
+    /**
+     * Get the isSolved bitset. Currently this is used to initialize
+     * the set of remaining/solvewd vertices in the solvers
+     * @return the bitset of solved vertices
+     */
+    [[nodiscard]] const bitset& getSolved() const
+    {
+        return solved;
+    }
 
+    /**
+     * Returns whether a vertex has been solved
+     * @param vertex the vertex
+     * @return whether it has been solved
+     */
+    [[nodiscard]] bool isSolved(int vertex) const
+    {
+        return solved[vertex];
+    }
+
+    /* TODO: some solvers currently want direct access to the int* with strategies
+       A better strategy is probably to factor this to a Solution class or have some
+       kind of move assignment to update the strategy... */
+    [[nodiscard]] int* getStrategy() const
+    {
+        return strategy;
+    }
+
+    /**
+     * If the vertex has been solved, returns the strategy if the winner is the owner.
+     * Otherwise, returns -1.
+     * @param vertex the vertex
+     * @return the strategy, or -1
+     */
+    [[nodiscard]] int getStrategy(int vertex) const
+    {
+        return strategy[vertex];
+    }
+
+    /**
+     * If the vertex has been solved, returns the winner of the vertex (0 or 1).
+     * @param vertex the vertex
+     * @return the winner, 0 or 1
+     */
+    [[nodiscard]] int getWinner(int vertex) const
+    {
+        return solved[vertex] ? (winner[vertex] ? 1 : 0) : -1;
+    }
+
+    /**
+     * Declare a vertex as solved, won by <winner> (0 or 1) with strategy <strategy>.
+     * @param vertex the vertex to set as solved/won
+     * @param winner the winner of the vertex, either 0 or 1
+     * @param strategy if the owner is the winner, then the strategy (next vertex to play to)
+     */
+    void solve(int vertex, int winner, int strategy)
+    {
+        this->solved[vertex] = true;
+        this->winner[vertex] = winner;
+        this->strategy[vertex] = owner(vertex) == winner ? strategy : -1;
+    }
+
+    /**
+     * Helper class for streaming to io streams (logging, etc.)
+     */
+    class _label_vertex
+    {
+    protected:
+        _label_vertex(const Game &g, int v) : g(g), v(v) { }
+        friend class Game;
+    public:
+        friend std::ostream& operator<<(std::ostream& out, const _label_vertex &lv) {
+            if (lv.v < 0 or lv.v >= lv.g.nodecount()) {
+                out << "<N/A>";
+            } else {
+                std::string* l = lv.g.rawlabel(lv.v);
+                if (l == nullptr or l->empty()) out << lv.v << "/" << lv.g.priority(lv.v);
+                else out << *l;
+            }
+            return out;
+        }
+    protected:
+        const Game &g;
+        const int v;
+    };
+
+    /**
+     * Wrap a vertex for writing to a stream. For example: cerr << label_vertex(v);
+     * @param v the vertex
+     * @return a helper class
+     */
     _label_vertex label_vertex(int v)
     {
         return _label_vertex(*this, v);
     }
 
-    _label_vertex label(int v)
-    {
-        return _label_vertex(*this, v);
-    }
-
+private:
     /**
      * Game fields
      */
 
-private:
     long n_vertices;        // number of vertices
     long n_edges;           // number of edges
     int *_priority;        // priority of each vertex
@@ -414,33 +498,10 @@ private:
     size_t e_allocated;    // number of edges allocated as virtual memory
     size_t e_size;         // number of entries used in edge array
 
-public:
     bitset solved;         // set true if vertex solved
     bitset winner;         // for solved vertices, set 1 if won by 1, else 0
     int *strategy;         // strategy for winning vertices
 
-    class _label_vertex
-    {
-        protected:
-            _label_vertex(Game &g, int v) : g(g), v(v) { }
-            friend class Game;
-        public:
-            friend std::ostream& operator<<(std::ostream& out, const _label_vertex &lv) {
-                if (lv.v < 0 or lv.v >= lv.g.nodecount()) {
-                    out << "<N/A>";
-                } else {
-                    std::string* l = lv.g.rawlabel(lv.v);
-                    if (l == NULL or l->empty()) out << lv.v << "/" << lv.g.priority(lv.v);
-                    else out << *l;
-                }
-                return out;
-            }
-        protected:
-            Game &g;
-            int v;
-    };
-
-private:
     void unsafe_permute(int *mapping); // apply a reordering
     
     boost::random::mt19937 generator;

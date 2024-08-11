@@ -22,9 +22,10 @@ namespace pg {
 NPPSolver::NPPSolver(Oink& oink, Game& game) :
     Solver(oink, game),
     totqueries(0), totpromos(0), maxqueries(0), maxpromos(0), queries(0), promos(0), doms(0),
-    maxprio(priority(nodecount() - 1)), strategy(game.strategy), inverse(new int[maxprio + 1]),
+    maxprio(priority(nodecount() - 1)), strategy(game.getStrategy()), inverse(new int[maxprio + 1]),
     Top(0), End(0), Pivot(0)
 {
+    // TODO: rewrite to no longer copy the current game.strategy
     uint resprio = maxprio / 20;
     resprio = (resprio >= 500) ? resprio : 500;
     outgame.resize(nodecount());

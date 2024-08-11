@@ -439,8 +439,8 @@ MSPMSolver::run()
                 for (auto curedge = outs(n); *curedge != -1; curedge++) {
                     int to = *curedge;
                     if (cover[to] == -2) continue;
-                    if (game.solved[to]) {
-                        if (game.winner[to] == pl) {
+                    if (game.isSolved(to)) {
+                        if (game.getWinner(to) == pl) {
                             Solver::solve(n, pl, to);
                             cover[n] = -1;
                             pms[k*n+pl] = -1;
@@ -473,8 +473,8 @@ MSPMSolver::run()
             while (!q.empty()) {
                 int n = q.front();
                 q.pop();
-                if (!game.solved[n]) LOGIC_ERROR;
-                const bool pl = game.winner[n];
+                if (!game.isSolved(n)) LOGIC_ERROR;
+                const bool pl = game.getWinner(n);
                 for (auto curedge = ins(n); *curedge != -1; curedge++) {
                     int from = *curedge;
                     if (cover[from]) continue;

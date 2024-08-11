@@ -400,7 +400,7 @@ int main(int argc, char **argv)
         // print winning nodes
         bool banner = false;
         for (int i=0; i<pg.nodecount(); i++) {
-            if (pg.solved[i] and pg.winner[i] == 0) {
+            if (pg.isSolved(i) and pg.getWinner(i) == 0) {
                 if (!banner) out << "won by even:";
                 banner = true;
                 // out << " " << i; // << "(" << pg.priority(i) << ")";
@@ -410,7 +410,7 @@ int main(int argc, char **argv)
         if (banner) out << std::endl;
         banner = false;
         for (int i=0; i<pg.nodecount(); i++) {
-            if (pg.solved[i] and pg.winner[i] == 1) {
+            if (pg.isSolved(i) and pg.getWinner(i) == 1) {
                 if (!banner) out << "won by odd:";
                 banner = true;
                 out << " " << pg.label_vertex(i);

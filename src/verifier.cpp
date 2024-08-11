@@ -45,40 +45,40 @@ Verifier::verify(bool fullgame, bool even, bool odd)
      * This turns each dominion into a single player game.
      * Also some trivial checks are performed.
      */
-    for (int i=0; i<n_vertices; i++) {
+    for (int v=0; v < n_vertices; v++) {
         // (for full solutions) check whether every vertex is won
-        if (!game.solved[i]) {
+        if (!game.isSolved(v)) {
             if (fullgame) throw "not every vertex is won";
             else continue;
         }
 
-        const bool winner = game.winner[i];
+        const bool winner = game.getWinner(v) ;
 
         if (winner == 0 and !even) continue; // whatever
         if (winner == 1 and !odd) continue; // whatever
 
-        if (winner == game.owner(i)) {
+        if (winner == game.owner(v)) {
             // if winner, check whether the strategy stays in the dominion
-            int str = game.strategy[i];
+            int str = game.getStrategy(v);
             if (str == -1) {
                 throw "winning vertex has no strategy";
-            } else if (!game.has_edge(i, str)) {
+            } else if (!game.has_edge(v, str)) {
                 throw "strategy is not a valid move";
-            } else if (!game.solved[str] or game.winner[str] != winner) {
+            } else if (!game.isSolved(str) or game.getWinner(str) != winner) {
                 throw "strategy leaves dominion";
             }
             n_strategies++; // number of checked strategies
         } else {
             // if loser, check whether the loser can escape
-            for (auto curedge = game.outs(i); *curedge != -1; curedge++) {
+            for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
                 int to = *curedge;
-                if (!game.solved[to] or game.winner[to] != winner) {
-                    logger << "escape edge from " << game.label_vertex(i) << " to " << game.label_vertex(to) << std::endl;
+                if (!game.isSolved(to) or game.getWinner(to) != winner) {
+                    logger << "escape edge from " << game.label_vertex(v) << " to " << game.label_vertex(to) << std::endl;
                     throw "loser can escape";
                 }
             }
             // and of course check that no strategy is set
-            if (game.strategy[i] != -1) throw "losing vertex has strategy";
+            if (game.getStrategy(v) != -1) throw "losing vertex has strategy";
         }
     }
 
@@ -93,12 +93,12 @@ Verifier::verify(bool fullgame, bool even, bool odd)
 
     int64_t pre = 0;
 
-    for (int i=n_vertices-1; i>=0; i--) {
+    for (int v = n_vertices - 1; v >= 0; v--) {
         // only if a dominion
-        if (!game.solved[i]) continue;
+        if (!game.isSolved(v)) continue;
 
-        int prio = game.priority(i);
-        int winner = game.winner[i];
+        int prio = game.priority(v);
+        int winner = game.getWinner(v);
 
         // only compute SCC for a (probably) top vertex
         if (winner == 0 and !even) continue; // don't check even dominions
@@ -108,13 +108,13 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         if (winner == (prio&1)) continue;
 
         // only run the check if not yet done at priority <prio>
-        if (done[i] == prio) continue;
+        if (done[v] == prio) continue;
 
         // set <bot> (in tarjan search) to current pre
         int64_t bot = pre;
 
-        // start the tarjan search at vertex <i>
-        st.push(i);
+        // start the tarjan search at vertex <v>
+        st.push(v);
 
         while (!st.empty()) {
             int v = st.top();
@@ -134,9 +134,9 @@ Verifier::verify(bool fullgame, bool even, bool odd)
              */
             int min = low[v];
             bool pushed = false;
-            if (game.strategy[v] != -1) {
-                int to = game.strategy[v];
-                if (to > i) {
+            if (game.getStrategy(v) != -1) {
+                int to = game.getStrategy(v);
+                if (to > v) {
                     // skip if to higher priority
                 } else if (done[to] == prio) {
                     // skip if already found scc (done[to] set to prio)
@@ -152,7 +152,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
                     int to = *curedge;
                     // skip if to higher priority
-                    if (to > i) continue;
+                    if (to > v) continue;
                     // skip if already found scc (done[to] set to prio)
                     if (done[to] == prio) continue;
                     // check if visited in this search
@@ -193,8 +193,8 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 if (n == v) break;
             }
 
-            bool cycles = scc_size > 1 or game.strategy[v] == v or
-                (game.strategy[v] == -1 and game.has_edge(v, v));
+            bool cycles = scc_size > 1 or game.getStrategy(v) == v or
+                (game.getStrategy(v) == -1 and game.has_edge(v, v));
 
             if (cycles && (max_prio&1) == (prio&1)) {
                 /**
