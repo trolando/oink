@@ -391,15 +391,15 @@ Game::parse_solution(std::istream &in)
         // get node
         int ident = stoi(token);
         if (ident < 0 || ident >= n_vertices) {
-            throw "node index out of bounds";
+            throw std::runtime_error("node index out of bounds");
         }
 
-        if (solved[ident]) throw "node already solved";
+        if (solved[ident]) throw std::runtime_error("node already solved");
 
         // parse winner
         int w;
-        if (!(ss >> w)) throw "missing winner";
-        if (w!= 0 && w!= 1) throw "invalid winner";
+        if (!(ss >> w)) throw std::runtime_error("missing winner");
+        if (w!= 0 && w!= 1) throw std::runtime_error("invalid winner");
 
         // set winner
         solved[ident] = true;
@@ -408,8 +408,8 @@ Game::parse_solution(std::istream &in)
         // parse strategy
         if (w == _owner[ident]) {
             int str;
-            if (!(ss >> str)) throw "missing strategy for winning node";
-            // if (!has_edge(ident, str)) throw "strategy not successor of node";
+            if (!(ss >> str)) throw std::runtime_error("missing strategy for winning node");
+            // if (!has_edge(ident, str)) throw std::runtime_error("strategy not successor of node");
             // actually this is already checked by the verifier
             strategy[ident] = str;
         } else {

@@ -222,14 +222,14 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
     uint64_t n;
 
     inp.read(buf, 6);
-    if (!inp) throw "expecting parity game specification";
-    if (strncmp(buf, "parity", 6) != 0) throw "expecting parity game specification";
+    if (!inp) throw std::runtime_error("expecting parity game specification");
+    if (strncmp(buf, "parity", 6) != 0) throw std::runtime_error("expecting parity game specification");
 
     skip_whitespace(rd);
-    if (!read_uint64(rd, &n)) throw "missing number of nodes";
+    if (!read_uint64(rd, &n)) throw std::runtime_error("missing number of nodes");
 
     skip_whitespace(rd);
-    if (rd->sbumpc() != ';') throw "missing ';'";
+    if (rd->sbumpc() != ';') throw std::runtime_error("missing ';'");
 
     // check if next token is 'start'
     // that means "start" <initial vertex id> ";"
@@ -310,7 +310,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 
             char ch;
             skip_whitespace(rd);
-            if (!(inp >> ch)) throw "missing ; to end line";
+            if (!(inp >> ch)) throw std::runtime_error("missing ; to end line");
             if (ch == ',') continue; // next successor
             if (ch == ';') break; // end of line
             if (ch == '\"') {

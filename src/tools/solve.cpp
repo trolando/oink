@@ -268,8 +268,8 @@ int main(int argc, char **argv)
             pg = PGParser::parse_pgsolver_renumber(std::cin, options.count("no-loops") == 0 and options.count("no") == 0);
         }
         out << "parity game with " << pg.nodecount() << " nodes and " << pg.edgecount() << " edges." << std::endl;
-    } catch (const char *err) {
-        out << "parsing error: " << err << std::endl;
+    } catch (std::runtime_error &err) {
+        out << "parsing error: " << err.what() << std::endl;
         return -1;
     }
 
@@ -285,8 +285,8 @@ int main(int argc, char **argv)
             file.close();
             out << "solution parsed." << std::endl;
         }
-    } catch (const char *err) {
-        out << "parsing error: " << err << std::endl;
+    } catch (std::runtime_error &err) {
+        out << "parsing error: " << err.what() << std::endl;
         return -1;
     }
 
@@ -378,8 +378,8 @@ int main(int argc, char **argv)
             double vend = wctime();
             out << "solution verified (" << v.numberOfStrategies() << " strategies)." << std::endl;
             out << "verification took " << std::fixed << (vend - vbegin) << " sec." << std::endl;
-        } catch (const char *err) {
-            out << "verification error: " << err << std::endl;
+        } catch (std::runtime_error &err) {
+            out << "verification error: " << err.what() << std::endl;
             return -1;
         }
     }

@@ -61,8 +61,8 @@ main(int argc, const char **argv)
         std::cout << "verified in " << (end - begin) << " sec." << std::endl;
         
         return 0;
-    } catch (const char *err) {
-        std::cerr << err << std::endl;
+    } catch (std::runtime_error &err) {
+        std::cerr << err.what() << std::endl;
         return -1;
     }
 }

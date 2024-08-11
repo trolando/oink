@@ -253,8 +253,8 @@ main(int argc, char **argv)
         } else {
             *game = PGParser::parse_pgsolver(std::cin, false);
         }
-    } catch (const char *err) {
-        std::cerr << "parsing error: " << err << std::endl;
+    } catch (std::runtime_error &err) {
+        std::cerr << "parsing error: " << err.what() << std::endl;
         return -1;
     }
 

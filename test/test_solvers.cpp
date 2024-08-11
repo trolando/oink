@@ -184,8 +184,8 @@ test_solver(Game &game, const std::string& solverid, double &time, std::ostream 
     try {
         Verifier v(game, log);
         v.verify(true, true, true);
-    } catch (const char *err) {
-        log << "verification error: " << err << std::endl;
+    } catch (std::runtime_error &err) {
+        log << "verification error: " << err.what() << std::endl;
         return 2;
     }
 
@@ -370,8 +370,8 @@ main(int argc, char **argv)
                     times[id] += time;
                 }
                 std::cout << std::endl;
-            } catch (const char *s) {
-                std::cout << s << std::endl;
+            } catch (std::runtime_error &err) {
+                std::cout << err.what() << std::endl;
                 std::cout << "not a parity game input?!" << std::endl;
             }
         }

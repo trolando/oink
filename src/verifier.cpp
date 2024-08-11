@@ -48,7 +48,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
     for (int v=0; v < n_vertices; v++) {
         // (for full solutions) check whether every vertex is won
         if (!game.isSolved(v)) {
-            if (fullgame) throw "not every vertex is won";
+            if (fullgame) throw std::runtime_error("not every vertex is won");
             else continue;
         }
 
@@ -61,11 +61,11 @@ Verifier::verify(bool fullgame, bool even, bool odd)
             // if winner, check whether the strategy stays in the dominion
             int str = game.getStrategy(v);
             if (str == -1) {
-                throw "winning vertex has no strategy";
+                throw std::runtime_error("winning vertex has no strategy");
             } else if (!game.has_edge(v, str)) {
-                throw "strategy is not a valid move";
+                throw std::runtime_error("strategy is not a valid move");
             } else if (!game.isSolved(str) or game.getWinner(str) != winner) {
-                throw "strategy leaves dominion";
+                throw std::runtime_error("strategy leaves dominion");
             }
             n_strategies++; // number of checked strategies
         } else {
@@ -74,11 +74,11 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 int to = *curedge;
                 if (!game.isSolved(to) or game.getWinner(to) != winner) {
                     logger << "escape edge from " << game.label_vertex(v) << " to " << game.label_vertex(to) << std::endl;
-                    throw "loser can escape";
+                    throw std::runtime_error("loser can escape");
                 }
             }
             // and of course check that no strategy is set
-            if (game.getStrategy(v) != -1) throw "losing vertex has strategy";
+            if (game.getStrategy(v) != -1) throw std::runtime_error("losing vertex has strategy");
         }
     }
 
@@ -210,7 +210,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 delete[] done;
                 delete[] low;
 
-                throw "loser can win";
+                throw std::runtime_error("loser can win");
             }
 
             /**
