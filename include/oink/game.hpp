@@ -71,12 +71,16 @@ public:
      */
     Game(int count, int ecount = -1);
 
+    Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, std::vector<std::vector<int>>& edges, std::vector<std::string*>& labels);
+
     /**
      * Construct a deep clone of an existing parity game.
      * Does not clone the vector representation.
      * Does not clone the <in> array.
      */
     Game(const Game& other);
+
+    Game(Game&& other) noexcept;
 
     /**
      * Deconstructor.
@@ -140,12 +144,6 @@ public:
      * NOTE: uses the edge arrays.
      */
     int find_edge(int from, int to);
-
-    /**
-     * Parse a pgsolver game.
-     * After parse_pgsolver(x), the state of the object is as after constructor Game(x).
-     */
-    void parse_pgsolver(std::istream &in, bool removeBadLoops=true);
 
     /**
      * Parse a [full or partial] pgsolver solution.
@@ -506,6 +504,8 @@ private:
     
     boost::random::mt19937 generator;
     inline long rng(long low, long high) { return boost::random::uniform_int_distribution<> (low, high)(generator); }
+
+    friend class PGParser;
 };
 
 }

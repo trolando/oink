@@ -29,6 +29,7 @@
 #include "cxxopts.hpp" 
 #include "oink/oink.hpp"
 #include "oink/solvers.hpp"
+#include "oink/pgparser.hpp"
 #include "verifier.hpp"
 #include "tools/getrss.h"
 
@@ -256,10 +257,15 @@ int main(int argc, char **argv)
             if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
             std::ifstream file(filename, std::ios_base::binary);
             in.push(file);
-            pg.parse_pgsolver(in, options.count("no-loops") == 0 and options.count("no") == 0);
+            // time it
+            auto begin = wctime();
+            //pg = PGParser::parse_pgsolver(in, options.count("no-loops") == 0 and options.count("no") == 0);
+            pg = PGParser::parse_pgsolver_renumber(in, options.count("no-loops") == 0 and options.count("no") == 0);
+            auto end = wctime();
+            out << "parsing took " << std::fixed << (end-begin) << " sec." << std::endl;
             file.close();
         } else {
-            pg.parse_pgsolver(std::cin, options.count("no-loops") == 0 and options.count("no") == 0);
+            pg = PGParser::parse_pgsolver_renumber(std::cin, options.count("no-loops") == 0 and options.count("no") == 0);
         }
         out << "parity game with " << pg.nodecount() << " nodes and " << pg.edgecount() << " edges." << std::endl;
     } catch (const char *err) {

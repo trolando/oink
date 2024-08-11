@@ -22,6 +22,7 @@
 
 #include "cxxopts.hpp"
 #include "oink/game.hpp"
+#include "oink/pgparser.hpp"
 
 using namespace std;
 using namespace pg;
@@ -247,10 +248,10 @@ main(int argc, char **argv)
     try {
         if (options.count("input")) {
             std::ifstream file(options["input"].as<std::string>());
-            game->parse_pgsolver(file, false);
+            *game = PGParser::parse_pgsolver(file, false);
             file.close();
         } else {
-            game->parse_pgsolver(std::cin, false);
+            *game = PGParser::parse_pgsolver(std::cin, false);
         }
     } catch (const char *err) {
         std::cerr << "parsing error: " << err << std::endl;

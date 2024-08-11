@@ -70,6 +70,7 @@ target_sources(oink
   PRIVATE
     # Core files
     src/game.cpp
+    src/pgparser.cpp
     src/oink.cpp
     src/scc.cpp
     src/solvers.cpp

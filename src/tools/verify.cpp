@@ -20,6 +20,7 @@
 
 #include "oink/game.hpp"
 #include "verifier.hpp"
+#include "oink/pgparser.hpp"
 
 using namespace std;
 using namespace pg;
@@ -42,8 +43,7 @@ main(int argc, const char **argv)
 
     try {
         std::ifstream inp(argv[1]);
-        Game pg;
-        pg.parse_pgsolver(inp, false);
+        Game pg = PGParser::parse_pgsolver_renumber(inp, false);
         inp.close();
         std::cout << "game loaded." << std::endl;
 

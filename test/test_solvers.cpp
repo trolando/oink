@@ -37,6 +37,7 @@
 #include "oink/solver.hpp"
 #include "verifier.hpp"
 #include "lace.h"
+#include "oink/pgparser.hpp"
 
 using namespace pg;
 namespace fs = boost::filesystem;
@@ -307,7 +308,7 @@ main(int argc, char **argv)
 
     setsighandlers();
 
-    if (opt_workers >= 0) lace_start(opt_workers, 1000000UL);
+    if (opt_workers >= 0) lace_start(opt_workers, 10000000UL);
 
     int final_res = 0;
     std::stringstream log;
@@ -351,8 +352,7 @@ main(int argc, char **argv)
             std::ifstream inp(cp.c_str(), std::ios_base::binary);
             in.push(inp);
             try {
-                Game game;
-                game.parse_pgsolver(in, opt_loops);
+                Game game = PGParser::parse_pgsolver_renumber(in, opt_loops);
                 inp.close();
                 total++;
                 for (const auto& id : solvers) {

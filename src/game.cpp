@@ -49,6 +49,45 @@ Game::Game() : _owner(0), solved(0), winner(0)
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
 
+Game::Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, std::vector<std::vector<int>>& edges, std::vector<std::string*>& labels) : Game(nv, ne)
+{
+    n_vertices = nv;
+    n_edges = ne;
+
+    // copy priorities
+    std::move(priorities.begin(), priorities.end(), _priority);
+
+    // copy owners
+    _owner = owners;
+
+    // copy edges
+    int e = 0;
+    for (auto v=0; v<n_vertices; v++) {
+        const auto f = e;
+        _firstouts[v] = e;
+        for (auto & to : edges[v]) {
+            _outedges[e++] = to;
+        }
+        _outcount[v] = e-f;
+        _outedges[e++] = -1;
+    }
+    e_size = e;
+
+    // copy labels
+    for (auto v=0; v<n_vertices; v++) {
+        if (labels[v] != nullptr) _label[v] = new std::string(*labels[v]);
+    }
+
+    // check if ordered
+    is_ordered = true;
+    for (int i=1; i<n_vertices; i++) {
+        if (_priority[i-1] > _priority[i]) {
+            is_ordered = false;
+            break;
+        }
+    }
+}
+
 Game::~Game()
 {
     for (int i=0; i<n_vertices; i++) {
@@ -155,47 +194,9 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
 
-/**
- * Helper functions for parsing a PGSolver format parity game.
- */
-
-static void
-skip_whitespace(std::streambuf *rd)
+Game::Game(Game&& other) noexcept : Game()
 {
-    // read whitespace
-    while (true) {
-        int ch;
-        if ((ch=rd->sgetc()) == EOF) return;
-        if (ch != ' ' and ch != '\n' and ch != '\t' and ch != '\r') break;
-        rd->sbumpc();
-    }
-}
-
-static void
-skip_line(std::streambuf *rd)
-{
-    while (true) {
-        int ch;
-        if ((ch=rd->sbumpc()) == EOF) return;
-        if (ch == '\n' or ch == '\r') return;
-    }
-}
-
-static bool
-read_uint64(std::streambuf *rd, uint64_t *res)
-{
-    uint64_t r = 0;
-    int ch;
-    if ((ch=rd->sgetc()) == EOF) return false;
-    if (ch < '0' or ch > '9') { return false; }
-    while (true) {
-        rd->sbumpc();
-        r = (10*r)+(ch-'0');
-        if ((ch=rd->sgetc()) == EOF) break;
-        if (ch < '0' or ch > '9') { break; }
-    }
-    *res = r;
-    return true;
+    swap(other);
 }
 
 void
@@ -371,148 +372,6 @@ Game::find_edge(int from, int to)
         if (_outedges[idx] == to) return idx;
     }
     return -1;
-}
-
-void
-Game::parse_pgsolver(std::istream &inp, bool removeBadLoops)
-{
-    std::streambuf *rd = inp.rdbuf();
-
-    char buf[64];
-    uint64_t n;
-
-    /**
-     * Read header line...
-     * "parity" <number of nodes> ;
-     */
-
-    inp.read(buf, 6);
-    if (!inp) throw "expecting parity game specification";
-    if (strncmp(buf, "parity", 6) != 0) throw "expecting parity game specification";
-
-    skip_whitespace(rd);
-    if (!read_uint64(rd, &n)) throw "missing number of nodes";
-
-    skip_whitespace(rd);
-    if (rd->sbumpc() != ';') throw "missing ';'";
-
-    // check if next token is 'start'
-    {
-        skip_whitespace(rd);
-        int ch = rd->sgetc();
-        if (ch == 's') skip_line(rd);
-    }
-
-    /**
-     * Construct game...
-     */
-
-    Game res(n+1, true);
-    swap(res);
-
-    /**
-     * Parse the nodes...
-     */
-
-    int node_count = 0; // number of read nodes
-    solved.set(); // we use solved to store whether a node has not yet been read
-
-    while (node_count < n_vertices) {
-        uint64_t id;
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &id)) {
-            // we expect maybe one more node...
-            if (node_count == n_vertices-1) {
-                v_resize(node_count);
-                // ignore rest, they can be bigger
-                break;
-            }
-            throw "unable to read id";
-        }
-        if (id >= (unsigned)n_vertices) throw "invalid id";
-
-        if (!solved[id]) throw "duplicate id";
-        solved[id] = false;
-        node_count++;
-
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &n)) throw "missing priority";
-        if (n > INT_MAX) throw "priority too high"; // don't be ridiculous
-        _priority[id] = n;
-
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &n)) throw "missing owner";
-
-        if (n == 0) { /* nothing */ }
-        else if (n == 1) { _owner[id] = true; }
-        else { throw "invalid owner"; }
-
-        _label[id] = 0;
-        e_start(id);
-
-        bool has_self = false;
-        int count = 0;
-
-        // parse successors and optional label
-        for (;;) {
-            skip_whitespace(rd);
-            if (!read_uint64(rd, &n)) throw "missing successor";
-            if (n >= (uint64_t)n_vertices) {
-                std::cout << "id " << id << " with successor " << n << std::endl;
-                throw "invalid successor";
-            }
-
-            if (id == n and removeBadLoops and (_owner[id] != (_priority[id]&1))) {
-                has_self = true;
-            } else {
-                // add edge to the vector
-                e_add(id, n);
-                count++;
-            }
-
-            char ch;
-            skip_whitespace(rd);
-            if (!(inp >> ch)) throw "missing ; to end line";
-            if (ch == ',') continue; // next successor
-            if (ch == ';') break; // end of line
-            if (ch == '\"') {
-                _label[id] = new std::string();
-                while (true) {
-                    inp >> ch;
-                    if (ch == '\"') break;
-                    *_label[id] += ch;
-                }
-                // now read ;
-                skip_whitespace(rd);
-                if (!(inp >> ch) or ch != ';') throw "missing ; to end line";
-            }
-            break;
-        }
-
-        if (has_self and count == 0) {
-            e_add(id, id);
-            count++;
-        }
-
-        e_finish();
-    }
-
-    if (solved.any()) {
-        std::cout << "count : " << solved.count() << std::endl;
-        throw "missing nodes";
-    }
-
-    // check if ordered...
-    is_ordered = true;
-    for (int i=1; i<n_vertices; i++) {
-        if (_priority[i-1] > _priority[i]) {
-            is_ordered = false;
-            break;
-        }
-    }
-
-    // ensure strategy empty
-    std::fill(strategy, strategy+n_vertices, static_cast<int>(~0));
 }
 
 void

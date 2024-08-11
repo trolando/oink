@@ -17,6 +17,7 @@
 #include <fstream>
 
 #include "oink/oink.hpp"
+#include "oink/pgparser.hpp"
 
 int
 main(int argc, char** argv)
@@ -27,10 +28,10 @@ main(int argc, char** argv)
     pg::Game pg;
     if (argc > 1) {
         std::ifstream file(argv[1], std::ios_base::binary);
-        pg.parse_pgsolver(file);
+        pg = pg::PGParser::parse_pgsolver(file, true);
         file.close();
     } else {
-        pg.parse_pgsolver(std::cin);
+        pg = pg::PGParser::parse_pgsolver(std::cin, true);
     }
 
     /**
