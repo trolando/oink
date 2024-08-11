@@ -19,7 +19,7 @@
 
 #include <queue>
 
-#include "pp.hpp"
+#include "solvers/pp.hpp"
 
 namespace pg {
 

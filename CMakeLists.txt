@@ -76,29 +76,29 @@ target_sources(oink
     src/solver.cpp
     src/verifier.cpp
     # Solvers
-    src/zlk.cpp
-    src/zlkq.cpp
-    src/npp.cpp
-    src/pp.cpp
-    src/ppp.cpp
-    src/rr.cpp
-    src/dp.cpp
-    src/rrdp.cpp
-    src/ppq.cpp
-    src/fpi.cpp
-    src/fpj.cpp
-    src/psi.cpp
-    src/ssi.cpp
-    src/spm.cpp
-    src/mspm.cpp
-    src/tspm.cpp
-    src/sspm.cpp
-    src/qpt.cpp
-    src/tl.cpp
-    src/rtl.cpp
-    src/zlkpp.cpp
-    src/ptl.cpp
-    src/dtl.cpp
+    src/solvers/zlk.cpp
+    src/solvers/zlkq.cpp
+    src/solvers/npp.cpp
+    src/solvers/pp.cpp
+    src/solvers/ppp.cpp
+    src/solvers/rr.cpp
+    src/solvers/dp.cpp
+    src/solvers/rrdp.cpp
+    src/solvers/ppq.cpp
+    src/solvers/fpi.cpp
+    src/solvers/fpj.cpp
+    src/solvers/psi.cpp
+    src/solvers/ssi.cpp
+    src/solvers/spm.cpp
+    src/solvers/mspm.cpp
+    src/solvers/tspm.cpp
+    src/solvers/sspm.cpp
+    src/solvers/qpt.cpp
+    src/solvers/tl.cpp
+    src/solvers/rtl.cpp
+    src/solvers/zlkpp.cpp
+    src/solvers/ptl.cpp
+    src/solvers/dtl.cpp
     ${OINK_HDRS}
 )
 
