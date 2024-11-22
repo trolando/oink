@@ -46,6 +46,7 @@ PTL             | Progressive Tangle Learning (research variant)
 SPPTL           | Single-player Progressive Tangle Learning (research variant)
 DTL             | Distance Tangle Learning (research variant based on 'good path length')
 IDTL            | Interleaved Distance Tangle Learning (interleaved variant of DTL)
+TLQ             | Tangle Learning applied to the quasi-polynomial time recursive algorithm
 
 ### Fixpoint algorithms
 

@@ -39,6 +39,7 @@
 #include "solvers/ppq.hpp"
 #include "solvers/ptl.hpp"
 #include "solvers/dtl.hpp"
+#include "solvers/tlq.hpp"
 
 namespace pg {
 
@@ -76,6 +77,7 @@ Solvers::Solvers()
     _add("rtl", "recursive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<RTLSolver>(oink, game); });
     _add("ortl", "one-sided recursive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<ORTLSolver>(oink, game); });
     _add("tl", "tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLSolver>(oink, game); });
+    _add("tlq", "qpt recursive with tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLQSolver>(oink, game); });
 }       
 
 void
