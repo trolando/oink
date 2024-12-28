@@ -93,12 +93,12 @@ Verifier::verify(bool fullgame, bool even, bool odd)
 
     int64_t pre = 0;
 
-    for (int v = n_vertices - 1; v >= 0; v--) {
+    for (int top = n_vertices - 1; top >= 0; top--) {
         // only if a dominion
-        if (!game.isSolved(v)) continue;
+        if (!game.isSolved(top)) continue;
 
-        int prio = game.priority(v);
-        int winner = game.getWinner(v);
+        int prio = game.priority(top);
+        int winner = game.getWinner(top);
 
         // only compute SCC for a (probably) top vertex
         if (winner == 0 and !even) continue; // don't check even dominions
@@ -108,13 +108,13 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         if (winner == (prio&1)) continue;
 
         // only run the check if not yet done at priority <prio>
-        if (done[v] == prio) continue;
+        if (done[top] == prio) continue;
 
         // set <bot> (in tarjan search) to current pre
         int64_t bot = pre;
 
-        // start the tarjan search at vertex <v>
-        st.push(v);
+        // start the tarjan search at vertex <top>
+        st.push(top);
 
         while (!st.empty()) {
             int v = st.top();
@@ -136,7 +136,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
             bool pushed = false;
             if (game.getStrategy(v) != -1) {
                 int to = game.getStrategy(v);
-                if (to > v) {
+                if (game.priority(to) > prio) {
                     // skip if to higher priority
                 } else if (done[to] == prio) {
                     // skip if already found scc (done[to] set to prio)
@@ -152,7 +152,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
                     int to = *curedge;
                     // skip if to higher priority
-                    if (to > v) continue;
+                    if (game.priority(to) > prio) continue;
                     // skip if already found scc (done[to] set to prio)
                     if (done[to] == prio) continue;
                     // check if visited in this search
@@ -185,6 +185,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
              */
             int max_prio = -1;
             int scc_size = 0;
+
             for (auto it=res.rbegin(); it!=res.rend(); it++) {
                 int n = *it;
                 if (game.priority(n) > max_prio) max_prio = game.priority(n);
