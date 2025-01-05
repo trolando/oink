@@ -204,7 +204,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 logger << "\033[1;31mscc where loser wins\033[m with priority \033[1;34m" << max_prio << "\033[m";
                 for (auto it=res.rbegin(); it!=res.rend(); it++) {
                     int n = *it;
-                    logger << " " << n;
+                    logger << " " << game.label_vertex(n);
                     if (n == v) break;
                 }
                 logger << std::endl;
