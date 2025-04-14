@@ -36,7 +36,8 @@ public:
 
 enum class MeasureKind {
     Small,
-    Ordered
+    Ordered,
+    Succinct
 };
 
 
@@ -109,6 +110,62 @@ private:
     int val(int tgt) const;
     bool bump(int tgt);
 };
+
+
+class Succinct : public Measures
+{
+public:
+    Succinct(const Game &game, const int player);
+    Succinct(const Succinct &other);
+    virtual ~Succinct();
+
+    void copy(int from, int to) override; // copy <from> to <to>
+    void copy_bot(int to) override; // load bottom in <to>
+    void copy_top(int to) override; // load top in <to>
+    void copy_from(const Measures& other, int from, int to) override;
+    void see(int tgt, int priority) override; // let <tgt> see a priority
+    int compare(int i, int j) const override; // compare <i> and <j>
+    bool eq(int i, int j) const override;
+    void stream(std::ostream &out, int i) const override;
+    bool is_top(int tgt) const override;
+    Measures* clone() const override { return new Succinct(*this); }
+    void set(const Measures& other) override;
+    void inc(int i) override; // smallest increment to <tgt>
+
+private:
+    int player; // are we doing even or odd?
+    int l; // number of bits: ceil_log2(nodecount())
+    int h; // depth of the ordered tree: roughly max_prio/2
+           // the even tree (max_prio/2)+1: 1=>1, 2=>2, 3=>2, 4=>3, etc
+           // the odd tree (max_prio+1)/2 : 1=>1, 2=>1, 3=>2, 4=>2, etc
+    bitset bits; // the bits (l bits per entry)
+    int *depth; // depth per bit (assuming it fits in a 32 bit integer)
+    long N; // nodecount
+
+    void trunc(int target, int pindex);
+    void prog(int target, int pindex); // what is h?
+
+
+/*
+    int *data;
+    int *counts;
+    int n;
+    int d;
+    int l;
+    bitset top;
+    bitset priorities;
+    int player;
+    int N; // number of vertices of player priority
+    int max_pr; // highest priority of the player
+    int max_opp_pr; // highest priority of the opponent
+
+    bool up(int tgt, int priority);
+    int val(int tgt) const;
+    bool bump(int tgt);*/
+};
+
+
+
 
 
 class GPMSolver : public Solver

@@ -569,6 +569,273 @@ void Ordered::stream(std::ostream &out, int i) const
     }
 }
 
+Succinct::Succinct(const Game &game, const int player)
+{
+    this->player = player;
+    this->N = game.nodecount();
+    this->l = 1;
+    while ((1L<<(this->l)) <= N) this->l++;
+    int max_pr = game.priority(game.nodecount()-1);
+    this->h = player == 0 ? (max_pr/2)+1 : (max_pr+1)/2;
+    bits.resize(l*(4+N));
+    depth = new int[l*(4+N)];
+    std::fill(depth, depth + (l*(4+N)), '\0');
+}
+
+Succinct::Succinct(const Succinct &src)
+{
+    this->player = src.player;
+    this->N = src.N;
+    this->l = src.l;
+    this->h = src.h;
+    this->bits = src.bits;
+    this->depth = new int[l*(4+N)];
+    std::copy(src.depth, src.depth+(l*(4+N)), this->depth);
+}
+
+Succinct::~Succinct()
+{
+    delete[] depth;
+}
+
+void
+Succinct::set(const Measures &other)
+{
+    auto src = dynamic_cast<const Succinct*>(&other);
+
+    delete[] depth;
+
+    this->player = src->player;
+    this->N = src->N;
+    this->l = src->l;
+    this->h = src->h;
+    this->bits = src->bits;
+    this->depth = new int[l*(4+N)];
+    std::copy(src->depth, src->depth+(l*(4+N)), this->depth);
+}
+
+void Succinct::copy(int from, int to)
+{
+    int fi = l*(4+from);
+    int ti = l*(4+to);
+    for (int i=0; i<l; i++) bits[ti+i] = bits[fi+i];
+    std::copy(depth+fi, depth+fi+l, depth+ti);
+}
+
+void Succinct::copy_from(const Measures& mother, int from, int to)
+{
+    const Succinct *other = dynamic_cast<const Succinct*>(&mother);
+    // assuming that the two Measures have the same value for l...
+    int fi = l*(4+from);
+    int ti = l*(4+to);
+    for (int i=0; i<l; i++) bits[ti+i] = other->bits[fi+i];
+    std::copy(other->depth+fi, other->depth+fi+l, depth+ti);
+}
+
+void Succinct::copy_bot(int to)
+{
+    int ti = l*(4+to);
+    for (int i=0; i<l; i++) bits[ti+i] = 0;
+    std::fill(depth+ti, depth+ti+l, '\0');
+}
+
+void Succinct::copy_top(int to)
+{
+    depth[l*(4+to)] = -1;
+}
+
+bool Succinct::is_top(int target) const
+{
+    return depth[l*(4+target)] == -1;
+}
+
+void Succinct::trunc(int target, int pindex)
+{
+    int ti = l*(4+target);
+    // check if Top
+    if (depth[ti] != -1) {
+        // [pindex],....,....,.... => [pindex],0*
+        for (int i=l-1; i>=0 and depth[ti+i] > pindex; i--) {
+            bits[ti+i] = 0;
+            depth[ti+i] = pindex+1;
+        }
+    }
+}
+
+void Succinct::see(int target, int priority)
+{
+    int pindex = player == 0 ? h-(priority+1)/2-1 : h-priority/2-1;
+
+    if ((priority&1) != player) {
+        trunc(target, pindex);
+        return;
+    }
+
+    int ti = l*(4+target);
+
+    // std::cout << "l=" << l << " h=" << h << " pindex=" << pindex << std::endl;
+
+    // Case 1: Top -> Top
+    if (depth[ti] == -1) return; // nothing to do, it's top!
+    
+    // Case 2: Some bits below [pindex], so we can let [pindex] go from ..e to ..10*
+    if (depth[ti+l-1] > pindex) {
+        // we know the last one is below pindex. So pindex ends with epsilon currently.
+        // i.e., xxxe,...,... => xxx10*
+        int i;
+        for (i=l-1; i>=0 and depth[ti+i] > pindex; i--) {
+            bits[ti+i] = 0;
+            depth[ti+i] = pindex;
+        }
+        bits[ti+i+1] = 1;        
+        return;
+    }
+
+    // Case 3: no bits below [pindex], so analyze lowest nonempty level
+    //         that is: all "depth" are <= pindex
+    //         that is: we simply find the next higher measure
+    //
+    // Case 3a: the lowest has a 0 ==> to epsilon, but special case for bottom
+    // ?0111 b  => ?e?
+    // ?0       => ?,0
+    // ?0111    => ?,0000
+    // when we find 0 on deepest, set tail to 0 and deepest+1
+    //
+    // Case 3b: the bottom one has only 1s (cannot be empty)
+    //          next one is not empty
+    // ?,111 => ?100
+    // set to 1, then only 0s, at deepest-1
+
+    // Case 3c: the bottom one has only 1s (cannot be empty)
+    //          next one is empty
+    // ?,,111   => ?,100
+    // set to 1, then only 0s, at deepest-1
+
+    // first zero: ,00000
+
+    int deepest = depth[ti+l-1];
+    for (int i=l-1; i>=0; i--) {
+        if (depth[ti+i] == deepest) {
+            if (bits[ti+i] == 0) {
+                for (int j=i; j<l; j++) {
+                    depth[ti+j] = deepest+1;
+                }
+                return;
+            } else {
+                // set every later bit to 0
+                bits[ti+i] = 0;
+            }
+        } else {
+            bits[ti+i+1] = 1;
+            for (int j=i+1; j<l; j++) {
+                depth[ti+j] = deepest-1;
+            }
+            return;
+        }
+    }
+
+    // if we're here, then...
+    // ,1111 => 1000,
+    // 1111 => T
+    if (deepest == 0) {
+        depth[ti] = -1; // to Top!
+    } else {
+        bits[ti] = 1; // everything else is set to 0 already
+        for (int i=0; i<l; i++) {
+            depth[ti+i] = deepest-1;
+        }
+    }
+}
+
+void Succinct::inc(int target)
+{
+    see(target, player);
+}
+
+/**
+ * Return -1 if value[i] < value[j]
+ * Return  0 if value[i] = value[j]
+ * Return  1 if value[i] > value[j]
+ */
+int Succinct::compare(int u, int v) const
+{
+    int ti = l*(4+u);
+    int tj = l*(4+v);
+    
+    // Handle \Top cases
+    if (depth[ti] == -1) {
+        if (depth[tj] == -1) return 0;
+        else return 1;
+    } else if (depth[tj] == -1) {
+        return -1;
+    }
+
+    // Non-\Top case
+    for (int i=0; i<l; i++) {
+        if (depth[ti+i] < depth[tj+i]) {
+            // j has epsilon, so if i has 0, -1
+            if (bits[ti+i] == 0) return -1;
+            else return 1;
+        } else if (depth[ti+i] > depth[tj+i]) {
+            // mirror case
+            // i has epsilon, so if j has 0, 1
+            if (bits[tj+i] == 0) return 1;
+            else return -1;
+        } else if (bits[ti+i] < bits[tj+i]) {
+            // 0 < 1
+            return -1;
+        } else if (bits[ti+i] > bits[tj+i]) {
+            // 1 > 0
+            return 1;
+        }
+    }
+    return 0;
+}
+
+bool Succinct::eq(int u, int v) const
+{
+    int ti = l*(4+u);
+    int tj = l*(4+v);
+    
+    // Handle \Top cases
+    if (depth[ti] == -1) {
+        if (depth[tj] == -1) return true;
+        else return false;
+    } else if (depth[tj] == -1) {
+        return false;
+    }
+
+    // Non-\Top case
+    for (int i=0; i<l; i++) {
+        if (depth[ti+i] != depth[tj+i]) return false;
+        if (bits[ti+i] != bits[tj+i]) return false;
+    }
+
+    return true;
+}
+
+void Succinct::stream(std::ostream &out, int target) const
+{
+    int ti = l*(4+target);
+    if (depth[ti] == -1) {
+        out << "\033[1;33mTop\033[m";
+    } else {
+        out << "[ ";
+        int j=0;
+        for (int i=0; i<h; i++) {
+            if (i>0) out << ",";
+            int c=0;
+            while (j<l and depth[ti+j]==i) {
+                c++;
+                out << bits[ti+j];
+                j++;
+            }
+            if (c == 0) out << "ε";
+        }
+        out << " ]";
+    }
+}
+
 GPMSolver::GPMSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
@@ -943,6 +1210,8 @@ std::optional<MeasureKind> parse_measure_kind(std::string& opts) {
         return { MeasureKind::Ordered };
     } else if (opts == "spm" || opts == "small" || opts == "SPM" || opts == "SMALL") {
         return { MeasureKind::Small };
+    } else if (opts == "sspm"  || opts == "succinct" || opts == "SSPM" || opts == "SUCCINCT") {
+        return { MeasureKind::Succinct };
     }
 
     return std::nullopt;
@@ -954,6 +1223,8 @@ Measures *new_measure(const MeasureKind kind, const Game &game, const int player
             return new Small(game, player);
         case MeasureKind::Ordered:
             return new Ordered(game, player);
+        case MeasureKind::Succinct:
+            return new Succinct(game, player);
         default:
             THROW_ERROR("Measure kind exists but is not implemented");
     }
@@ -965,7 +1236,10 @@ void stream_measure_kind(std::ostream& logger, MeasureKind kind) {
             logger << "Small Progress Measures (SPM)";
             break;
         case MeasureKind::Ordered:
-            logger << "Ordered Progress Measure (OPM)";
+            logger << "Ordered Progress Measures (OPM)";
+            break;
+        case MeasureKind::Succinct:
+            logger << "Succinct Progress Measures (SSPM)";
             break;
         default:
             THROW_ERROR("Measure kind exists but is not implemented");
@@ -974,7 +1248,7 @@ void stream_measure_kind(std::ostream& logger, MeasureKind kind) {
 }
 
 void stream_measure_kinds(std::ostream& logger) {
-    logger << "spm, opm";
+    logger << "small, ordered, succinct";
 }
 
 }
