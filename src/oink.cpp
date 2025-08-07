@@ -362,8 +362,10 @@ void _solve_loop(Oink* s)
 }
 
 VOID_TASK_1(solve_loop, Oink*, s)
+void solve_loop_CALL(lace_worker* lace, Oink* s)
 {
     _solve_loop(s);
+    (void)lace;
 }
 
 void
@@ -509,10 +511,10 @@ Oink::run()
 
     if (Solvers::isParallel(*solver)) {
         if (workers >= 0) {
-            if (lace_workers() == 0) {
-                lace_start(workers, 0);
-                logger << "initialized Lace with " << lace_workers() << " workers" << std::endl;
-                RUN(solve_loop, this);
+            if (lace_worker_count() == 0) { // FIXME we should use lace_is_running or something like that, but it doesn't exist yet
+                lace_start(workers, 0, 0);
+                logger << "initialized Lace with " << lace_worker_count() << " workers" << std::endl;
+                solve_loop(this);
                 lace_stop();
             } else {
                 logger << "running parallel (Lace already initialized)" << std::endl;

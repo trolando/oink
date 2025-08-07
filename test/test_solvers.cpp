@@ -308,7 +308,7 @@ main(int argc, char **argv)
 
     setsighandlers();
 
-    if (opt_workers >= 0) lace_start(opt_workers, 10000000UL);
+    if (opt_workers >= 0) lace_start(opt_workers, 10000000UL, 0);
 
     int final_res = 0;
     std::stringstream log;

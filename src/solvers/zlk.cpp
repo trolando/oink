@@ -49,15 +49,16 @@ typedef struct
 par_helper** pvec;
 
 VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
+void attractParT_CALL(lace_worker* lace, int pl, int cur, int r, ZLKSolver* s)
 {
-    s->attractParT(__lace_worker, __lace_dq_head, pl, cur, r);
+    s->attractParT(lace, pl, cur, r);
 }
 
 void
-ZLKSolver::attractParT(WorkerP* __lace_worker, Task* __lace_dq_head, int pl, int cur, int r)
+ZLKSolver::attractParT(lace_worker* lace, int pl, int cur, int r)
 {
     int c = 0;
-    par_helper* ours = pvec[LACE_WORKER_ID];
+    par_helper* ours = pvec[lace_worker_id()];
 
     // attract to <cur>
     for (auto curedge = ins(cur); *curedge != -1; curedge++) {
@@ -72,7 +73,7 @@ ZLKSolver::attractParT(WorkerP* __lace_worker, Task* __lace_dq_head, int pl, int
                     winning[from] = pl;
                     strategy[from] = cur;
                     ours->items[ours->count++] = from;
-                    SPAWN(attractParT, pl, from, r, this);
+                    attractParT_SPAWN(lace, pl, from, r, this);
                     c++;
                     break;
                 }
@@ -116,31 +117,32 @@ ZLKSolver::attractParT(WorkerP* __lace_worker, Task* __lace_dq_head, int pl, int
                 winning[from] = pl;
                 strategy[from] = -1;
                 ours->items[ours->count++] = from;
-                SPAWN(attractParT, pl, from, r, this);
+                attractParT_SPAWN(lace, pl, from, r, this);
                 c++;
             }
         }
     }
 
-    while (c) { SYNC(attractParT); c--; }
+    while (c) { attractParT_SYNC(lace); c--; }
 }
 
 TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
+int attractPar_CALL(lace_worker* lace, int i, int r, std::vector<int>* R, ZLKSolver* s)
 {
-    return s->attractPar(__lace_worker, __lace_dq_head, i, r, R);
+    return s->attractPar(lace, i, r, R);
 }
 
 int
-ZLKSolver::attractPar(WorkerP* __lace_worker, Task* __lace_dq_head, int i, int r, std::vector<int>* R)
+ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
 {
     const int pr = priority(i);
     const int pl = pr & 1;
 
     // initialize pvec (set count to 0) for all workers
-    const int W = lace_workers();
+    const int W = lace_worker_count();
     for (int j=0; j<W; j++) pvec[j]->count = 0;
 
-    par_helper* ours = pvec[LACE_WORKER_ID];
+    par_helper* ours = pvec[lace_worker_id()];
     int spawn_count = 0;
 
     for (; i>=0; i--) {
@@ -149,7 +151,7 @@ ZLKSolver::attractPar(WorkerP* __lace_worker, Task* __lace_dq_head, int i, int r
         if (!to_inversion and priority(i) != pr) break;
         if ((priority(i)&1) != pl) { // search until parity inversion
             // first SYNC on all children, who knows this node may be attracted
-            while (spawn_count) { SYNC(attractParT); spawn_count--; }
+            while (spawn_count) { attractParT_SYNC(lace); spawn_count--; }
             // after SYNC, check if node <i> is now attracted.
             if (_r < 0) break; // not attracted, so we're done!
             else continue; // already done
@@ -176,12 +178,12 @@ ZLKSolver::attractPar(WorkerP* __lace_worker, Task* __lace_dq_head, int i, int r
         winning[i] = pl;
         strategy[i] = -1; // head nodes have no strategy (for now)
         ours->items[ours->count++] = i;
-        SPAWN(attractParT, pl, i, r, this);
+        attractParT_SPAWN(lace, pl, i, r, this);
         spawn_count++;
     }
 
     // first SYNC on all children (if any)
-    while (spawn_count) { SYNC(attractParT); spawn_count--; }
+    while (spawn_count) { attractParT_SYNC(lace); spawn_count--; }
 
     // update R
     size_t to_reserve = R->size();
@@ -442,15 +444,11 @@ ZLKSolver::run()
     int i = inverse[max_prio];
     int next_r = 0;
 
-    bool usePar = lace_workers() != 0;
-    // WorkerP* __lace_worker = NULL;
-    // Task* __lace_dq_head = NULL;
+    bool usePar = lace_worker_count() != 0;
 
     if (usePar) {
         // initialize Lace and also allocate space for pvec for each worker
-        const int W = lace_workers();
-        // __lace_worker = lace_get_worker();
-        // __lace_dq_head = lace_get_head(__lace_worker);
+        const int W = lace_worker_count();
         pvec = (par_helper**)malloc(sizeof(par_helper*[W]));
         for (int i=0; i<W; i++) pvec[i] = (par_helper*)malloc(sizeof(par_helper) + sizeof(int[nodecount()]));
     }
@@ -500,7 +498,7 @@ ZLKSolver::run()
 #endif
 
             // attract until inversion and add to A
-            int j = usePar ? RUN(attractPar, i, r, A, this) : attractExt(i, r, A);
+            int j = usePar ? pg::attractPar(i, r, A, this) : attractExt(i, r, A);
             // j is now the next i (subgame), or -1 if the subgame is empty
 
 #ifndef NDEBUG
@@ -686,7 +684,7 @@ ZLKSolver::run()
     }
 
     if (usePar) {
-        const int W = lace_workers();
+        const int W = lace_worker_count();
         for (int i=0; i<W; i++) free(pvec[i]);
         free(pvec);
     }

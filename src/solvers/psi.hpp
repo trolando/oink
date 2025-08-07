@@ -46,10 +46,10 @@ public:
     int mark_solved_seq(void);
     int switch_strategy_seq(int pl);
 
-    void compute_val(WorkerP*, Task*, int v);
-    void compute_all_val(WorkerP*, Task*);
-    int switch_strategy(WorkerP*, Task*, int pl, int begin, int count);
-    void run_par(WorkerP*, Task*);
+    void compute_val(lace_worker*, int v);
+    void compute_all_val(lace_worker*);
+    int switch_strategy(lace_worker*, int pl, int begin, int count);
+    void run_par(lace_worker*);
 };
 
 }

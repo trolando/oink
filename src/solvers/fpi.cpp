@@ -31,27 +31,28 @@ FPISolver::~FPISolver()
 }
 
 TASK_3(int, update_block_rec, FPISolver*, solver, int, i, int, n)
+int update_block_rec_CALL(lace_worker* lace, FPISolver* solver, int i, int n)
 {
-    return solver->update_block_rec(__lace_worker, __lace_dq_head, i, n);
+    return solver->update_block_rec(lace, i, n);
 }
 
 int
-FPISolver::update_block_rec(WorkerP* __lace_worker, Task* __lace_dq_head, int i, int n)
+FPISolver::update_block_rec(lace_worker* lace, int i, int n)
 {
     if (n>128) {
         // because dynamic bitset is not thread safe, work in blocks of 64...
         if (i&127) {
             // start not yet aligned
             int N = 128 - (i&127);
-            SPAWN(update_block_rec, this, i+N, n-N);
+            update_block_rec_SPAWN(lace, this, i+N, n-N);
             int a = this->updateBlock(i, N);
-            int b = SYNC(update_block_rec);
+            int b = update_block_rec_SYNC(lace);
             return a+b;
         } else {
             int N = (n/128)*64;
-            SPAWN(update_block_rec, this, i+N, n-N);
-            int a = CALL(update_block_rec, this, i, N);
-            int b = SYNC(update_block_rec);
+            update_block_rec_SPAWN(lace, this, i+N, n-N);
+            int a = update_block_rec_CALL(lace, this, i, N);
+            int b = update_block_rec_SYNC(lace);
             return a+b;
         }
     } else {
@@ -60,20 +61,21 @@ FPISolver::update_block_rec(WorkerP* __lace_worker, Task* __lace_dq_head, int i,
 }
 
 VOID_TASK_4(freeze_thaw_reset_rec, FPISolver*, solver, int, i, int, n, int, p)
+void freeze_thaw_reset_rec_CALL(lace_worker* lace, FPISolver* solver, int i, int n, int p)
 {
     if (n>128) {
         // because dynamic bitset is not thread safe, work in blocks of 64...
         if (i&127) {
             // start not yet aligned
             int N = 128 - (i&127);
-            SPAWN(freeze_thaw_reset_rec, solver, i+N, n-N, p);
+            freeze_thaw_reset_rec_SPAWN(lace, solver, i+N, n-N, p);
             solver->freezeThawReset(i, N, p);
-            SYNC(freeze_thaw_reset_rec);
+            freeze_thaw_reset_rec_SYNC(lace);
         } else {
             int N = (n/128)*64;
-            SPAWN(freeze_thaw_reset_rec, solver, i+N, n-N, p);
-            CALL(freeze_thaw_reset_rec, solver, i, N, p);
-            SYNC(freeze_thaw_reset_rec);
+            freeze_thaw_reset_rec_SPAWN(lace, solver, i+N, n-N, p);
+            freeze_thaw_reset_rec_CALL(lace, solver, i, N, p);
+            freeze_thaw_reset_rec_SYNC(lace);
         }
     } else {
         solver->freezeThawReset(i, n, p);
@@ -177,12 +179,13 @@ FPISolver::freezeThawReset(int i, int n, int p)
 }
 
 VOID_TASK_1(fpi_run_par, FPISolver*, _this)
+void fpi_run_par_CALL(lace_worker* lace, FPISolver* _this)
 {
-    _this->run_par(__lace_worker, __lace_dq_head);
+    _this->run_par(lace);
 }
 
 void
-FPISolver::run_par(WorkerP* __lace_worker, Task* __lace_dq_head)
+FPISolver::run_par(lace_worker* lace)
 {
     int d = this->priority(this->nodecount()-1);
     int *p_start = new int[d+1];
@@ -211,10 +214,10 @@ FPISolver::run_par(WorkerP* __lace_worker, Task* __lace_dq_head)
     while (p <= d) {
         if (p_len[p] == 0) {
             p++;
-        } else if (CALL(update_block_rec, this, p_start[p], p_len[p])) {
+        } else if (update_block_rec_CALL(lace, this, p_start[p], p_len[p])) {
             // something changed, freeze and reset
             if (p != 0) {
-                CALL(freeze_thaw_reset_rec, this, 0, p_start[p], p);
+                freeze_thaw_reset_rec_CALL(lace, this, 0, p_start[p], p);
                 p = 0;
             }
             this->iterations++;
@@ -248,7 +251,7 @@ FPISolver::runPar()
 
     memset(frozen, 0, sizeof(int[nodecount()])); // initially no vertex is frozen (we don't freeze at level 0)
 
-    RUN(fpi_run_par, this);
+    fpi_run_par(this);
 
     // done
     for (int v=0; v<nodecount(); v++) {
@@ -355,7 +358,7 @@ FPISolver::runSeq()
 void
 FPISolver::run()
 {
-    if (lace_workers() != 0) {
+    if (lace_worker_count() != 0) {
         runPar();
     } else {
         runSeq();

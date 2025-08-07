@@ -86,12 +86,13 @@ PSISolver::si_top_val(int a)
  * currently chosen strategy
  */
 VOID_TASK_2(compute_val, int, v, PSISolver *, s)
+void compute_val_CALL(lace_worker* lace, int v, PSISolver* s)
 {
-    s->compute_val(__lace_worker, __lace_dq_head, v);
+    s->compute_val(lace, v);
 }
 
 void
-PSISolver::compute_val(WorkerP* __lace_worker, Task* __lace_dq_head, int v)
+PSISolver::compute_val(lace_worker* lace, int v)
 {
     // mark node as visited
     done[v] = 1;
@@ -109,17 +110,17 @@ PSISolver::compute_val(WorkerP* __lace_worker, Task* __lace_dq_head, int v)
     while (from != -1) {
         int next = next_in[from];
         if (next != -1) {
-            SPAWN(compute_val, from, this);
+            compute_val_SPAWN(lace, from, this);
             count++;
         } else {
-            CALL(compute_val, from, this);
+            compute_val_CALL(lace, from, this);
             break;
         }
         from = next;
     }
 
     while (count--) {
-        SYNC(compute_val);
+        compute_val_SYNC(lace);
     }
 } 
 
@@ -127,6 +128,7 @@ PSISolver::compute_val(WorkerP* __lace_worker, Task* __lace_dq_head, int v)
  * Fill first_in and next_in based on strategies
  */
 VOID_TASK_2(set_in, int, begin, int, count)
+void set_in_CALL(lace_worker* lace, int begin, int count)
 {
     // some cut-off point...
     if (count <= 64) {
@@ -141,9 +143,9 @@ VOID_TASK_2(set_in, int, begin, int, count)
             }
         }
     } else {
-        SPAWN(set_in, begin+count/2, count-count/2);
-        CALL(set_in, begin, count/2);
-        SYNC(set_in);
+        set_in_SPAWN(lace, begin+count/2, count-count/2);
+        set_in_CALL(lace, begin, count/2);
+        set_in_SYNC(lace);
     }
 }
 
@@ -151,6 +153,7 @@ VOID_TASK_2(set_in, int, begin, int, count)
  * Resets "done" array before recomputing valuations. Only resets if done equals 1 or 2
  */
 VOID_TASK_2(reset_done, int, begin, int, count)
+void reset_done_CALL(lace_worker* lace, int begin, int count)
 {
     // some cut-off point...
     if (count <= 64) {
@@ -164,9 +167,9 @@ VOID_TASK_2(reset_done, int, begin, int, count)
             // TODO printf("%d: %d\n", n, done[n]);
         }
     } else {
-        SPAWN(reset_done, begin+count/2, count-count/2);
-        CALL(reset_done, begin, count/2);
-        SYNC(reset_done);
+        reset_done_SPAWN(lace, begin+count/2, count-count/2);
+        reset_done_CALL(lace, begin, count/2);
+        reset_done_SYNC(lace);
     }
 }
 
@@ -174,27 +177,28 @@ VOID_TASK_2(reset_done, int, begin, int, count)
  * Master function for (re)computing the valuations of all unsolved nodes
  */
 VOID_TASK_1(compute_all_val, PSISolver*, s)
+void compute_all_val_CALL(lace_worker* lace, PSISolver* s)
 {
-    s->compute_all_val(__lace_worker, __lace_dq_head);
+    s->compute_all_val(lace);
 }
 
 void
-PSISolver::compute_all_val(WorkerP* __lace_worker, Task* __lace_dq_head)
+PSISolver::compute_all_val(lace_worker* lace)
 {
     // reset "done" (for nodes that are not disabled or won)
-    CALL(reset_done, 0, nodecount());
-    CALL(set_in, 0, nodecount());
+    reset_done_CALL(lace, 0, nodecount());
+    set_in_CALL(lace, 0, nodecount());
     // for all unsolved enabled nodes that go to sink, run compute val
     int count = 0;
     for (int i=0; i<nodecount(); i++) {
         if (done[i] == 3) continue;
         if (str[i] == -1 or halt[str[i]]) { // str[i] is -2 for disabled and not -1 for won
-            SPAWN(compute_val, i, this);
+            compute_val_SPAWN(lace, i, this);
             count++;
         }
     }
     while (count--) {
-        SYNC(compute_val);
+        compute_val_SYNC(lace);
     }
 }
 
@@ -243,6 +247,7 @@ PSISolver::compute_vals_seq(void)
  * Mark all nodes with even_cycle (done==2) as won (done==3, won==1)
  */
 TASK_3(int, mark_solved_rec, PSISolver*, s, int, begin, int, count)
+int mark_solved_rec_CALL(lace_worker* lace, PSISolver* s, int begin, int count)
 {
     // some cut-off point...
     if (count < 64) {
@@ -257,9 +262,9 @@ TASK_3(int, mark_solved_rec, PSISolver*, s, int, begin, int, count)
         }
         return res;
     } else {
-        SPAWN(mark_solved_rec, s, begin+count/2, count-count/2);
-        int res = CALL(mark_solved_rec, s, begin, count/2);
-        return res + SYNC(mark_solved_rec);
+        mark_solved_rec_SPAWN(lace, s, begin+count/2, count-count/2);
+        int res = mark_solved_rec_CALL(lace, s, begin, count/2);
+        return res + mark_solved_rec_SYNC(lace);
     }
 }
 
@@ -281,6 +286,7 @@ PSISolver::mark_solved_seq(void)
  * Check if Even still wants to halt the path...
  */
 TASK_3(int, switch_halting, PSISolver*, s, int, begin, int, count)
+int switch_halting_CALL(lace_worker* lace, PSISolver* s, int begin, int count)
 {
     // some cut-off point...
     if (count <= 64) {
@@ -297,9 +303,9 @@ TASK_3(int, switch_halting, PSISolver*, s, int, begin, int, count)
 
         return res;
     } else {
-        SPAWN(switch_halting, s, begin+count/2, count-count/2);
-        int res = CALL(switch_halting, s, begin, count/2);
-        res += SYNC(switch_halting);
+        switch_halting_SPAWN(lace, s, begin+count/2, count-count/2);
+        int res = switch_halting_CALL(lace, s, begin, count/2);
+        res += switch_halting_SYNC(lace);
         return res;
     }
 }
@@ -308,12 +314,13 @@ TASK_3(int, switch_halting, PSISolver*, s, int, begin, int, count)
  * Implementation of greedy-all-switches strategy
  */
 TASK_4(int, switch_strategy, PSISolver*, s, int, pl, int, begin, int, count)
+int switch_strategy_CALL(lace_worker* lace, PSISolver* s, int pl, int begin, int count)
 {
-    return s->switch_strategy(__lace_worker, __lace_dq_head, pl, begin, count);
+    return s->switch_strategy(lace, pl, begin, count);
 }
 
 int
-PSISolver::switch_strategy(WorkerP* __lace_worker, Task* __lace_dq_head, int pl, int begin, int count)
+PSISolver::switch_strategy(lace_worker* lace, int pl, int begin, int count)
 {
     // some cut-off point...
     if (count < 64) {
@@ -347,9 +354,9 @@ PSISolver::switch_strategy(WorkerP* __lace_worker, Task* __lace_dq_head, int pl,
         }
         return res;
     } else {
-        SPAWN(switch_strategy, this, pl, begin+count/2, count-count/2);
-        int res = CALL(switch_strategy, this, pl, begin, count/2);
-        res += SYNC(switch_strategy);
+        switch_strategy_SPAWN(lace, this, pl, begin+count/2, count-count/2);
+        int res = switch_strategy_CALL(lace, this, pl, begin, count/2);
+        res += switch_strategy_SYNC(lace);
         return res;
     }
 }
@@ -438,23 +445,24 @@ PSISolver::print_debug()
 }
 
 VOID_TASK_1(psi_run_par, PSISolver*, _this)
+void psi_run_par_CALL(lace_worker* lace, PSISolver* _this)
 {
-    return _this->run_par(__lace_worker, __lace_dq_head);
+    return _this->run_par(lace);
 }
 
 void
-PSISolver::run_par(WorkerP* __lace_worker, Task* __lace_dq_head)
+PSISolver::run_par(lace_worker* lace)
 {
     for (;;) {
         ++this->major;
         if (this->trace) fmt::printf(this->logger, "\033[1;38;5;208mMajor iteration %d\033[m\n", this->major);
         for (;;) {
             ++this->minor;
-            CALL(compute_all_val, this);                            // update valuation
+            compute_all_val_CALL(lace, this);                            // update valuation
 #ifndef NDEBUG
             if (this->trace >= 3) this->print_debug();
 #endif
-            int count = CALL(switch_strategy, this, 1, 0, this->nodecount()); // switch strategies
+            int count = switch_strategy_CALL(lace, this, 1, 0, this->nodecount()); // switch strategies
             if (this->trace) fmt::printf(this->logger, "%d changed strategies for Odd\n", count);
             if (count == 0) break;                                  // if nothing left, done
         }
@@ -469,10 +477,10 @@ PSISolver::run_par(WorkerP* __lace_worker, Task* __lace_dq_head)
                 this->logger << ")" << std::endl;
             }
         }
-        int solved = CALL(mark_solved_rec, this, 0, this->nodecount());       // mark nodes won by Even
+        int solved = mark_solved_rec_CALL(lace, this, 0, this->nodecount());       // mark nodes won by Even
         if (this->trace) fmt::printf(this->logger, "%d nodes marked as won by Even\n", solved);
-        int count = CALL(switch_strategy, this, 0, 0, this->nodecount());     // switch strategies
-        count += CALL(switch_halting, this, 0, this->nodecount());     // switch halting strategies
+        int count = switch_strategy_CALL(lace, this, 0, 0, this->nodecount());     // switch strategies
+        count += switch_halting_CALL(lace, this, 0, this->nodecount());     // switch halting strategies
         if (this->trace) fmt::printf(this->logger, "%d changed strategies for Even\n", count);
         if (count == 0) break;                                      // if nothing left, done
     }
@@ -523,7 +531,7 @@ PSISolver::run()
         }
     }
 
-    if (lace_workers() == 0) {
+    if (lace_worker_count() == 0) {
         for (;;) {
             ++major;
             if (trace) fmt::printf(logger, "\033[1;38;5;208mMajor iteration %d\033[m\n", major);
@@ -555,7 +563,7 @@ PSISolver::run()
             if (count == 0) break;                                      // if nothing left, done
         }
     } else {
-        RUN(psi_run_par, this);
+        psi_run_par(this);
     }
 
     // Now set dominions and derive strategy for odd.
