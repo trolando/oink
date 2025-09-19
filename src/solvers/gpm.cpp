@@ -5,6 +5,44 @@
 
 namespace pg {
 
+
+// Append an integral value T to buf in little-endian.
+template <class T>
+inline void push_le(std::vector<std::byte>& buf, T v) {
+    static_assert(std::is_integral_v<T>, "push_le: T must be an integral type");
+    using U = std::make_unsigned_t<T>;
+    U x;
+    static_assert(sizeof(x) == sizeof(v), "sizes must match");
+    // bitwise copy to avoid implementation-defined casts for signed types
+    std::memcpy(&x, &v, sizeof(T));
+    for (size_t i = 0; i < sizeof(T); ++i) {
+        buf.push_back(std::byte((x >> (8*i)) & U{0xFF}));
+    }
+}
+
+// Read an integral value T from buf[offset..] (little-endian).
+template <class T>
+inline T read_le_at(const std::vector<std::byte>& buf, size_t offset) {
+    static_assert(std::is_integral_v<T>, "read_le_at: T must be an integral type");
+    using U = std::make_unsigned_t<T>;
+    U x = 0;
+    for (size_t i = 0; i < sizeof(T); ++i) {
+        x |= U(std::to_integer<uint8_t>(buf[offset + i])) << (8*i);
+    }
+    T v;
+    static_assert(sizeof(v) == sizeof(x), "sizes must match");
+    std::memcpy(&v, &x, sizeof(T));  // preserves bit pattern (handles signed)
+    return v;
+}
+
+template <class T>
+inline T read_le_advance(const std::vector<std::byte>& buf, size_t& cursor) {
+    T v = read_le_at<T>(buf, cursor);
+    cursor += sizeof(T);
+    return v;
+}
+
+
 Small::Small(const Game &game, const int player) : game(game)
 {
     this->player = player;
@@ -222,6 +260,32 @@ void Small::stream(std::ostream &out, int i) const
         for (int x=l-1; x >= 0; x--) out << " " << ip[x];
         out << " ]";
     }
+}
+
+std::vector<std::byte> Small::store(int tgt) const
+{
+    std::vector<std::byte> blob;
+    blob.reserve(static_cast<size_t>(l) * sizeof(int) + 1); // perf: avoid reallocs
+
+    int *tp = data + (tgt+4) * l;
+    for (int i=0; i<l; i++) {
+        push_le<int>(blob, *tp++);
+    }
+    push_le<uint8_t>(blob, top[tgt+4]);
+
+    return blob;
+}
+
+void Small::load(int tgt, const std::vector<std::byte>& blob)
+{
+    size_t cur = 0;
+
+    int* tp = data + (tgt + 4) * l;
+    for (int i = 0; i < l; ++i) {
+        *tp++ = read_le_advance<int>(blob, cur);
+    }
+
+    top[tgt + 4] = read_le_advance<uint8_t>(blob, cur);
 }
 
 Ordered::Ordered(const Game &game, const int player)
@@ -569,6 +633,33 @@ void Ordered::stream(std::ostream &out, int i) const
     }
 }
 
+std::vector<std::byte> Ordered::store(int tgt) const
+{
+    std::vector<std::byte> blob;
+    blob.reserve(static_cast<size_t>(l) * sizeof(int) + 1); // perf: avoid reallocs
+        
+    int *tp = data + (tgt+4) * l; 
+    for (int i=0; i<l; i++) {
+        push_le<int>(blob, *tp++);
+    }
+    push_le<uint8_t>(blob, top[tgt+4]);
+
+    return blob;
+}       
+    
+void Ordered::load(int tgt, const std::vector<std::byte>& blob)
+{       
+    size_t cur = 0;
+
+    int* tp = data + (tgt + 4) * l;
+    for (int i = 0; i < l; ++i) {
+        *tp++ = read_le_advance<int>(blob, cur);
+    }
+
+    top[tgt + 4] = read_le_advance<uint8_t>(blob, cur);
+}
+
+
 Succinct::Succinct(const Game &game, const int player)
 {
     this->player = player;
@@ -835,6 +926,32 @@ void Succinct::stream(std::ostream &out, int target) const
         out << " ]";
     }
 }
+
+std::vector<std::byte> Succinct::store(int tgt) const
+{   
+    std::vector<std::byte> blob;
+    blob.reserve(static_cast<size_t>(l) * (sizeof(uint8_t) + sizeof(int))); // perf: avoid reallocs
+
+    int ti = l*(4+tgt);
+    for (int i=0; i<l; i++) {
+        push_le<uint8_t>(blob, bits[ti+i]);
+        push_le<int>(blob, depth[ti+i]);
+    }
+    
+    return blob;
+}           
+     
+void Succinct::load(int tgt, const std::vector<std::byte>& blob)
+{       
+    size_t cur = 0;
+    
+    int ti = l*(4+tgt);
+    for (int i = 0; i < l; ++i) {
+        bits[ti+i] = read_le_advance<uint8_t>(blob, cur) != 0 ? 1 : 0;
+        depth[ti+i] = read_le_advance<int>(blob, cur);
+    }
+}       
+
 
 GPMSolver::GPMSolver(Oink& oink, Game& game) : Solver(oink, game)
 {

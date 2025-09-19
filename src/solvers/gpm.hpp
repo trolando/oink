@@ -2,6 +2,7 @@
 #define GPM_HPP
 
 #include <optional>
+#include <vector>
 
 #include "oink/solver.hpp"
 
@@ -30,6 +31,8 @@ public:
     virtual bool is_top(int tgt) const = 0;
     virtual Measures* clone() const = 0;
     virtual void set(const Measures& other) = 0;
+    virtual std::vector<std::byte> store(int tgt) const = 0;
+    virtual void load(int tgt, const std::vector<std::byte>& blob) = 0;
 
     Measures& operator=(const Measures& src) { this->set(src); return *this; }
 };
@@ -60,6 +63,9 @@ public:
     Measures* clone() const override { return new Small(*this); }
     void set(const Measures& other) override;
     void inc(int i) override; // smallest increment to <tgt>
+    std::vector<std::byte> store(int tgt) const override;
+    void load(int tgt, const std::vector<std::byte>& blob) override;
+
 
 private:
     int *data;
@@ -92,6 +98,8 @@ public:
     Measures* clone() const override { return new Ordered(*this); }
     void set(const Measures& other) override;
     void inc(int i) override; // smallest increment to <tgt>
+    std::vector<std::byte> store(int tgt) const override;
+    void load(int tgt, const std::vector<std::byte>& blob) override;
 
 private:
     int *data;
@@ -131,6 +139,8 @@ public:
     Measures* clone() const override { return new Succinct(*this); }
     void set(const Measures& other) override;
     void inc(int i) override; // smallest increment to <tgt>
+    std::vector<std::byte> store(int tgt) const override;
+    void load(int tgt, const std::vector<std::byte>& blob) override;
 
 private:
     int player; // are we doing even or odd?
