@@ -195,6 +195,8 @@ private:
     int lift_attempts = 0;
     uintqueue Queue;
 
+    bool use_shortcuts = true;
+
     //bitset R0; // remainder (non-Top, in-Game) for 0
     //bitset R1; // remainder (non-Top, in-Game) for 0
     //bitset B0; // bottom for 0

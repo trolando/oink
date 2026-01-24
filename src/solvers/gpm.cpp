@@ -1250,22 +1250,43 @@ GPMSolver::solve(Measures &pm, const int player)
 }
 
 bool
-GPMSolver::parseOptions(std::string& opts) {
-    std::optional<MeasureKind> parsed = parse_measure_kind(opts);
-    if (parsed.has_value()) {
-        measure_kind = *parsed;
-        if (trace) {
-            logger << "selected ";
-            stream_measure_kind(logger, measure_kind);
-            logger << " for GPM" << std::endl;
+GPMSolver::parseOptions(std::string& opts)
+{
+    std::string remaining = opts;
+
+    do {
+        size_t comma_index = remaining.find(',');
+        std::string opt = remaining.substr(0, comma_index);
+        if (opt == "noshortcuts" || opt == "no-shortcuts") {
+            use_shortcuts = false;
+        } else {
+            std::optional<MeasureKind> parsed = parse_measure_kind(opt);
+            if (parsed.has_value()) {
+                measure_kind = *parsed;
+            } else {
+                logger << "unrecognised option for GPM solver, possible options: ";
+                stream_measure_kinds(logger);
+                logger << ", no-shortcuts (separated by commas and no spaces)" << std::endl;
+                return false;
+            }
         }
-        return true;
-    } else {
-        logger << "unrecognised option for GPM solver, possible options: ";
-        stream_measure_kinds(logger);
-        logger << std::endl;
-        return false;
+        if (comma_index == std::string::npos) {
+            remaining = remaining.substr(remaining.size());
+        } else {
+            remaining = remaining.substr(comma_index + 1);
+        }
+    } while (!remaining.empty());
+
+    if (trace) {
+        logger << "selected ";
+        stream_measure_kind(logger, measure_kind);
+        logger << " for GPM" << std::endl;
+        if (!use_shortcuts) {
+            logger << "disabled shortcuts for GPM" << std::endl;
+        }
     }
+
+    return true;
 }
 
 void
@@ -1299,12 +1320,16 @@ GPMSolver::run()
         iterations++;
         if (c0) {
             c0 = update(*pm0, 0);
-            if (!c0 || (iterations%10) == 0) shortcuts(0, *pm0, *pm1);
+            if (use_shortcuts) {
+                if (!c0 || (iterations%10) == 0) shortcuts(0, *pm0, *pm1);
+            }
         }
 
         if (c1) {
             c1 = update(*pm1, 1);
-            if (!c1 || (iterations%10) == 0) shortcuts(1, *pm0, *pm1);
+            if (use_shortcuts) {
+                if (!c1 || (iterations%10) == 0) shortcuts(1, *pm0, *pm1);
+            }
         }
 
         if (!c0 && !c1) break;
