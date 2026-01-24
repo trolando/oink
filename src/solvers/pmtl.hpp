@@ -41,6 +41,7 @@ private:
     MeasureKind measure_kind = MeasureKind::Ordered;
     bool use_tangles = true;
     bool go_up = false;
+    bool use_shortcuts = true;
 
     std::vector<int*> tout; // for each tangle
     std::vector<int> *tin; // for each normal vertex

@@ -910,6 +910,8 @@ PMTLSolver::parseOptions(std::string& opts) {
             use_tangles = true;
         } else if (opt == "notangle" || opt == "notangles" || opt == "NOTANGLE" || opt == "NOTANGLES") {
             use_tangles = false;
+        } else if (opt == "noshortcuts" || opt == "no-shortcuts" || opt == "NOSHORTCUTS" || opt == "NO-SHORTCUTS") {
+            use_shortcuts = false;
         } else {
             std::optional<MeasureKind> parsed = parse_measure_kind(opt);
             if (parsed.has_value()) {
@@ -941,6 +943,9 @@ PMTLSolver::parseOptions(std::string& opts) {
             logger << "enabled tangle attractors for PMTL" << std::endl;
         } else {
             logger << "disabled tangle attractors for PMTL" << std::endl;
+        }
+        if (!use_shortcuts) {
+            logger << "disabled shortcuts for PMTL" << std::endl;
         }
     }
 
@@ -1006,7 +1011,7 @@ PMTLSolver::run()
                 c0 = update<false, false>(*pm0, *pm0b, 0);
             }
             pm0->set(*pm0b);
-            shortcuts(0, *pm0, *pm1, *pm1b);
+            if (use_shortcuts) shortcuts(0, *pm0, *pm1, *pm1b);
             evenlifts += lifts;
             if (!c0) {
                 solve(*pm0, 1);
@@ -1029,7 +1034,7 @@ PMTLSolver::run()
                 c1 = update<false, false>(*pm1, *pm1b, 1);
             }
             pm1->set(*pm1b);
-            shortcuts(1, *pm1, *pm0, *pm0b);
+            if (use_shortcuts) shortcuts(1, *pm1, *pm0, *pm0b);
             oddlifts += lifts;
             if (!c1) {
                 solve(*pm1, 0);
