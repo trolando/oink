@@ -21,7 +21,7 @@ if(NOT TARGET lace)
   endif()
 endif()
 
-find_package(Boost REQUIRED COMPONENTS filesystem iostreams regex system random CONFIG)
+find_package(Boost REQUIRED COMPONENTS filesystem iostreams regex random CONFIG)
 
 # Main library target
 add_library(oink STATIC)
