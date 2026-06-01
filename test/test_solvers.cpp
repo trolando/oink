@@ -50,6 +50,8 @@ bool opt_single = false;
 bool opt_loops = false;
 bool opt_wcwc = false;
 bool opt_sort = false;
+bool opt_progress = false;
+bool opt_show_log = false;
 int opt_workers = 0;
 int opt_trace = -1;
 std::optional<std::string> opt_solver_opts = {};
@@ -83,6 +85,30 @@ setsighandlers(void)
 {
     sig_int_handler = signal(SIGINT, catchsig);
 }
+
+/*------------------------------------------------------------------------*/
+
+/**
+ * Stream buffer that tees output to two underlying buffers simultaneously.
+ * Used to write solver log output to both the log stringstream and stdout
+ * when --show-log is active.
+ */
+class TeeBuf : public std::streambuf {
+    std::streambuf *buf1_, *buf2_;
+public:
+    TeeBuf(std::streambuf *b1, std::streambuf *b2) : buf1_(b1), buf2_(b2) {}
+protected:
+    int overflow(int c) override {
+        if (c == traits_type::eof()) return traits_type::eof();
+        if (buf1_->sputc(traits_type::to_char_type(c)) == traits_type::eof()) return traits_type::eof();
+        if (buf2_->sputc(traits_type::to_char_type(c)) == traits_type::eof()) return traits_type::eof();
+        return c;
+    }
+    std::streamsize xsputn(const char *s, std::streamsize n) override {
+        buf1_->sputn(s, n);
+        return buf2_->sputn(s, n);
+    }
+};
 
 /*------------------------------------------------------------------------*/
 
@@ -223,11 +249,13 @@ main(int argc, char **argv)
     for (const auto& id : Solvers::getSolverIDs()) {
         opts.add_options("Solvers")(id, Solvers::desc(id));
     }
-    opts.add_options("Solvers")("e,external", "External solver, e.g., 'python solver.py %I %O'", cxxopts::value<std::vector<std::string>>());
+    opts.add_options("Solvers")("e,external", "External solver as name:command, e.g., 'mysolv:python solver.py %I %O'", cxxopts::value<std::vector<std::string>>());
     opts.add_options("Solving")
-        ("t,trace", "Write trace with given level (0-3) to stdout", cxxopts::value<int>())
+        ("t,trace", "Set trace level (0-3) for solver logging (saved to .pg.log on failure; see --show-log)", cxxopts::value<int>())
         ("c,configure", "Additional configuration options for the solver", cxxopts::value<std::string>())
         ("w,workers", "Number of workers for parallel algorithms, or -1 for sequential, 0 for autodetect", cxxopts::value<int>()->default_value("-1"))
+        ("show-log", "Also write solver log output to stdout (use with -t to see trace live)")
+        ("progress", "Compact progress output for random games: overwrite each game line, only keep failures")
         ;
     opts.allow_unrecognised_options();
 
@@ -266,6 +294,8 @@ main(int argc, char **argv)
     opt_sort = options.count("sort") != 0;
     if (options.count("workers")) opt_workers = options["workers"].as<int>();
     if (options.count("trace")) opt_trace = options["trace"].as<int>();
+    opt_show_log = options.count("show-log") != 0;
+    opt_progress = options.count("progress") != 0;
 
     std::cout << "Selected solvers:";
 
@@ -279,11 +309,15 @@ main(int argc, char **argv)
     }
     if (options.count("external")) {
         for (auto& e : options["external"].as<std::vector<std::string>>()) {
-            Solvers::add(e, "external tool", 0, [&](Oink& oink, Game& game) {
-                return std::make_unique<ExternalSolver>(oink, game, e);
+            // Parse "name:command"; fall back to using the whole string as both if no colon
+            size_t colon = e.find(':');
+            std::string name = (colon != std::string::npos) ? e.substr(0, colon) : e;
+            std::string cmd  = (colon != std::string::npos) ? e.substr(colon + 1) : e;
+            Solvers::add(name, "external tool", 0, [cmd](Oink& oink, Game& game) {
+                return std::make_unique<ExternalSolver>(oink, game, cmd);
             });
-            solvers.push_back(e);
-            std::cout << " '" << e << "'";
+            solvers.push_back(name);
+            std::cout << " " << name;
         }
     }
     if (solvers.size() == 0) {
@@ -308,10 +342,23 @@ main(int argc, char **argv)
 
     setsighandlers();
 
+    // Set up tee stream: when --show-log is active, solver log output goes to both
+    // the log stringstream (for .pg.log files) and stdout.
+    std::stringstream log;
+    std::unique_ptr<TeeBuf>    tee_buf;
+    std::unique_ptr<std::ostream> tee_out;
+    if (opt_show_log) {
+        tee_buf = std::make_unique<TeeBuf>(log.rdbuf(), std::cout.rdbuf());
+        tee_out = std::make_unique<std::ostream>(tee_buf.get());
+    }
+    // Returns the appropriate log stream for a solver run.
+    auto solver_log_stream = [&]() -> std::ostream& {
+        return opt_show_log ? *tee_out : static_cast<std::ostream&>(log);
+    };
+
     if (opt_workers >= 0) lace_start(opt_workers, 10000000UL, 0);
 
     int final_res = 0;
-    std::stringstream log;
     double time;
     long total=0;
 
@@ -358,7 +405,7 @@ main(int argc, char **argv)
                 for (const auto& id : solvers) {
                     std::cout << std::flush;
                     log.str("");
-                    int res = test_solver(game, id, time, opt_trace == -1 ? log : std::cout);
+                    int res = test_solver(game, id, time, solver_log_stream());
                     if (res == 0) {
                         sgood[id]++;
                         std::cout << "\033[38;5;82m" << id << "\033[m";
@@ -404,19 +451,41 @@ main(int argc, char **argv)
             g.set_random_seed(seed);
             g.init_random_game(size, maxP, maxE-size);
 
-            std::cout << "game " << i << " (gameseed=" << seed << " size=" << g.vertexcount() << "," << g.edgecount() << "): ";
-            std::cout << std::endl << std::flush;
+            if (opt_progress) {
+                // Overwrite progress indicator in-place; will be replaced next iteration
+                // or flushed by a failure line.
+                std::cout << "\rgame " << (i+1) << "/" << n << "  " << std::flush;
+            } else {
+                std::cout << "game " << i << " (gameseed=" << seed << " size=" << g.vertexcount() << "," << g.edgecount() << "): ";
+                std::cout << std::endl << std::flush;
+            }
+
             total++;
+
+            // In progress mode we buffer per-game solver output so we can decide
+            // whether to keep the line (failure) or silently overwrite it (pass).
+            std::ostringstream progress_line;
+            bool any_fail = false;
+
             for (const auto& id : solvers) {
-                std::cout << std::flush;
                 log.str("");
-                int res = test_solver(g, id, time, opt_trace == -1 ? log : std::cout);
+                int res = test_solver(g, id, time, solver_log_stream());
+
+                // Helper: format one solver result into the given stream
+                auto emit = [&](std::ostream& out) {
+                    if (res == 0) {
+                        out << "\033[38;5;82m" << id << "\033[m";
+                    } else {
+                        out << "\033[38;5;196m" << id << "\033[m";
+                    }
+                    out << " \033[38;5;8m(" << std::fixed << std::setprecision(0) << (1000.0*time) << ")\033[m ";
+                };
+
                 if (res == 0) {
                     sgood[id]++;
-                    std::cout << "\033[38;5;82m" << id << "\033[m";
                 } else {
+                    any_fail = true;
                     final_res = res;
-                    std::cout << "\033[38;5;196m" << id << "\033[m";
 
                     std::ostringstream fn;
                     fn << "bad_" << id << "_" << i << ".pg";
@@ -430,11 +499,31 @@ main(int argc, char **argv)
                     flog << log.str();
                     flog.close();
                 }
-                std::cout << " \033[38;5;8m(" << std::fixed << std::setprecision(0) << (1000.0*time) << ")\033[m ";
+
+                if (opt_progress) {
+                    emit(progress_line);
+                } else {
+                    std::cout << std::flush;
+                    emit(std::cout);
+                }
                 times[id] += time;
             }
-            std::cout << std::endl;
+
+            if (opt_progress) {
+                if (any_fail) {
+                    // Failure: move to a fresh line and print the full game info
+                    std::cout << "\ngame " << i << " (gameseed=" << seed
+                              << " size=" << g.vertexcount() << "," << g.edgecount() << "): "
+                              << progress_line.str() << "\n";
+                }
+                // On success: leave the \r progress indicator; next iteration will overwrite it
+            } else {
+                std::cout << std::endl;
+            }
         }
+
+        // Ensure the cursor is on a fresh line after the progress indicator
+        if (opt_progress) std::cout << "\n";
     }
 
     if (opt_workers >= 0) lace_stop();
