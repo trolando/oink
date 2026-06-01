@@ -9,13 +9,13 @@ project(oink
 
 # Dependencies
 include(FetchContent)
-if(NOT TARGET lace)
+if(NOT TARGET lace::lace)
   find_package(lace QUIET)
   if(NOT lace_FOUND)
     FetchContent_Declare(
         lace
         GIT_REPOSITORY https://github.com/trolando/lace.git
-        GIT_TAG        v2.0.3
+        GIT_TAG        v2.3.2
     )
     FetchContent_MakeAvailable(lace)
   endif()
@@ -285,7 +285,3 @@ install(
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/oink
 )
 
-export(EXPORT oink-targets
-    FILE ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-targets.cmake
-    NAMESPACE oink::
-)
