@@ -493,6 +493,8 @@ bool Ordered::bump(int tgt)
 
     int *tp = data + (tgt+4)*l;
 
+    if (tp[0] == -1) return false; // nothing to do
+
     for (int i = 1; i<l; i++) {
         if (tp[i] == -1) {
             // if the current is _, then the smallest increase is max_opp_pr
