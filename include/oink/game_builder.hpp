@@ -22,6 +22,7 @@
 
 #include <oink/bitset.hpp>
 #include <oink/game.hpp>
+#include <oink/player.hpp>
 
 namespace pg {
 
@@ -41,7 +42,7 @@ public:
     explicit GameBuilder(int vertex_count);
 
     void set_priority(int v, int priority);
-    void set_owner(int v, int owner);
+    void set_owner(int v, Player owner);
     void set_label(int v, std::string label);
     void add_edge(int from, int to);
 

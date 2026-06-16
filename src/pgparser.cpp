@@ -21,6 +21,7 @@
 #include <boost/container/flat_map.hpp>
 #include "oink/pgparser.hpp"
 #include "oink/game_builder.hpp"
+#include "oink/player.hpp"
 #include "printf.hpp"
 
 namespace pg {
@@ -424,7 +425,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         if (!read_uint64(rd, &n)) throw std::runtime_error("missing owner");
         if (n != 0 and n != 1) throw std::runtime_error("invalid owner (must be 0 or 1)");
         const int cur_owner = (int) n;
-        builder.set_owner((int)id, cur_owner);
+        builder.set_owner((int)id, player_from_int(cur_owner));
 
         bool has_self = false;
         int count = 0;

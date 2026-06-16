@@ -49,9 +49,9 @@ int
 main()
 {
     GameBuilder b(3);
-    b.set_priority(0, 1); b.set_owner(0, 0); b.set_label(0, "a");
-    b.set_priority(1, 2); b.set_owner(1, 1); // no label
-    b.set_priority(2, 3); b.set_owner(2, 0); b.set_label(2, "c");
+    b.set_priority(0, 1); b.set_owner(0, Player::Even); b.set_label(0, "a");
+    b.set_priority(1, 2); b.set_owner(1, Player::Odd); // no label
+    b.set_priority(2, 3); b.set_owner(2, Player::Even); b.set_label(2, "c");
     b.add_edge(0, 1); b.add_edge(0, 2);
     b.add_edge(1, 0);
     b.add_edge(2, 2); // self-loop

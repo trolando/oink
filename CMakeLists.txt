@@ -33,6 +33,7 @@ set(OINK_HDRS
     include/oink/error.hpp
     include/oink/game.hpp
     include/oink/game_builder.hpp
+    include/oink/player.hpp
     include/oink/solution.hpp
     include/oink/span.hpp
     include/oink/solvers.hpp

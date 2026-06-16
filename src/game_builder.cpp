@@ -40,10 +40,10 @@ GameBuilder::set_priority(int v, int priority)
 }
 
 void
-GameBuilder::set_owner(int v, int owner)
+GameBuilder::set_owner(int v, Player owner)
 {
     assert(v >= 0 and v < vertex_count_);
-    owner_[v] = owner ? 1 : 0;
+    owner_[v] = player_index(owner);
 }
 
 void
