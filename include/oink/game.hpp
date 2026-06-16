@@ -332,12 +332,12 @@ public:
 
     inline const int* outedges() const
     {
-        return _outedges;
+        return _outedges.data();
     }
 
     inline const int* inedges() const
     {
-        return _inedges;
+        return _inedges.data();
     }
 
     inline int firstout(const int vertex) const
@@ -476,19 +476,19 @@ private:
 
     long n_vertices;        // number of vertices
     long n_edges;           // number of edges
-    int *_priority;        // priority of each vertex
+    std::vector<int> _priority;  // priority of each vertex
     bitset _owner;         // owner of each vertex (1 for odd, 0 for even)
     std::vector<std::string> _label;  // vertex labels (empty string means no label)
 
-    int *_outedges;        // outgoing edges as array
-    int *_firstouts;       // first outgoing edge of each vertex
-    int *_outcount;        // outgoing edge count of each vertex
+    std::vector<int> _outedges;   // outgoing edges as array
+    std::vector<int> _firstouts;  // first outgoing edge of each vertex
+    std::vector<int> _outcount;   // outgoing edge count of each vertex
 
-    int *_inedges;         // incoming edges as array
-    int *_firstins;        // first incoming edge of each vertex
-    int *_incount;         // incoming edge count of each vertex
+    std::vector<int> _inedges;    // incoming edges as array (empty until build_in_array)
+    std::vector<int> _firstins;   // first incoming edge of each vertex
+    std::vector<int> _incount;    // incoming edge count of each vertex
 
-    std::vector<int> *_outvec; // outgoing edges as vector
+    std::vector<std::vector<int>> _outvec; // outgoing edges as vector (for construction)
 
     bool is_ordered;       // records if the game is in-order
     size_t v_allocated;    // number of vertices allocated as virtual memory

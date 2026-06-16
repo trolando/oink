@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstring> // memset
 #include <iostream>
 #include <ctime>
 
@@ -32,14 +31,6 @@ Game::Game() : _owner(0), solution_(0)
 {
     n_vertices = 0;
     n_edges = 0;
-    _priority = NULL;
-    _outvec = NULL;
-    _outedges = NULL;
-    _firstouts = NULL;
-    _outcount = NULL;
-    _inedges = NULL;
-    _firstins = NULL;
-    _incount = NULL;
     is_ordered = true;
     v_allocated = 0;
     e_allocated = 0;
@@ -53,7 +44,7 @@ Game::Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, s
     n_edges = ne;
 
     // copy priorities
-    std::move(priorities.begin(), priorities.end(), _priority);
+    std::move(priorities.begin(), priorities.end(), _priority.begin());
 
     // copy owners
     _owner = owners;
@@ -88,20 +79,7 @@ Game::Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, s
 
 Game::~Game()
 {
-    free(_priority);
-    free(_firstouts);
-    free(_outcount);
-    free(_outedges);
-
-    if (_outvec != NULL) {
-        delete[] _outvec;
-    }
-
-    if (_inedges != NULL) {
-        delete[] _inedges;
-        delete[] _firstins;
-        delete[] _incount;
-    }
+    // all storage is RAII-managed (std::vector / bitset / Solution)
 }
 
 Game::Game(int vcount, int ecount) : _owner(vcount), solution_(vcount)
@@ -116,25 +94,15 @@ Game::Game(int vcount, int ecount) : _owner(vcount), solution_(vcount)
     e_allocated = vcount+ecount+1;  // extra space for -1
     e_size = 0;
 
-    _priority = (int*)malloc(sizeof(int[v_allocated]));
+    // vertex arrays sized to capacity, value-initialized to 0
+    _priority.resize(v_allocated);
     _label.resize(v_allocated);
-    _firstouts = (int*)malloc(sizeof(int[v_allocated]));
-    _outcount = (int*)malloc(sizeof(int[v_allocated]));
-    _outedges = (int*)malloc(sizeof(int[e_allocated]));
-    if (_priority == (int*)0) abort();
-    if (_firstouts == (int*)0) abort();
-    if (_outcount == (int*)0) abort();
-    if (_outedges == (int*)0) abort();
+    _firstouts.resize(v_allocated);
+    _outcount.resize(v_allocated);
+    _outedges.resize(e_allocated);
 
-    _outvec = NULL;
-    _inedges = NULL;
-    _firstins = NULL;
-    _incount = NULL;
     is_ordered = true;
 
-    std::fill(_priority, _priority+vcount, 0);
-    std::fill(_firstouts, _firstouts+vcount, '\x00');
-    std::fill(_outcount, _outcount+vcount, '\x00');
     _outedges[0] = -1;
     e_size++;
 
@@ -150,7 +118,7 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
 {
     n_edges = other.n_edges;
 
-    memcpy(_priority, other._priority, sizeof(int[n_vertices]));
+    std::copy_n(other._priority.data(), n_vertices, _priority.data());
     _owner = other._owner;
     for (int i=0; i<n_vertices; i++) {
         _label[i] = other._label[i];
@@ -158,19 +126,19 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
 
     // clone the edge out ARRAY
     e_size = other.e_size;
-    memcpy(_outedges, other._outedges, sizeof(int[e_size]));
-    memcpy(_firstouts, other._firstouts, sizeof(int[n_vertices]));
-    memcpy(_outcount, other._outcount, sizeof(int[n_vertices]));
+    std::copy_n(other._outedges.data(), e_size, _outedges.data());
+    std::copy_n(other._firstouts.data(), n_vertices, _firstouts.data());
+    std::copy_n(other._outcount.data(), n_vertices, _outcount.data());
 
     // copy inedges
-    if (other._inedges != NULL) {
+    if (!other._inedges.empty()) {
          size_t len = n_vertices + n_edges;
-         _inedges = new int[len];
-         _firstins = new int[n_vertices];
-         _incount = new int[n_vertices];
-         memcpy(_inedges, other._inedges, sizeof(int[len]));
-         memcpy(_firstins, other._firstins, sizeof(int[n_vertices]));
-         memcpy(_incount, other._incount, sizeof(int[n_vertices]));
+         _inedges.resize(len);
+         _firstins.resize(n_vertices);
+         _incount.resize(n_vertices);
+         std::copy_n(other._inedges.data(), len, _inedges.data());
+         std::copy_n(other._firstins.data(), n_vertices, _firstins.data());
+         std::copy_n(other._incount.data(), n_vertices, _incount.data());
     }
 
     is_ordered = other.is_ordered;
@@ -282,8 +250,7 @@ Game::set_label(int node, std::string label)
 void
 Game::vec_init(void)
 {
-    if (_outvec != NULL) delete[] _outvec;
-    _outvec = new std::vector<int>[n_vertices];
+    _outvec.assign(n_vertices, {});
 
     // copy current edges to vectors
     for (int v=0; v<n_vertices; v++) {
@@ -303,8 +270,8 @@ Game::vec_finish(void)
         for (int to : _outvec[v]) e_add(v, to);
         e_finish();
     }
-    delete[] _outvec;
-    _outvec = NULL;
+    _outvec.clear();
+    _outvec.shrink_to_fit();
 }
 
 bool
@@ -520,7 +487,7 @@ Game::unsafe_permute(int *mapping)
     for (unsigned long i=0; i<len; i++) {
         if (_outedges[i] != -1) _outedges[i] = mapping[_outedges[i]];
     }
-    if (_inedges != NULL) {
+    if (!_inedges.empty()) {
         for (unsigned long i=0; i<len; i++) {
             if (_inedges[i] != -1) _inedges[i] = mapping[_inedges[i]];
         }
@@ -540,7 +507,7 @@ Game::unsafe_permute(int *mapping)
             std::swap(_firstouts[i], _firstouts[k]);
             std::swap(_outcount[i], _outcount[k]);
             // swap in array
-            if (_inedges != NULL) {
+            if (!_inedges.empty()) {
                 std::swap(_firstins[i], _firstins[k]);
                 std::swap(_incount[i], _incount[k]);
             }
@@ -777,26 +744,18 @@ void
 Game::e_sizeup(void)
 {
     e_allocated += e_allocated/2;
-    _outedges = (int*)realloc(_outedges, sizeof(int[e_allocated]));
-    if (_outedges == NULL) abort();
+    _outedges.resize(e_allocated);
 }
 
 void
 Game::v_sizeup(void)
 {
-    const size_t old_allocated = v_allocated;
     v_allocated += v_allocated/2;
     n_vertices = v_allocated;
-    _priority = (int*)realloc(_priority, sizeof(int[v_allocated]));
-    _firstouts = (int*)realloc(_firstouts, sizeof(int[v_allocated]));
-    _outcount = (int*)realloc(_outcount, sizeof(int[v_allocated]));
-    if (_priority == (int*)0) abort();
-    if (_firstouts == (int*)0) abort();
-    if (_outcount == (int*)0) abort();
-    // zero-initialize the newly allocated tail of each array
-    std::fill(_priority+old_allocated, _priority+v_allocated, 0);
-    std::fill(_firstouts+old_allocated, _firstouts+v_allocated, 0);
-    std::fill(_outcount+old_allocated, _outcount+v_allocated, 0);
+    // resize grows the arrays, value-initializing the new tail to 0
+    _priority.resize(v_allocated);
+    _firstouts.resize(v_allocated);
+    _outcount.resize(v_allocated);
     _label.resize(v_allocated);
     _owner.resize(v_allocated);
     solution_.resize(v_allocated);
@@ -837,23 +796,14 @@ Game::e_finish(void)
 void
 Game::build_in_array(bool rebuild)
 {
-    if (_inedges != NULL) {
-        if (rebuild) {
-            delete[] _inedges;
-            delete[] _firstins;
-            delete[] _incount;
-        } else {
-            return;
-        }
-    }
+    if (!_inedges.empty() and !rebuild) return;
 
-    _inedges = new int[e_size];
-    _firstins = new int[n_vertices];
-    _incount = new int[n_vertices];
+    _inedges.assign(e_size, 0);
+    _firstins.assign(n_vertices, 0);
 
     // set incount of each vertex
 
-    memset(_incount, 0, sizeof(int[n_vertices]));
+    _incount.assign(n_vertices, 0);
     for (int v=0; v<n_vertices; v++) {
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
             int to = *curedge;
