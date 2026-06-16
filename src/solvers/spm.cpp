@@ -368,7 +368,7 @@ SPMSolver::run()
         if (counts[i] == 0) continue;
         if (i&1) { if (max1 == -1) max1 = i; }
         else { if (max0 == -1) max0 = i; }
-        if (max0 != -1 and max0 != -1) break;
+        if (max0 != -1 and max1 != -1) break;
     }
 
     // initialize all nodes as not dirty
