@@ -140,7 +140,6 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         else if (n == 1) { res._owner[id] = true; }
         else { throw std::runtime_error("invalid owner"); }
 
-        res._label[id] = 0;
         res.e_start(id);
 
         bool has_self = false;
@@ -169,11 +168,10 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
             if (ch == ',') continue; // next successor
             if (ch == ';') break; // end of line
             if (ch == '\"') {
-                res._label[id] = new std::string();
                 while (true) {
                     inp >> ch;
                     if (ch == '\"') break;
-                    *res._label[id] += ch;
+                    res._label[id] += ch;
                 }
                 // now read ;
                 skip_whitespace(rd);

@@ -320,9 +320,9 @@ public:
     /**
      * Get the "real" label of a vertex
      */
-    inline std::string* rawlabel(const int vertex) const
+    inline const std::string* rawlabel(const int vertex) const
     {
-        return _label[vertex];
+        return _label[vertex].empty() ? nullptr : &_label[vertex];
     }
 
     /**
@@ -449,7 +449,7 @@ public:
             if (lv.v < 0 or lv.v >= lv.g.nodecount()) {
                 out << "<N/A>";
             } else {
-                std::string* l = lv.g.rawlabel(lv.v);
+                const std::string* l = lv.g.rawlabel(lv.v);
                 if (l == nullptr or l->empty()) out << lv.v << "/" << lv.g.priority(lv.v);
                 else out << *l;
             }
@@ -479,7 +479,7 @@ private:
     long n_edges;           // number of edges
     int *_priority;        // priority of each vertex
     bitset _owner;         // owner of each vertex (1 for odd, 0 for even)
-    std::string **_label;  // (optional) vertex labels
+    std::vector<std::string> _label;  // vertex labels (empty string means no label)
 
     int *_outedges;        // outgoing edges as array
     int *_firstouts;       // first outgoing edge of each vertex

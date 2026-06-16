@@ -68,6 +68,22 @@ main()
     expect_accept("valid game", "parity 2;\n0 0 0 0,1;\n1 1 1 1;\n");
     expect_accept("valid with label", "parity 2;\n0 0 0 0,1 \"a\";\n1 1 1 1;\n");
 
+    // Labels round-trip through the parser into Game storage.
+    {
+        std::istringstream in("parity 2;\n0 0 0 0,1 \"hello\";\n1 1 1 1;\n");
+        Game g = PGParser::parse_pgsolver(in, false);
+        const std::string* l0 = g.rawlabel(0);
+        const std::string* l1 = g.rawlabel(1);
+        if (l0 == nullptr or *l0 != "hello") {
+            std::cerr << "FAIL [label storage]: vertex 0 label not stored correctly" << std::endl;
+            failures++;
+        }
+        if (l1 != nullptr) {
+            std::cerr << "FAIL [label storage]: vertex 1 should have no label" << std::endl;
+            failures++;
+        }
+    }
+
     // Malformed input (see roadmap Phase 1, task 5).
     expect_reject("empty file", "");
     expect_reject("missing header", "notparity 2;\n0 0 0 1;\n");

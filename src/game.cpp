@@ -33,7 +33,6 @@ Game::Game() : _owner(0), solved(0), winner(0)
     n_vertices = 0;
     n_edges = 0;
     _priority = NULL;
-    _label = NULL;
     _outvec = NULL;
     _outedges = NULL;
     _firstouts = NULL;
@@ -75,7 +74,7 @@ Game::Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, s
 
     // copy labels
     for (auto v=0; v<n_vertices; v++) {
-        if (labels[v] != nullptr) _label[v] = new std::string(*labels[v]);
+        if (labels[v] != nullptr) _label[v] = *labels[v];
     }
 
     // check if ordered
@@ -90,12 +89,7 @@ Game::Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, s
 
 Game::~Game()
 {
-    for (int i=0; i<n_vertices; i++) {
-        if (_label[i]) delete _label[i];
-    }
-
     free(_priority);
-    free(_label);
     free(strategy);
     free(_firstouts);
     free(_outcount);
@@ -125,13 +119,12 @@ Game::Game(int vcount, int ecount) : _owner(vcount), solved(vcount), winner(vcou
     e_size = 0;
 
     _priority = (int*)malloc(sizeof(int[v_allocated]));
-    _label = (string**)calloc(v_allocated, sizeof(string*));
+    _label.resize(v_allocated);
     strategy = (int*)malloc(sizeof(int[v_allocated]));
     _firstouts = (int*)malloc(sizeof(int[v_allocated]));
     _outcount = (int*)malloc(sizeof(int[v_allocated]));
     _outedges = (int*)malloc(sizeof(int[e_allocated]));
     if (_priority == (int*)0) abort();
-    if (_label == (string**)0) abort();
     if (strategy == (int*)0) abort();
     if (_firstouts == (int*)0) abort();
     if (_outcount == (int*)0) abort();
@@ -166,7 +159,7 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
     memcpy(_priority, other._priority, sizeof(int[n_vertices]));
     _owner = other._owner;
     for (int i=0; i<n_vertices; i++) {
-        if (other._label[i]) _label[i] = new std::string(*other._label[i]);
+        _label[i] = other._label[i];
     }
 
     // clone the edge out ARRAY
@@ -263,7 +256,6 @@ Game::init_vertex(int v, int priority, int owner, std::string label)
     while (v >= n_vertices) v_sizeup();
     set_priority(v, priority);
     set_owner(v, owner);
-    this->_label[v] = 0; // just ensure that it's properly zeroed before use
     set_label(v, label);
     this->strategy[v] = -1; // initialize strategy
 }
@@ -287,9 +279,7 @@ Game::set_owner(int node, int owner)
 void
 Game::set_label(int node, std::string label)
 {
-    if (this->_label[node]) delete this->_label[node];
-    if (label != "") this->_label[node] = new std::string(label);
-    else this->_label[node] = 0;
+    _label[node] = std::move(label);
 }
 
 
@@ -434,7 +424,7 @@ Game::write_pgsolver(std::ostream &os)
             else os << ",";
             os << *curedge;
         }
-        if (_label[i] != 0 and !_label[i]->empty()) os << " \"" << *_label[i] << "\"";
+        if (!_label[i].empty()) os << " \"" << _label[i] << "\"";
         os << ";" << std::endl;
     }
 }
@@ -736,8 +726,7 @@ Game::extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game)
         game_to_subgame[v] = w;
 
         // initialize most stuff (except edges)
-        if (_label[v] != 0) res->init_vertex(w, _priority[v], _owner[v], *_label[v]);
-        else res->init_vertex(w, _priority[v], _owner[v], "");
+        res->init_vertex(w, _priority[v], _owner[v], _label[v]);
     }
 
     // now add all edges
@@ -822,19 +811,16 @@ Game::v_sizeup(void)
     strategy = (int*)realloc(strategy, sizeof(int[v_allocated]));
     _firstouts = (int*)realloc(_firstouts, sizeof(int[v_allocated]));
     _outcount = (int*)realloc(_outcount, sizeof(int[v_allocated]));
-    _label = (string**)realloc(_label, sizeof(string*[v_allocated]));
     if (_priority == (int*)0) abort();
     if (strategy == (int*)0) abort();
     if (_firstouts == (int*)0) abort();
     if (_outcount == (int*)0) abort();
-    if (_label == (string**)0) abort();
-    // zero-initialize the newly allocated tail of each array; in particular
-    // _label must be null so the destructor does not free garbage pointers
+    // zero-initialize the newly allocated tail of each array
     std::fill(_priority+old_allocated, _priority+v_allocated, 0);
     std::fill(strategy+old_allocated, strategy+v_allocated, -1);
     std::fill(_firstouts+old_allocated, _firstouts+v_allocated, 0);
     std::fill(_outcount+old_allocated, _outcount+v_allocated, 0);
-    std::fill(_label+old_allocated, _label+v_allocated, nullptr);
+    _label.resize(v_allocated);
     _owner.resize(v_allocated);
     solved.resize(v_allocated);
     winner.resize(v_allocated);
