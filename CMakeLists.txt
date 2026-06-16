@@ -213,6 +213,12 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         enable_testing()
         set(CTEST_TESTING_TIMEOUT 30)
 
+        # parser unit tests (malformed and valid input)
+        add_executable(test_parser)
+        target_sources(test_parser PRIVATE test/test_parser.cpp)
+        set_target_props(test_parser)
+        add_test(NAME TestParser COMMAND test_parser)
+
         # test fixpoint algorithms
         add_test(NAME TestSolverFPIpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w 0)
         add_test(NAME TestSolverFPIseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w -1)
