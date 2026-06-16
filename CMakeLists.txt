@@ -234,6 +234,12 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         set_target_props(test_builder)
         add_test(NAME TestBuilder COMMAND test_builder)
 
+        # Game unit tests (dynamic growth)
+        add_executable(test_game)
+        target_sources(test_game PRIVATE test/test_game.cpp)
+        set_target_props(test_game)
+        add_test(NAME TestGame COMMAND test_game)
+
         # test fixpoint algorithms
         add_test(NAME TestSolverFPIpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w 0)
         add_test(NAME TestSolverFPIseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w -1)
