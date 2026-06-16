@@ -32,6 +32,10 @@ set(OINK_HDRS
     include/oink/oink.hpp
     include/oink/error.hpp
     include/oink/game.hpp
+    include/oink/game_builder.hpp
+    include/oink/player.hpp
+    include/oink/solution.hpp
+    include/oink/span.hpp
     include/oink/solvers.hpp
     include/oink/solver.hpp
     include/oink/bitset.hpp
@@ -111,6 +115,7 @@ target_sources(oink
   PRIVATE
     # Core files
     src/game.cpp
+    src/game_builder.cpp
     src/pgparser.cpp
     src/oink.cpp
     src/scc.cpp
@@ -237,6 +242,18 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         target_sources(test_parser PRIVATE test/test_parser.cpp)
         set_target_props(test_parser)
         add_test(NAME TestParser COMMAND test_parser)
+
+        # Solution class unit tests
+        add_executable(test_solution)
+        target_sources(test_solution PRIVATE test/test_solution.cpp)
+        set_target_props(test_solution)
+        add_test(NAME TestSolution COMMAND test_solution)
+
+        # GameBuilder unit tests
+        add_executable(test_builder)
+        target_sources(test_builder PRIVATE test/test_builder.cpp)
+        set_target_props(test_builder)
+        add_test(NAME TestBuilder COMMAND test_builder)
 
         # test fixpoint algorithms
         add_test(NAME TestSolverFPIpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w 0)

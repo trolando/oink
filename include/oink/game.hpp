@@ -26,6 +26,8 @@
 #include <boost/random/uniform_int_distribution.hpp>
 
 #include <oink/bitset.hpp>
+#include <oink/solution.hpp>
+#include <oink/span.hpp>
 
 namespace pg {
 
@@ -249,12 +251,12 @@ public:
     /**
      * Returns whether every vertex has dominion 0 or 1.
      */
-    inline bool game_solved() const { return (unsigned)vertexcount() == solved.count(); }
+    inline bool game_solved() const { return (unsigned)vertexcount() == solution_.solved().count(); }
 
     /**
      * Count and return how many vertices have dominion -1.
      */
-    inline long count_unsolved() const { return vertexcount() - solved.count(); }
+    inline long count_unsolved() const { return vertexcount() - solution_.solved().count(); }
 
     /**
      * Create a new Game of the subgame of the vertices given in <selection>.
@@ -320,9 +322,9 @@ public:
     /**
      * Get the "real" label of a vertex
      */
-    inline std::string* rawlabel(const int vertex) const
+    inline const std::string* rawlabel(const int vertex) const
     {
-        return _label[vertex];
+        return _label[vertex].empty() ? nullptr : &_label[vertex];
     }
 
     /**
@@ -331,12 +333,12 @@ public:
 
     inline const int* outedges() const
     {
-        return _outedges;
+        return _outedges.data();
     }
 
     inline const int* inedges() const
     {
-        return _inedges;
+        return _inedges.data();
     }
 
     inline int firstout(const int vertex) const
@@ -369,6 +371,22 @@ public:
         return inedges() + firstin(vertex);
     }
 
+    /**
+     * Non-owning views over the outgoing/incoming edges of a vertex (without the
+     * -1 terminator). These wrap the same raw pointers returned by outs()/ins()
+     * and support range-based for; the raw pointer API above remains available
+     * for hot loops.
+     */
+    inline span<const int> out_edges(const int vertex) const
+    {
+        return span<const int>(outs(vertex), outcount(vertex));
+    }
+
+    inline span<const int> in_edges(const int vertex) const
+    {
+        return span<const int>(ins(vertex), incount(vertex));
+    }
+
     inline const std::vector<int> outvec(const int vertex) const
     {
         return _outvec[vertex];
@@ -381,7 +399,7 @@ public:
      */
     [[nodiscard]] const bitset& getSolved() const
     {
-        return solved;
+        return solution_.solved();
     }
 
     /**
@@ -391,7 +409,7 @@ public:
      */
     [[nodiscard]] bool isSolved(int vertex) const
     {
-        return solved[vertex];
+        return solution_.is_solved(vertex);
     }
 
     /* TODO: some solvers currently want direct access to the int* with strategies
@@ -399,7 +417,7 @@ public:
        kind of move assignment to update the strategy... */
     [[nodiscard]] int* getStrategy() const
     {
-        return strategy;
+        return const_cast<int*>(solution_.strategy_data());
     }
 
     /**
@@ -410,7 +428,7 @@ public:
      */
     [[nodiscard]] int getStrategy(int vertex) const
     {
-        return strategy[vertex];
+        return solution_.strategy(vertex);
     }
 
     /**
@@ -420,7 +438,7 @@ public:
      */
     [[nodiscard]] int getWinner(int vertex) const
     {
-        return solved[vertex] ? (winner[vertex] ? 1 : 0) : -1;
+        return solution_.is_solved(vertex) ? solution_.winner(vertex) : -1;
     }
 
     /**
@@ -431,9 +449,7 @@ public:
      */
     void solve(int vertex, int winner, int strategy)
     {
-        this->solved[vertex] = true;
-        this->winner[vertex] = winner;
-        this->strategy[vertex] = owner(vertex) == winner ? strategy : -1;
+        solution_.solve(vertex, winner, owner(vertex) == winner ? strategy : -1);
     }
 
     /**
@@ -449,7 +465,7 @@ public:
             if (lv.v < 0 or lv.v >= lv.g.nodecount()) {
                 out << "<N/A>";
             } else {
-                std::string* l = lv.g.rawlabel(lv.v);
+                const std::string* l = lv.g.rawlabel(lv.v);
                 if (l == nullptr or l->empty()) out << lv.v << "/" << lv.g.priority(lv.v);
                 else out << *l;
             }
@@ -477,28 +493,26 @@ private:
 
     long n_vertices;        // number of vertices
     long n_edges;           // number of edges
-    int *_priority;        // priority of each vertex
+    std::vector<int> _priority;  // priority of each vertex
     bitset _owner;         // owner of each vertex (1 for odd, 0 for even)
-    std::string **_label;  // (optional) vertex labels
+    std::vector<std::string> _label;  // vertex labels (empty string means no label)
 
-    int *_outedges;        // outgoing edges as array
-    int *_firstouts;       // first outgoing edge of each vertex
-    int *_outcount;        // outgoing edge count of each vertex
+    std::vector<int> _outedges;   // outgoing edges as array
+    std::vector<int> _firstouts;  // first outgoing edge of each vertex
+    std::vector<int> _outcount;   // outgoing edge count of each vertex
 
-    int *_inedges;         // incoming edges as array
-    int *_firstins;        // first incoming edge of each vertex
-    int *_incount;         // incoming edge count of each vertex
+    std::vector<int> _inedges;    // incoming edges as array (empty until build_in_array)
+    std::vector<int> _firstins;   // first incoming edge of each vertex
+    std::vector<int> _incount;    // incoming edge count of each vertex
 
-    std::vector<int> *_outvec; // outgoing edges as vector
+    std::vector<std::vector<int>> _outvec; // outgoing edges as vector (for construction)
 
     bool is_ordered;       // records if the game is in-order
     size_t v_allocated;    // number of vertices allocated as virtual memory
     size_t e_allocated;    // number of edges allocated as virtual memory
     size_t e_size;         // number of entries used in edge array
 
-    bitset solved;         // set true if vertex solved
-    bitset winner;         // for solved vertices, set 1 if won by 1, else 0
-    int *strategy;         // strategy for winning vertices
+    Solution solution_;    // mutable solver output (solved/winner/strategy)
 
     void unsafe_permute(int *mapping); // apply a reordering
     
