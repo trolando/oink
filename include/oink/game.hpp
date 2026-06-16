@@ -27,6 +27,7 @@
 
 #include <oink/bitset.hpp>
 #include <oink/solution.hpp>
+#include <oink/span.hpp>
 
 namespace pg {
 
@@ -368,6 +369,22 @@ public:
     inline const int *ins(const int vertex) const
     {
         return inedges() + firstin(vertex);
+    }
+
+    /**
+     * Non-owning views over the outgoing/incoming edges of a vertex (without the
+     * -1 terminator). These wrap the same raw pointers returned by outs()/ins()
+     * and support range-based for; the raw pointer API above remains available
+     * for hot loops.
+     */
+    inline span<const int> out_edges(const int vertex) const
+    {
+        return span<const int>(outs(vertex), outcount(vertex));
+    }
+
+    inline span<const int> in_edges(const int vertex) const
+    {
+        return span<const int>(ins(vertex), incount(vertex));
     }
 
     inline const std::vector<int> outvec(const int vertex) const

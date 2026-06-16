@@ -78,6 +78,14 @@ main()
     check("edges 1", (succ(g, 1) == std::vector<int>{0}));
     check("edges 2", (succ(g, 2) == std::vector<int>{2}));
 
+    // span view over outgoing edges matches the raw iteration
+    {
+        check("out_edges size", g.out_edges(0).size() == 2);
+        std::vector<int> via_span;
+        for (int to : g.out_edges(0)) via_span.push_back(to);
+        check("out_edges view", (via_span == std::vector<int>{1, 2}));
+    }
+
     // Builder remains usable after build(): build a second, equivalent game.
     Game g2 = b.build();
     check("rebuild vertexcount", g2.vertexcount() == 3 and g2.edgecount() == 4);

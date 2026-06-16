@@ -34,6 +34,7 @@ set(OINK_HDRS
     include/oink/game.hpp
     include/oink/game_builder.hpp
     include/oink/solution.hpp
+    include/oink/span.hpp
     include/oink/solvers.hpp
     include/oink/solver.hpp
     include/oink/bitset.hpp

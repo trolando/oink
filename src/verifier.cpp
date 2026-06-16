@@ -70,8 +70,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
             n_strategies++; // number of checked strategies
         } else {
             // if loser, check whether the loser can escape
-            for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
-                int to = *curedge;
+            for (int to : game.out_edges(v)) {
                 if (!game.isSolved(to) or game.getWinner(to) != winner) {
                     logger << "escape edge from " << game.label_vertex(v) << " to " << game.label_vertex(to) << std::endl;
                     throw std::runtime_error("loser can escape");
