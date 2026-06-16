@@ -599,7 +599,7 @@ SPMSolver::run()
                 cycles.clear();
             }
 
-            if (counts[max] == 0) {
+            if (max >= 0 and counts[max] == 0) {
                 if (trace >= 2) logger << "\033[1mlowering max\033[m for player " << (pl == 0 ? "even" : "odd") << std::endl;
                 if (pl == 0) { while (max0 > 0 and counts[max0] == 0) max0 -= 2; }
                 else { while (max1 > 0 and counts[max1] == 0) max1 -= 2; }
