@@ -45,6 +45,12 @@ public:
     void set_label(int v, std::string label);
     void add_edge(int from, int to);
 
+    /**
+     * Reduce the vertex count, dropping trailing vertices (and their data).
+     * Used when the final vertex count is only known after parsing.
+     */
+    void truncate(int new_count);
+
     [[nodiscard]] int vertex_count() const noexcept { return vertex_count_; }
 
     /**
@@ -55,6 +61,7 @@ public:
 
 private:
     int vertex_count_;
+    size_t edge_count_ = 0;
     std::vector<int> priority_;
     bitset owner_;
     std::vector<std::string> labels_;

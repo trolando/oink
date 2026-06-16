@@ -25,10 +25,11 @@ GameBuilder::GameBuilder(int vertex_count)
     : vertex_count_(vertex_count),
       priority_(vertex_count, 0),
       owner_(vertex_count),
-      labels_(vertex_count),
       outgoing_(vertex_count)
 {
     assert(vertex_count >= 0);
+    // labels_ is grown lazily on first set_label, so unlabeled games (the large
+    // ones) do not pay for a full vector of empty strings.
 }
 
 void
@@ -49,6 +50,7 @@ void
 GameBuilder::set_label(int v, std::string label)
 {
     assert(v >= 0 and v < vertex_count_);
+    if ((int)labels_.size() <= v) labels_.resize(v + 1);
     labels_[v] = std::move(label);
 }
 
@@ -58,6 +60,19 @@ GameBuilder::add_edge(int from, int to)
     assert(from >= 0 and from < vertex_count_);
     assert(to >= 0 and to < vertex_count_);
     outgoing_[from].push_back(to);
+    edge_count_++;
+}
+
+void
+GameBuilder::truncate(int new_count)
+{
+    assert(new_count >= 0 and new_count <= vertex_count_);
+    for (int v = new_count; v < vertex_count_; v++) edge_count_ -= outgoing_[v].size();
+    vertex_count_ = new_count;
+    priority_.resize(new_count);
+    owner_.resize(new_count);
+    if ((int)labels_.size() > new_count) labels_.resize(new_count);
+    outgoing_.resize(new_count);
 }
 
 Game
@@ -65,15 +80,15 @@ GameBuilder::build()
 {
     if (vertex_count_ == 0) return Game();
 
-    size_t ne = 0;
-    for (const auto& outs : outgoing_) ne += outs.size();
+    const size_t ne = edge_count_;
 
     // The Game accumulator constructor takes labels as nullable pointers; point
     // them at our owned strings (empty string means no label). It copies them,
-    // so the borrowed pointers only need to be valid during the call.
-    std::vector<std::string*> label_ptrs(vertex_count_);
-    for (int v = 0; v < vertex_count_; v++) {
-        label_ptrs[v] = labels_[v].empty() ? nullptr : &labels_[v];
+    // so the borrowed pointers only need to be valid during the call. labels_ is
+    // grown lazily, so any index beyond its size has no label.
+    std::vector<std::string*> label_ptrs(vertex_count_, nullptr);
+    for (int v = 0; v < (int)labels_.size(); v++) {
+        if (!labels_[v].empty()) label_ptrs[v] = &labels_[v];
     }
 
     return Game(static_cast<size_t>(vertex_count_), ne, priority_, owner_, outgoing_, label_ptrs);

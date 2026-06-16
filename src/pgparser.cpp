@@ -20,6 +20,7 @@
 #include <vector>
 #include <boost/container/flat_map.hpp>
 #include "oink/pgparser.hpp"
+#include "oink/game_builder.hpp"
 #include "printf.hpp"
 
 namespace pg {
@@ -382,19 +383,17 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
     // so, we expect n or n+1 nodes
     unsigned long n_vertices = n+1;
 
-    // initialize variables
+    // accumulate vertices and edges directly into a builder; priorities are kept
+    // as uint64 here so they can be renumbered (compressed) before building
+    GameBuilder builder(n_vertices);
     bitset seen(n_vertices);
     std::vector<uint64_t> priority(n_vertices);
-    bitset owner(n_vertices);
-    std::vector<std::vector<int>> edges(n_vertices);
-    std::vector<std::string*> labels(n_vertices);
 
     /**
      * Parse the nodes...
      */
 
     size_t node_count = 0; // number of read nodes
-    size_t edge_count = 0; // number of read edges
 
     while (node_count < n_vertices) {
         uint64_t id;
@@ -405,9 +404,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
             if (node_count == n_vertices - 1 && !seen[n_vertices - 1]) {
                 n_vertices -= 1;
                 seen.resize(n_vertices);
-                owner.resize(n_vertices);
-                edges.resize(n_vertices);
-                labels.resize(n_vertices);
+                builder.truncate(n_vertices);
                 // ignore rest, they can be bigger
                 break;
             } else {
@@ -425,9 +422,9 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
 
         skip_whitespace(rd);
         if (!read_uint64(rd, &n)) throw std::runtime_error("missing owner");
-
-        if (n == 1) owner[id] = true;
-        else if (n != 0) throw std::runtime_error("invalid owner (must be 0 or 1)");
+        if (n != 0 and n != 1) throw std::runtime_error("invalid owner (must be 0 or 1)");
+        const int cur_owner = (int) n;
+        builder.set_owner((int)id, cur_owner);
 
         bool has_self = false;
         int count = 0;
@@ -442,11 +439,10 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
                 throw std::runtime_error(err.str());
             }
 
-            if (id == n and removeBadLoops and (owner[id] != (priority[id]&1))) {
+            if (id == n and removeBadLoops and (cur_owner != (int)(priority[id]&1))) {
                 has_self = true;
             } else {
-                // add edge to the vector
-                edges[id].push_back((int) n);
+                builder.add_edge((int)id, (int)n);
                 count++;
             }
 
@@ -465,17 +461,16 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
                 // now read ;
                 skip_whitespace(rd);
                 if (!(in >> ch) or ch != ';') throw std::runtime_error("missing ; to end line");
-                labels[id] = new std::string(label);
+                builder.set_label((int)id, label);
             }
             break;
         }
 
         if (has_self and count == 0) {
             // we must keep it
-            edges[id].push_back((int)id);
+            builder.add_edge((int)id, (int)id);
             count++;
         }
-        edge_count += count;
     }
 
     if (!seen.all()) {
@@ -501,12 +496,11 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         pair.second = counter;
     }
 
-    std::vector<int> int_priorities(node_count);
     for (unsigned v=0; v<node_count; v++) {
-        int_priorities[v] = map[priority[v]];
+        builder.set_priority(v, map[priority[v]]);
     }
 
-    return { node_count, edge_count, int_priorities, owner, edges, labels };
+    return builder.build();
 }
 
 }
