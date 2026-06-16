@@ -28,7 +28,7 @@ using namespace std;
 
 namespace pg {
 
-Game::Game() : _owner(0), solved(0), winner(0)
+Game::Game() : _owner(0), solution_(0)
 {
     n_vertices = 0;
     n_edges = 0;
@@ -44,7 +44,6 @@ Game::Game() : _owner(0), solved(0), winner(0)
     v_allocated = 0;
     e_allocated = 0;
     e_size = 0;
-    strategy = NULL;
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
 
@@ -90,7 +89,6 @@ Game::Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, s
 Game::~Game()
 {
     free(_priority);
-    free(strategy);
     free(_firstouts);
     free(_outcount);
     free(_outedges);
@@ -106,7 +104,7 @@ Game::~Game()
     }
 }
 
-Game::Game(int vcount, int ecount) : _owner(vcount), solved(vcount), winner(vcount)
+Game::Game(int vcount, int ecount) : _owner(vcount), solution_(vcount)
 {
     assert(vcount > 0);
     if (ecount == -1) ecount = size_t(4) * vcount; // reasonable default outdegree
@@ -120,12 +118,10 @@ Game::Game(int vcount, int ecount) : _owner(vcount), solved(vcount), winner(vcou
 
     _priority = (int*)malloc(sizeof(int[v_allocated]));
     _label.resize(v_allocated);
-    strategy = (int*)malloc(sizeof(int[v_allocated]));
     _firstouts = (int*)malloc(sizeof(int[v_allocated]));
     _outcount = (int*)malloc(sizeof(int[v_allocated]));
     _outedges = (int*)malloc(sizeof(int[e_allocated]));
     if (_priority == (int*)0) abort();
-    if (strategy == (int*)0) abort();
     if (_firstouts == (int*)0) abort();
     if (_outcount == (int*)0) abort();
     if (_outedges == (int*)0) abort();
@@ -141,8 +137,6 @@ Game::Game(int vcount, int ecount) : _owner(vcount), solved(vcount), winner(vcou
     std::fill(_outcount, _outcount+vcount, '\x00');
     _outedges[0] = -1;
     e_size++;
-
-    std::fill(strategy, strategy+vcount, '\xff');
 
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
@@ -181,9 +175,7 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
 
     is_ordered = other.is_ordered;
 
-    solved = other.solved;
-    winner = other.winner;
-    memcpy(strategy, other.strategy, sizeof(int[n_vertices]));
+    solution_ = other.solution_;
 
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
@@ -257,7 +249,7 @@ Game::init_vertex(int v, int priority, int owner, std::string label)
     set_priority(v, priority);
     set_owner(v, owner);
     set_label(v, label);
-    this->strategy[v] = -1; // initialize strategy
+    solution_.set_strategy(v, -1); // initialize strategy
 }
 
 void
@@ -385,27 +377,22 @@ Game::parse_solution(std::istream &in)
             throw std::runtime_error("node index out of bounds");
         }
 
-        if (solved[ident]) throw std::runtime_error("node already solved");
+        if (solution_.is_solved(ident)) throw std::runtime_error("node already solved");
 
         // parse winner
         int w;
         if (!(ss >> w)) throw std::runtime_error("missing winner");
         if (w!= 0 && w!= 1) throw std::runtime_error("invalid winner");
 
-        // set winner
-        solved[ident] = true;
-        winner[ident] = w;
-
         // parse strategy
+        int str = -1;
         if (w == _owner[ident]) {
-            int str;
             if (!(ss >> str)) throw std::runtime_error("missing strategy for winning node");
             // if (!has_edge(ident, str)) throw std::runtime_error("strategy not successor of node");
             // actually this is already checked by the verifier
-            strategy[ident] = str;
-        } else {
-            strategy[ident] = -1;
         }
+
+        solution_.solve(ident, w, str);
     }
 }
 
@@ -450,13 +437,13 @@ void
 Game::write_sol(std::ostream &out)
 {
     // print banner
-    out << "paritysol " << solved.count() << ";" << std::endl;
+    out << "paritysol " << solution_.solved().count() << ";" << std::endl;
 
     // print solution
     for (int i=0; i<n_vertices; i++) {
-        if (solved[i]) {
-            out << i << " " << (winner[i] ? "1" : "0");
-            if (winner[i] == _owner[i] and strategy[i] != -1) out << " " << strategy[i];
+        if (solution_.is_solved(i)) {
+            out << i << " " << (solution_.winner(i) ? "1" : "0");
+            if (solution_.winner(i) == _owner[i] and solution_.strategy(i) != -1) out << " " << solution_.strategy(i);
             out << ";" << std::endl;
         }
     }
@@ -525,8 +512,9 @@ void
 Game::unsafe_permute(int *mapping)
 {
     // first update vectors and arrays and the strategies
+    int* strat = solution_.strategy_data();
     for (int i=0; i<n_vertices; i++) {
-        if (strategy[i] != -1) strategy[i] = mapping[strategy[i]];
+        if (strat[i] != -1) strat[i] = mapping[strat[i]];
     }
     unsigned long len = n_vertices + n_edges;
     for (unsigned long i=0; i<len; i++) {
@@ -557,9 +545,7 @@ Game::unsafe_permute(int *mapping)
                 std::swap(_incount[i], _incount[k]);
             }
             // swap solution
-            { bool b = solved[k]; solved[k] = solved[i]; solved[i] = b; }
-            { bool b = winner[k]; winner[k] = winner[i]; winner[i] = b; }
-            std::swap(strategy[i], strategy[k]);
+            solution_.swap_vertices(i, k);
         }
     }
 }
@@ -768,9 +754,7 @@ Game::swap(Game &other)
     std::swap(_inedges, other._inedges);
     std::swap(_firstins, other._firstins);
     std::swap(_incount, other._incount);
-    std::swap(solved, other.solved);
-    std::swap(winner, other.winner);
-    std::swap(strategy, other.strategy);
+    solution_.swap(other.solution_);
     std::swap(is_ordered, other.is_ordered);
     std::swap(v_allocated, other.v_allocated);
     std::swap(e_allocated, other.e_allocated);
@@ -780,17 +764,13 @@ Game::swap(Game &other)
 void
 Game::reset_solution()
 {
-    solved.reset();
-    winner.reset();
-    memset(strategy, -1, sizeof(int[n_vertices]));
+    solution_.reset();
 }
 
 void
 Game::copy_solution(Game &other)
 {
-    solved = other.solved;
-    winner = other.winner;
-    memcpy(strategy, other.strategy, sizeof(int[n_vertices]));
+    solution_ = other.solution_;
 }
 
 void 
@@ -808,22 +788,18 @@ Game::v_sizeup(void)
     v_allocated += v_allocated/2;
     n_vertices = v_allocated;
     _priority = (int*)realloc(_priority, sizeof(int[v_allocated]));
-    strategy = (int*)realloc(strategy, sizeof(int[v_allocated]));
     _firstouts = (int*)realloc(_firstouts, sizeof(int[v_allocated]));
     _outcount = (int*)realloc(_outcount, sizeof(int[v_allocated]));
     if (_priority == (int*)0) abort();
-    if (strategy == (int*)0) abort();
     if (_firstouts == (int*)0) abort();
     if (_outcount == (int*)0) abort();
     // zero-initialize the newly allocated tail of each array
     std::fill(_priority+old_allocated, _priority+v_allocated, 0);
-    std::fill(strategy+old_allocated, strategy+v_allocated, -1);
     std::fill(_firstouts+old_allocated, _firstouts+v_allocated, 0);
     std::fill(_outcount+old_allocated, _outcount+v_allocated, 0);
     _label.resize(v_allocated);
     _owner.resize(v_allocated);
-    solved.resize(v_allocated);
-    winner.resize(v_allocated);
+    solution_.resize(v_allocated);
 }
 
 void
@@ -832,8 +808,7 @@ Game::v_resize(size_t newsize)
     while (newsize > v_allocated) v_sizeup();
     n_vertices = newsize;
     _owner.resize(n_vertices);
-    solved.resize(n_vertices);
-    winner.resize(n_vertices);
+    solution_.resize(n_vertices);
 }
 
 void

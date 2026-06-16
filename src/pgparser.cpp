@@ -108,7 +108,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
      */
 
     int node_count = 0; // number of read nodes
-    res.solved.set(); // we use solved to store whether a node has not yet been read
+    bitset seen(res.n_vertices); // tracks which nodes have been read
 
     while (node_count < res.n_vertices) {
         uint64_t id;
@@ -117,6 +117,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
             // we expect maybe one more node...
             if (node_count == res.n_vertices-1) {
                 res.v_resize(node_count);
+                seen.resize(node_count);
                 // ignore rest, they can be bigger
                 break;
             }
@@ -124,8 +125,8 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         }
         if (id >= (unsigned)res.n_vertices) throw std::runtime_error("invalid id");
 
-        if (!res.solved[id]) throw std::runtime_error("duplicate id");
-        res.solved[id] = false;
+        if (seen[id]) throw std::runtime_error("duplicate id");
+        seen[id] = true;
         node_count++;
 
         skip_whitespace(rd);
@@ -188,8 +189,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         res.e_finish();
     }
 
-    if (res.solved.any()) {
-        std::cout << "count : " << res.solved.count() << std::endl;
+    if (!seen.all()) {
         throw std::runtime_error("missing nodes");
     }
 
@@ -201,9 +201,6 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
             break;
         }
     }
-
-    // ensure strategy empty
-    std::fill(res.strategy, res.strategy+res.n_vertices, static_cast<int>(~0));
 
     return res;
 }

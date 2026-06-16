@@ -90,6 +90,22 @@ public:
     void set_winner(int v, int winner) noexcept { winner_[v] = winner; }
     void set_strategy(int v, int strategy) noexcept { strategy_[v] = strategy; }
 
+    /** Swap the solution state of two vertices (used when permuting vertices). */
+    void swap_vertices(int a, int b) noexcept
+    {
+        bool sa = solved_[a]; solved_[a] = (bool)solved_[b]; solved_[b] = sa;
+        bool wa = winner_[a]; winner_[a] = (bool)winner_[b]; winner_[b] = wa;
+        std::swap(strategy_[a], strategy_[b]);
+    }
+
+    /** Cheap swap (pointer swaps only). */
+    void swap(Solution& other) noexcept
+    {
+        solved_.swap(other.solved_);
+        winner_.swap(other.winner_);
+        strategy_.swap(other.strategy_);
+    }
+
 private:
     bitset solved_;             // set if vertex is solved
     bitset winner_;             // for solved vertices, 1 if won by Odd, else 0

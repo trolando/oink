@@ -26,6 +26,7 @@
 #include <boost/random/uniform_int_distribution.hpp>
 
 #include <oink/bitset.hpp>
+#include <oink/solution.hpp>
 
 namespace pg {
 
@@ -249,12 +250,12 @@ public:
     /**
      * Returns whether every vertex has dominion 0 or 1.
      */
-    inline bool game_solved() const { return (unsigned)vertexcount() == solved.count(); }
+    inline bool game_solved() const { return (unsigned)vertexcount() == solution_.solved().count(); }
 
     /**
      * Count and return how many vertices have dominion -1.
      */
-    inline long count_unsolved() const { return vertexcount() - solved.count(); }
+    inline long count_unsolved() const { return vertexcount() - solution_.solved().count(); }
 
     /**
      * Create a new Game of the subgame of the vertices given in <selection>.
@@ -381,7 +382,7 @@ public:
      */
     [[nodiscard]] const bitset& getSolved() const
     {
-        return solved;
+        return solution_.solved();
     }
 
     /**
@@ -391,7 +392,7 @@ public:
      */
     [[nodiscard]] bool isSolved(int vertex) const
     {
-        return solved[vertex];
+        return solution_.is_solved(vertex);
     }
 
     /* TODO: some solvers currently want direct access to the int* with strategies
@@ -399,7 +400,7 @@ public:
        kind of move assignment to update the strategy... */
     [[nodiscard]] int* getStrategy() const
     {
-        return strategy;
+        return const_cast<int*>(solution_.strategy_data());
     }
 
     /**
@@ -410,7 +411,7 @@ public:
      */
     [[nodiscard]] int getStrategy(int vertex) const
     {
-        return strategy[vertex];
+        return solution_.strategy(vertex);
     }
 
     /**
@@ -420,7 +421,7 @@ public:
      */
     [[nodiscard]] int getWinner(int vertex) const
     {
-        return solved[vertex] ? (winner[vertex] ? 1 : 0) : -1;
+        return solution_.is_solved(vertex) ? solution_.winner(vertex) : -1;
     }
 
     /**
@@ -431,9 +432,7 @@ public:
      */
     void solve(int vertex, int winner, int strategy)
     {
-        this->solved[vertex] = true;
-        this->winner[vertex] = winner;
-        this->strategy[vertex] = owner(vertex) == winner ? strategy : -1;
+        solution_.solve(vertex, winner, owner(vertex) == winner ? strategy : -1);
     }
 
     /**
@@ -496,9 +495,7 @@ private:
     size_t e_allocated;    // number of edges allocated as virtual memory
     size_t e_size;         // number of entries used in edge array
 
-    bitset solved;         // set true if vertex solved
-    bitset winner;         // for solved vertices, set 1 if won by 1, else 0
-    int *strategy;         // strategy for winning vertices
+    Solution solution_;    // mutable solver output (solved/winner/strategy)
 
     void unsafe_permute(int *mapping); // apply a reordering
     
