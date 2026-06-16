@@ -743,14 +743,14 @@ Game::copy_solution(Game &other)
 void 
 Game::e_sizeup(void)
 {
-    e_allocated += e_allocated/2;
+    e_allocated += e_allocated/2 + 1; // +1 so it always grows (e.g. from size 1)
     _outedges.resize(e_allocated);
 }
 
 void
 Game::v_sizeup(void)
 {
-    v_allocated += v_allocated/2;
+    v_allocated += v_allocated/2 + 1; // +1 so it always grows (e.g. from size 1)
     n_vertices = v_allocated;
     // resize grows the arrays, value-initializing the new tail to 0
     _priority.resize(v_allocated);
