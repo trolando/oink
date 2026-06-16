@@ -143,6 +143,7 @@ Game::Game(int vcount, int ecount) : _owner(vcount), solved(vcount), winner(vcou
     _incount = NULL;
     is_ordered = true;
 
+    std::fill(_priority, _priority+vcount, 0);
     std::fill(_firstouts, _firstouts+vcount, '\x00');
     std::fill(_outcount, _outcount+vcount, '\x00');
     _outedges[0] = -1;
@@ -814,6 +815,7 @@ Game::e_sizeup(void)
 void
 Game::v_sizeup(void)
 {
+    const size_t old_allocated = v_allocated;
     v_allocated += v_allocated/2;
     n_vertices = v_allocated;
     _priority = (int*)realloc(_priority, sizeof(int[v_allocated]));
@@ -826,6 +828,13 @@ Game::v_sizeup(void)
     if (_firstouts == (int*)0) abort();
     if (_outcount == (int*)0) abort();
     if (_label == (string**)0) abort();
+    // zero-initialize the newly allocated tail of each array; in particular
+    // _label must be null so the destructor does not free garbage pointers
+    std::fill(_priority+old_allocated, _priority+v_allocated, 0);
+    std::fill(strategy+old_allocated, strategy+v_allocated, -1);
+    std::fill(_firstouts+old_allocated, _firstouts+v_allocated, 0);
+    std::fill(_outcount+old_allocated, _outcount+v_allocated, 0);
+    std::fill(_label+old_allocated, _label+v_allocated, nullptr);
     _owner.resize(v_allocated);
     solved.resize(v_allocated);
     winner.resize(v_allocated);
