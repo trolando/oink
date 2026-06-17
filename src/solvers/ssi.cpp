@@ -34,12 +34,16 @@ SSISolver::si_val_less(int a, int b)
 {
     // if a == b, then of course return false
     if (a == b) return false;
-    const int *a_val = val + k*a;
-    const int *b_val = val + k*b;
+    // a or b may be -1 (a halted/empty valuation, treated as all zeroes). Only
+    // form the offset pointer for a real vertex: computing val+k*(-1) would be an
+    // out-of-bounds pointer (undefined behavior) even though it is never read, and
+    // an optimizing compiler may exploit that to drop the a/b == -1 guards below.
+    const int *a_val = a == -1 ? nullptr : val + k*a;
+    const int *b_val = b == -1 ? nullptr : val + k*b;
     // find highest priority where they differ
     for (int i=k-1; i>=0; i--) {
-        const int a_i = a == -1 ? 0 : a_val[i];
-        const int b_i = b == -1 ? 0 : b_val[i];
+        const int a_i = a_val == nullptr ? 0 : a_val[i];
+        const int b_i = b_val == nullptr ? 0 : b_val[i];
         if (a_i == b_i) continue;
         if (i&1) return a_i > b_i; // for odd priorities
         else return a_i < b_i;     // for even priorities
