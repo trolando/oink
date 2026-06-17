@@ -16,7 +16,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <unistd.h>
 
 #include "fpi.hpp"
 

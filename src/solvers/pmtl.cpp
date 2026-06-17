@@ -17,11 +17,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <unistd.h>
 
 #include "pmtl.hpp"
 #include "oink/uintqueue.hpp"
-#include <boost/sort/sort.hpp>
 
 // #define CHECK_UNIQUE 1
 
@@ -466,8 +464,7 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         };
 
     // first order all vertices by value then priority
-    // std::sort(order, order+nodecount(), max_pm_first);
-    boost::sort::pdqsort(order, order+nodecount(), max_pm_first);
+    std::sort(order, order+nodecount(), max_pm_first);
 
 #ifndef NDEBUG
     if (trace >= 2) {

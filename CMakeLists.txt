@@ -7,6 +7,10 @@ project(oink
     LANGUAGES C CXX
 )
 
+# Build Oink (and the bundled lace) tuned to the build machine's CPU. Off by
+# default so packaged binaries stay portable; enable for local benchmarking.
+option(OINK_BUILD_NATIVE "Optimize for the build CPU (-march=native; not portable)" OFF)
+
 # Dependencies
 include(FetchContent)
 if(NOT TARGET lace::lace)
@@ -17,22 +21,33 @@ if(NOT TARGET lace::lace)
         GIT_REPOSITORY https://github.com/trolando/lace.git
         GIT_TAG        v2.3.2
     )
+    # Keep the bundled lace's CPU tuning consistent with Oink's. Uses the cache
+    # default so an explicit -DLACE_NATIVE_OPT still wins.
+    set(LACE_NATIVE_OPT ${OINK_BUILD_NATIVE} CACHE BOOL "Enable -march=native in lace")
     FetchContent_MakeAvailable(lace)
   endif()
 endif()
 
-find_package(Boost REQUIRED COMPONENTS filesystem iostreams regex random CONFIG)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
 
 # Main library target
 add_library(oink STATIC)
 add_library(oink::oink ALIAS oink)
-set_target_properties(oink PROPERTIES VERSION ${oink_VERSION} SOVERSION ${oink_VERSION_MAJOR})
+
+# Generate the version header from the single source of truth: project(VERSION).
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.hpp.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/oink/version.hpp
+    @ONLY
+)
 
 set(OINK_HDRS
     include/oink/oink.hpp
     include/oink/error.hpp
     include/oink/game.hpp
     include/oink/game_builder.hpp
+    include/oink/io.hpp
     include/oink/player.hpp
     include/oink/solution.hpp
     include/oink/span.hpp
@@ -61,15 +76,63 @@ target_include_directories(oink
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
-    $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(oink PUBLIC pthread lace::lace)
+target_link_libraries(oink PUBLIC Threads::Threads lace::lace)
 
-option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" ON)
+# Optional transparent decompression of input parity games (.gz/.bz2/.xz).
+# These are private implementation details of the parser: each backend is
+# independent, a missing library simply disables that format (reported as an
+# informational message at configure time), and the dependency does not appear
+# in Oink's public headers.
+# OINK_COMPRESSION_DEPS feeds find_dependency() in the CMake package config;
+# OINK_PC_EXTRA_LIBS feeds Libs.private in the pkg-config file.
+set(OINK_COMPRESSION_DEPS "")
+set(OINK_PC_EXTRA_LIBS "")
+find_package(ZLIB)
+if(ZLIB_FOUND)
+    target_link_libraries(oink PRIVATE ZLIB::ZLIB)
+    target_compile_definitions(oink PRIVATE OINK_HAVE_ZLIB=1)
+    list(APPEND OINK_COMPRESSION_DEPS ZLIB)
+    string(APPEND OINK_PC_EXTRA_LIBS " -lz")
+    message(STATUS "Oink: gzip (.gz) input support enabled")
+else()
+    message(STATUS "Oink: gzip (.gz) input support disabled (zlib not found)")
+endif()
+
+find_package(BZip2)
+if(BZIP2_FOUND)
+    target_link_libraries(oink PRIVATE BZip2::BZip2)
+    target_compile_definitions(oink PRIVATE OINK_HAVE_BZIP2=1)
+    list(APPEND OINK_COMPRESSION_DEPS BZip2)
+    string(APPEND OINK_PC_EXTRA_LIBS " -lbz2")
+    message(STATUS "Oink: bzip2 (.bz2) input support enabled")
+else()
+    message(STATUS "Oink: bzip2 (.bz2) input support disabled (libbz2 not found)")
+endif()
+
+find_package(LibLZMA)
+if(LibLZMA_FOUND)
+    target_link_libraries(oink PRIVATE LibLZMA::LibLZMA)
+    target_compile_definitions(oink PRIVATE OINK_HAVE_LZMA=1)
+    list(APPEND OINK_COMPRESSION_DEPS LibLZMA)
+    string(APPEND OINK_PC_EXTRA_LIBS " -llzma")
+    message(STATUS "Oink: xz (.xz) input support enabled")
+else()
+    message(STATUS "Oink: xz (.xz) input support disabled (liblzma not found)")
+endif()
+
+# OINK_BUILD_NATIVE is declared near the top so it can be propagated to lace.
 if(OINK_BUILD_NATIVE)
-    target_compile_options(oink PRIVATE "-march=native")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-march=native" OINK_HAS_MARCH_NATIVE)
+    if(OINK_HAS_MARCH_NATIVE)
+        target_compile_options(oink PRIVATE -march=native)
+    else()
+        message(WARNING "OINK_BUILD_NATIVE is ON but the compiler does not support -march=native")
+    endif()
 endif()
 
 option(OINK_ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
@@ -118,6 +181,7 @@ target_sources(oink
     # Core files
     src/game.cpp
     src/game_builder.cpp
+    src/io.cpp
     src/pgparser.cpp
     src/oink.cpp
     src/scc.cpp
@@ -160,18 +224,22 @@ set_target_properties(oink PROPERTIES PUBLIC_HEADER "${OINK_HDRS}")
 macro(set_target_props NAME)
     target_compile_features(${NAME} PUBLIC c_std_17 cxx_std_17)
     target_compile_options(${NAME} PRIVATE -Wall -Wextra)
-    target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${Boost_INCLUDE_DIRS})
+    target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(${NAME} oink::oink)
 endmacro(set_target_props)
 
-add_executable(solve)
-target_sources(solve PRIVATE src/tools/solve.cpp src/tools/getrss.c)
-set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
-set_target_props(solve)
-target_link_libraries(solve Boost::iostreams Boost::random)
+# Command-line tools. On by default; downstream consumers that embed Oink as a
+# library (e.g. via add_subdirectory) can disable them with -DOINK_BUILD_TOOLS=OFF.
+option(OINK_BUILD_TOOLS "Build the Oink command-line tools" ON)
+
+if(OINK_BUILD_TOOLS)
+    add_executable(solve)
+    target_sources(solve PRIVATE src/tools/solve.cpp src/tools/getrss.c)
+    set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
+    set_target_props(solve)
+endif()
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    option(OINK_BUILD_TOOLS "Build basic Oink tools" ON)
     option(OINK_BUILD_EXTRA_TOOLS "Build extra Oink tools" OFF)
     option(OINK_BUILD_TESTS "Build tests" ON)
 
@@ -179,7 +247,6 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_executable(test_solvers)
         target_sources(test_solvers PRIVATE test/test_solvers.cpp)
         set_target_props(test_solvers)
-        target_link_libraries(test_solvers Boost::iostreams Boost::filesystem Boost::random)
         add_executable(test_measures)
         target_sources(test_measures PRIVATE test/test_measures.cpp)
         set_target_props(test_measures)
@@ -324,7 +391,7 @@ set_target_properties(oink PROPERTIES
 
 include(GNUInstallDirs)
 
-install(TARGETS oink solve
+install(TARGETS oink
     EXPORT oink-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -332,6 +399,18 @@ install(TARGETS oink solve
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
 )
+
+# The generated version header is not part of PUBLIC_HEADER; install it directly.
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/oink/version.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
+)
+
+if(OINK_BUILD_TOOLS)
+    install(TARGETS solve
+        EXPORT oink-targets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
 
 install(EXPORT oink-targets
     FILE oink-targets.cmake
@@ -341,6 +420,9 @@ install(EXPORT oink-targets
 
 include(CMakePackageConfigHelpers)
 
+# oink-config.cmake.in resolves Threads and lace unconditionally and loops over
+# OINK_COMPRESSION_DEPS (set during backend detection above) for the optional
+# compression libraries that were enabled in this build.
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/oink-config.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config.cmake
@@ -358,5 +440,17 @@ install(
         ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config-version.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/oink
+)
+
+# pkg-config file for non-CMake consumers. OINK_PC_EXTRA_LIBS (the enabled
+# compression libs) goes into Libs.private for static linking; lace is pulled
+# in via Requires.
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/oink.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/oink.pc
+    @ONLY
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/oink.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
 )
 
