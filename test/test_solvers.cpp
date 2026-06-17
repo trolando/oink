@@ -23,8 +23,7 @@
 #include <sys/time.h>
 #include <optional>
 
-#include <boost/process/v1.hpp>
-
+#include <cstdio>
 #include <filesystem>
 #include <random>
 
@@ -54,7 +53,28 @@ static fs::path unique_temp_path()
         if (!fs::exists(p)) return p;
     }
 }
-namespace bp = boost::process::v1;
+// Run a shell command and stream its combined stdout+stderr to `logger`.
+// Portable replacement for boost::process (popen / _popen on Windows).
+static void run_command_logged(const std::string& cmd, std::ostream& logger)
+{
+    const std::string full = cmd + " 2>&1";
+#ifdef _WIN32
+    FILE* pipe = _popen(full.c_str(), "r");
+#else
+    FILE* pipe = popen(full.c_str(), "r");
+#endif
+    if (pipe == nullptr) {
+        logger << "failed to run command: " << cmd << std::endl;
+        return;
+    }
+    char buf[4096];
+    while (std::fgets(buf, sizeof(buf), pipe) != nullptr) logger << buf;
+#ifdef _WIN32
+    _pclose(pipe);
+#else
+    pclose(pipe);
+#endif
+}
 
 bool opt_inflate = false;
 bool opt_compress = false;
@@ -146,26 +166,19 @@ public:
         auto path2 = unique_temp_path();
 
         // Write parity game to temporary file
-        std::ofstream file(path1.native());
+        std::ofstream file(path1);
         game.write_pgsolver(file);
         file.close();
 
         // Replace %I with input filename and %O with output filename
-        replaceAll(cmd, "%I", path1.native());
-        replaceAll(cmd, "%O", path2.native());
+        replaceAll(cmd, "%I", path1.string());
+        replaceAll(cmd, "%O", path2.string());
 
-        // Run the external program (no timeout)
-        bp::ipstream out;
-        bp::ipstream err;
-        bp::system("/bin/sh", "-c", cmd, bp::std_out > out, bp::std_err > err);
-
-        // Send any stdout/stderr contents to the logger
-        std::string line;
-        while (std::getline(out, line)) logger << line << std::endl;
-        while (std::getline(err, line)) logger << line << std::endl;
+        // Run the external program (no timeout), logging its output
+        run_command_logged(cmd, logger);
 
         // Read solution from temporary file
-        std::ifstream solution(path2.native());
+        std::ifstream solution(path2);
         game.parse_solution(solution);
         solution.close();
 

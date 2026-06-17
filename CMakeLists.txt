@@ -28,10 +28,6 @@ if(NOT TARGET lace::lace)
   endif()
 endif()
 
-# Oink only needs header-only Boost libraries (Container, Sort, and Process in
-# the test driver), so no compiled Boost components are required.
-find_package(Boost REQUIRED CONFIG)
-
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
@@ -81,7 +77,6 @@ target_include_directories(oink
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
-    $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
     $<INSTALL_INTERFACE:include>
 )
 
@@ -204,7 +199,7 @@ set_target_properties(oink PROPERTIES PUBLIC_HEADER "${OINK_HDRS}")
 macro(set_target_props NAME)
     target_compile_features(${NAME} PUBLIC c_std_17 cxx_std_17)
     target_compile_options(${NAME} PRIVATE -Wall -Wextra)
-    target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${Boost_INCLUDE_DIRS})
+    target_include_directories(${NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(${NAME} oink::oink)
 endmacro(set_target_props)
 
