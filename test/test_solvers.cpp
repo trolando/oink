@@ -23,13 +23,10 @@
 #include <sys/time.h>
 #include <optional>
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/bzip2.hpp>
-#include <boost/iostreams/filter/gzip.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/random/random_device.hpp>
 #include <boost/process/v1.hpp>
+
+#include <filesystem>
+#include <random>
 
 #include "tools/cxxopts.hpp"
 #include "oink/oink.hpp"
@@ -38,10 +35,25 @@
 #include "verifier.hpp"
 #include "lace.h"
 #include "oink/pgparser.hpp"
+#include "oink/io.hpp"
 
 using namespace pg;
-namespace fs = boost::filesystem;
-namespace io = boost::iostreams;
+namespace fs = std::filesystem;
+
+// Generate a unique, non-existing path in the system temp directory.
+// Replaces boost::filesystem::unique_path() (no std::filesystem equivalent).
+static fs::path unique_temp_path()
+{
+    static std::mt19937_64 gen(std::random_device{}());
+    std::uniform_int_distribution<uint64_t> dist;
+    const auto dir = fs::temp_directory_path();
+    for (;;) {
+        std::ostringstream name;
+        name << "oink-" << std::hex << dist(gen);
+        auto p = dir / name.str();
+        if (!fs::exists(p)) return p;
+    }
+}
 namespace bp = boost::process::v1;
 
 bool opt_inflate = false;
@@ -130,8 +142,8 @@ public:
         */
 
         // Obtain temporary filenames
-        auto path1 = fs::unique_path();
-        auto path2 = fs::unique_path();
+        auto path1 = unique_temp_path();
+        auto path2 = unique_temp_path();
 
         // Write parity game to temporary file
         std::ofstream file(path1.native());
@@ -393,14 +405,9 @@ main(int argc, char **argv)
         for (auto &cp : files) {
             std::string filename = cp.filename().string();
             std::cout << filename << ": " << std::flush;
-            io::filtering_istream in;
-            if (boost::algorithm::ends_with(filename, ".bz2")) in.push(io::bzip2_decompressor());
-            if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
-            std::ifstream inp(cp.c_str(), std::ios_base::binary);
-            in.push(inp);
             try {
-                Game game = PGParser::parse_pgsolver_renumber(in, opt_loops);
-                inp.close();
+                auto in = open_input(cp.string());
+                Game game = PGParser::parse_pgsolver_renumber(*in, opt_loops);
                 total++;
                 for (const auto& id : solvers) {
                     std::cout << std::flush;
@@ -435,13 +442,13 @@ main(int argc, char **argv)
         if (options.count("seed")) {
             seriesseed = options["seed"].as<unsigned int>();
         } else {
-            boost::random::random_device rd;
+            std::random_device rd;
             seriesseed = rd();
         }
 
         std::cout << "Creating " << n << " random games: --size=" << size << " --maxp=" << maxP << " --maxe=" << maxE << " --seed=" << seriesseed << std::endl;
 
-        boost::random::mt19937 generator(seriesseed);
+        std::mt19937 generator(seriesseed);
         Game g;
 
         for (unsigned int i=0; i<n && !quit; i++) {

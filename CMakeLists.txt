@@ -21,7 +21,9 @@ if(NOT TARGET lace::lace)
   endif()
 endif()
 
-find_package(Boost REQUIRED COMPONENTS filesystem iostreams regex random CONFIG)
+# Oink only needs header-only Boost libraries (Container, Sort, and Process in
+# the test driver), so no compiled Boost components are required.
+find_package(Boost REQUIRED CONFIG)
 
 # Main library target
 add_library(oink STATIC)
@@ -33,6 +35,7 @@ set(OINK_HDRS
     include/oink/error.hpp
     include/oink/game.hpp
     include/oink/game_builder.hpp
+    include/oink/io.hpp
     include/oink/player.hpp
     include/oink/solution.hpp
     include/oink/span.hpp
@@ -67,6 +70,42 @@ target_include_directories(oink
 
 target_link_libraries(oink PUBLIC pthread lace::lace)
 
+# Optional transparent decompression of input parity games (.gz/.bz2/.xz).
+# These are private implementation details of the parser: each backend is
+# independent, a missing library simply disables that format (reported as an
+# informational message at configure time), and the dependency does not appear
+# in Oink's public headers.
+set(OINK_COMPRESSION_DEPS "")
+find_package(ZLIB)
+if(ZLIB_FOUND)
+    target_link_libraries(oink PRIVATE ZLIB::ZLIB)
+    target_compile_definitions(oink PRIVATE OINK_HAVE_ZLIB=1)
+    list(APPEND OINK_COMPRESSION_DEPS ZLIB)
+    message(STATUS "Oink: gzip (.gz) input support enabled")
+else()
+    message(STATUS "Oink: gzip (.gz) input support disabled (zlib not found)")
+endif()
+
+find_package(BZip2)
+if(BZIP2_FOUND)
+    target_link_libraries(oink PRIVATE BZip2::BZip2)
+    target_compile_definitions(oink PRIVATE OINK_HAVE_BZIP2=1)
+    list(APPEND OINK_COMPRESSION_DEPS BZip2)
+    message(STATUS "Oink: bzip2 (.bz2) input support enabled")
+else()
+    message(STATUS "Oink: bzip2 (.bz2) input support disabled (libbz2 not found)")
+endif()
+
+find_package(LibLZMA)
+if(LibLZMA_FOUND)
+    target_link_libraries(oink PRIVATE LibLZMA::LibLZMA)
+    target_compile_definitions(oink PRIVATE OINK_HAVE_LZMA=1)
+    list(APPEND OINK_COMPRESSION_DEPS LibLZMA)
+    message(STATUS "Oink: xz (.xz) input support enabled")
+else()
+    message(STATUS "Oink: xz (.xz) input support disabled (liblzma not found)")
+endif()
+
 option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" ON)
 if(OINK_BUILD_NATIVE)
     target_compile_options(oink PRIVATE "-march=native")
@@ -99,6 +138,7 @@ target_sources(oink
     # Core files
     src/game.cpp
     src/game_builder.cpp
+    src/io.cpp
     src/pgparser.cpp
     src/oink.cpp
     src/scc.cpp
@@ -149,7 +189,6 @@ add_executable(solve)
 target_sources(solve PRIVATE src/tools/solve.cpp src/tools/getrss.c)
 set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
 set_target_props(solve)
-target_link_libraries(solve Boost::iostreams Boost::random)
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     option(OINK_BUILD_TOOLS "Build basic Oink tools" ON)
@@ -160,7 +199,6 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_executable(test_solvers)
         target_sources(test_solvers PRIVATE test/test_solvers.cpp)
         set_target_props(test_solvers)
-        target_link_libraries(test_solvers Boost::iostreams Boost::filesystem Boost::random)
         add_executable(test_measures)
         target_sources(test_measures PRIVATE test/test_measures.cpp)
         set_target_props(test_measures)
@@ -321,6 +359,13 @@ install(EXPORT oink-targets
 )
 
 include(CMakePackageConfigHelpers)
+
+# Emit find_dependency() calls for the compression backends that were enabled,
+# so downstream find_package(oink) can resolve oink's private link deps.
+set(OINK_CONFIG_FIND_DEPS "")
+foreach(dep IN LISTS OINK_COMPRESSION_DEPS)
+    string(APPEND OINK_CONFIG_FIND_DEPS "find_dependency(${dep})\n")
+endforeach()
 
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/oink-config.cmake.in

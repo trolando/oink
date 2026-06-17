@@ -19,18 +19,14 @@
 #include <iostream>
 #include <fstream>
 #include <sys/time.h>
+#include <unistd.h>
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/iostreams/categories.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/bzip2.hpp>
-#include <boost/iostreams/filter/gzip.hpp>
-
-#include "cxxopts.hpp" 
+#include "cxxopts.hpp"
 #include "oink/oink.hpp"
 #include "oink/solvers.hpp"
 #include "oink/pgparser.hpp"
 #include "verifier.hpp"
+#include "oink/io.hpp"
 #include "tools/getrss.h"
 
 using namespace pg;
@@ -49,66 +45,50 @@ static double t_start;
 
 /*------------------------------------------------------------------------*/
 
-// timestamp_filter adds a timestamp at the beginning of every line.
-namespace io = boost::iostreams;
-class timestamp_filter : public io::output_filter
+// timestamp_streambuf prefixes a timestamp to the beginning of every line
+// before forwarding to an underlying ostream.
+class timestamp_streambuf : public std::streambuf
 {
 public:
-    timestamp_filter() {}
-    struct category : io::output_filter::category, io::flushable_tag { };
+    explicit timestamp_streambuf(std::ostream& sink) : sink(sink) {}
 
-    template<typename Sink> bool put(Sink& snk, char c);
-    template<typename Device> void close(Device&);
-    template<typename Sink> bool flush(Sink& snk);
+protected:
+    int_type overflow(int_type ch) override
+    {
+        if (traits_type::eq_int_type(ch, traits_type::eof())) return ch;
+        const char c = traits_type::to_char_type(ch);
+        if (is_start) {
+            if (c == '\n') return ch;  // ignore consecutive endl
+            is_start = false;
+            char sz[16];
+            int n = snprintf(sz, sizeof(sz), "[% 8.2f] ", wctime() - t_start);
+            sink.write(sz, n);
+        }
+        sink.put(c);
+        if (c == '\n') is_start = true;
+        return ch;
+    }
+
+    int sync() override { sink.flush(); return sink ? 0 : -1; }
 
 private:
+    std::ostream& sink;
     bool is_start = true;
-    char sz[16];
-    const char* pos = NULL;
-    const char* end = NULL;
 };
 
-template<typename Sink>
-bool timestamp_filter::put(Sink& dest, char c)
+// An ostream that prefixes every line with a timestamp.
+class timestamp_ostream : public std::ostream
 {
-    if (is_start) {
-        if (c == '\n') return true;  // ignore consecutive endl
-        is_start = false;
-        pos = sz;
-        end = sz + snprintf(sz, 16, "[% 8.2f] ", wctime() - t_start);
-    }
+public:
+    explicit timestamp_ostream(std::ostream& sink)
+        : std::ostream(nullptr), buf(sink) { rdbuf(&buf); }
 
-    while (pos != end) {
-        if (!io::put(dest, *pos)) return false;
-        pos++;
-    }
-
-    if (!io::put(dest, c)) return false;
-    if (c == '\n') is_start = true;
-
-    return true;
-}
-
-template<typename Sink>
-bool timestamp_filter::flush(Sink& dest)
-{
-    while (pos != end) {
-        if (!io::put(dest, *pos)) return false;
-        pos++;
-    }
-
-    return io::flush(dest);
-}
-
-template<typename Device>
-void timestamp_filter::close(Device&)
-{
-    is_start = true;
-    pos = end = NULL;
-}
+private:
+    timestamp_streambuf buf;
+};
 
 // global variable so signal handlers can work with it
-io::filtering_ostream out;
+timestamp_ostream out(std::cout);
 
 /*------------------------------------------------------------------------*/
 
@@ -238,13 +218,12 @@ int main(int argc, char **argv)
 
     /* Setup timestamp filter */
 
-    out.push(timestamp_filter());
-    out.push(std::cout);
 
     /**
      * STEP 1
      * Read the game that must be solved.
-     * (Supports bz2 and gz compression.)
+     * (Transparently decompresses .gz/.bz2/.xz when built with the
+     *  corresponding compression library.)
      */
 
     Game pg;
@@ -252,18 +231,12 @@ int main(int argc, char **argv)
     try {
         if (options.count("input")) {
             std::string filename = options["input"].as<std::string>();
-            io::filtering_istream in;
-            if (boost::algorithm::ends_with(filename, ".bz2")) in.push(io::bzip2_decompressor());
-            if (boost::algorithm::ends_with(filename, ".gz")) in.push(io::gzip_decompressor());
-            std::ifstream file(filename, std::ios_base::binary);
-            in.push(file);
+            auto in = open_input(filename);
             // time it
             auto begin = wctime();
-            //pg = PGParser::parse_pgsolver(in, options.count("no-loops") == 0 and options.count("no") == 0);
-            pg = PGParser::parse_pgsolver_renumber(in, options.count("no-loops") == 0 and options.count("no") == 0);
+            pg = PGParser::parse_pgsolver_renumber(*in, options.count("no-loops") == 0 and options.count("no") == 0);
             auto end = wctime();
             out << "parsing took " << std::fixed << (end-begin) << " sec." << std::endl;
-            file.close();
         } else {
             pg = PGParser::parse_pgsolver_renumber(std::cin, options.count("no-loops") == 0 and options.count("no") == 0);
         }
