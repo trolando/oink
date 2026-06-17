@@ -883,6 +883,8 @@ TLQSolver::run()
     delete[] str;
     delete[] tin;
     delete[] pea_vidx;
+    for (auto &x : tv) delete[] x;
+    for (auto &x : tout) delete[] x;
 }
 
 }

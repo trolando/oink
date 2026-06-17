@@ -596,6 +596,8 @@ PPQSolver::run()
 #endif
 
     delete[] str;
+    delete[] r;
+    delete[] u;
 }
 
 }
