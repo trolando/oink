@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <vector>
 
+#include <oink/intrinsics.hpp>
 #include <oink/libpopcnt.h>
 
 namespace pg
@@ -29,7 +30,7 @@ namespace pg
 
 static inline int bsr(uint64_t x)
 {
-    return __builtin_clzll(x) ^ 63;
+    return intrinsics::countl_zero64(x) ^ 63;
 }
 
 class bitset
@@ -280,7 +281,7 @@ public:
         size_t i = 0;
         while (i < num_blocks() and bits_[i] == 0) i++;
         if (i == num_blocks()) return npos;
-        else return i*64 + __builtin_ffsll(bits_[i]) - 1;
+        else return i*64 + intrinsics::countr_zero64(bits_[i]);
     }
 
     size_t find_last() const
@@ -302,12 +303,12 @@ public:
         size_t i = block_index(pos);
         uint64_t m = bits_[i] & (~uint64_t(0) << bit_index(pos));
         if (m) {
-            return i*64 + __builtin_ffsll(m) - 1;
+            return i*64 + intrinsics::countr_zero64(m);
         } else {
             i += 1;
             while (i < num_blocks() and bits_[i] == 0) i++;
             if (i == num_blocks()) return npos;
-            else return i*64 + __builtin_ffsll(bits_[i]) - 1;
+            else return i*64 + intrinsics::countr_zero64(bits_[i]);
         }
     }
 
