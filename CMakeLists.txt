@@ -222,6 +222,7 @@ endif()
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     option(OINK_BUILD_EXTRA_TOOLS "Build extra Oink tools" OFF)
+    option(OINK_BUILD_EXAMPLES "Build the library usage examples" ON)
     option(OINK_BUILD_TESTS "Build tests" ON)
 
     if(OINK_BUILD_TOOLS)
@@ -231,6 +232,13 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_executable(test_measures)
         target_sources(test_measures PRIVATE test/test_measures.cpp)
         set_target_props(test_measures)
+    endif()
+
+    # A small, self-contained example of using Oink as a library. Built by
+    # default so it keeps compiling against the public API; see examples/simple.cpp.
+    if(OINK_BUILD_EXAMPLES)
+        add_executable(oink-example-simple examples/simple.cpp)
+        set_target_props(oink-example-simple)
     endif()
 
     if(OINK_BUILD_EXTRA_TOOLS)
