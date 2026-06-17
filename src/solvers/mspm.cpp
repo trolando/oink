@@ -360,6 +360,7 @@ MSPMSolver::run()
 {
     // determine k = highest priority + 1
     k = priority(nodecount()-1)+1;
+    if (k < 2) k = 2; // both players' measures are always indexed, so reserve at least pm[0] and pm[1]
 
     // now create the data structure, for each node
     pms = new int[k*nodecount()];
