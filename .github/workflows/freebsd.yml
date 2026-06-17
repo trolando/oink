@@ -30,7 +30,7 @@ jobs:
           mkdir -p /usr/local/etc/pkg/repos
           echo 'FreeBSD-ports: { enabled: yes, signature_type: "none" }' > /usr/local/etc/pkg/repos/FreeBSD-ports.conf
           pkg update -f
-          pkg install -y cmake ninja pkgconf
+          pkg install -y cmake ninja pkgconf git
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
