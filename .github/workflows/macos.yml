@@ -1,0 +1,41 @@
+name: macOS
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clang-build:
+    name: 'macOS-15 Apple Clang ${{matrix.build_type}}'
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [RelWithDebInfo, Debug]
+    steps:
+    - uses: actions/checkout@v6
+    - name: Configure
+      run: |
+        export CC=clang CXX=clang++
+        cmake -S . -B build \
+          -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
+          -DCMAKE_INSTALL_PREFIX=$HOME/oink-install \
+          -DOINK_BUILD_TESTS=ON
+    - name: Build
+      run: cmake --build build
+    - name: Test
+      run: ctest --test-dir build --output-on-failure -C ${{matrix.build_type}} -VV --timeout 60
+    - name: Install
+      run: cmake --install build
+    - name: Run CMake consumer test
+      working-directory: test/install/consumer-cmake
+      run: |
+        export CMAKE_PREFIX_PATH=$HOME/oink-install
+        bash test.sh
+    - name: Run pkg-config consumer test
+      working-directory: test/install/consumer-pkgconfig
+      run: |
+        export PKG_CONFIG_PATH=$HOME/oink-install/lib/pkgconfig
+        bash test.sh

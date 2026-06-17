@@ -1,0 +1,53 @@
+name: Windows
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  msys2-build:
+    name: '${{ matrix.icon }} ${{ matrix.sys }} ${{ matrix.build_type }}'
+    runs-on: windows-latest
+    # Exploratory: the library, solvers and tests are expected to build under
+    # MSYS2/MinGW with no Boost. The `oink` CLI tool is not yet ported to Windows
+    # (getrss.c #errors on non-Linux/Apple), so it is excluded from the build and
+    # the install/consumer steps are not run here. Drop continue-on-error once green.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { icon: '🟦', sys: mingw64, build_type: RelWithDebInfo }
+          - { icon: '🟨', sys: ucrt64,  build_type: RelWithDebInfo }
+          - { icon: '🟨', sys: ucrt64,  build_type: Debug }
+          - { icon: '🟧', sys: clang64, build_type: RelWithDebInfo }
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - name: '🧰 Checkout'
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: '${{ matrix.icon }} Setup MSYS2'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: ${{matrix.sys}}
+        update: true
+        install: >-
+          git
+        pacboy: >-
+          toolchain:p
+          cmake:p
+          ninja:p
+          zlib:p
+          bzip2:p
+          xz:p
+    - name: '🚧 Configure'
+      run: cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DOINK_BUILD_TESTS=ON
+    - name: '🏗️ Build library and tests (excluding the CLI tool)'
+      run: cmake --build build --target oink test_solvers test_parser test_solution test_builder test_game
+    - name: '🧪 Test'
+      run: ctest --test-dir build --output-on-failure -C ${{matrix.build_type}} -VV --timeout 60
