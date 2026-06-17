@@ -248,6 +248,11 @@ test_solver(Game &game, const std::string& solverid, double &time, std::ostream 
 int
 main(int argc, char **argv)
 {
+    // Deliver progress output immediately. When stdout is a pipe (e.g. captured by
+    // CTest) it is block-buffered by default, so a run killed by a timeout would
+    // lose all per-game progress and hide which game/solver was stuck.
+    setvbuf(stdout, nullptr, _IONBF, 0);
+
     cxxopts::Options opts(argv[0], "Test parity game solvers");
     opts.custom_help("[OPTIONS...] [FILES...]");
     opts.add_options()
