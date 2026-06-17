@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+#include <algorithm>
 #include <stdexcept>
 #include <map>
 #include <set>
 #include <vector>
-#include <boost/container/flat_map.hpp>
 #include "oink/pgparser.hpp"
 #include "oink/game_builder.hpp"
 #include "oink/player.hpp"
@@ -481,24 +481,30 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
     }
 
     // we now need to fix the priorities first...
-    boost::container::flat_map<uint64_t, int> map;
-    for (const auto& entry : priority) {
-        map[entry] = -1;
-    }
+    // Compress priorities: assign each distinct priority a dense value that
+    // preserves order and parity. This needs the distinct priorities in sorted
+    // order, so we work on a sorted, de-duplicated vector (the parser is on the
+    // hot path for huge inputs, so we avoid node-based maps).
+    std::vector<uint64_t> distinct(priority);
+    std::sort(distinct.begin(), distinct.end());
+    distinct.erase(std::unique(distinct.begin(), distinct.end()), distinct.end());
 
+    std::vector<int> compressed(distinct.size());
     int counter = 0;
     uint64_t previous = 0;
-    for (auto& pair : map) {
-        if (previous != pair.first) {
+    for (size_t i=0; i<distinct.size(); i++) {
+        const uint64_t p = distinct[i];
+        if (previous != p) {
             counter++;
-            if ((counter&1) != (pair.first&1)) counter++;
-            previous = pair.first;
+            if ((counter&1) != (int)(p&1)) counter++;
+            previous = p;
         }
-        pair.second = counter;
+        compressed[i] = counter;
     }
 
     for (unsigned v=0; v<node_count; v++) {
-        builder.set_priority(v, map[priority[v]]);
+        auto it = std::lower_bound(distinct.begin(), distinct.end(), priority[v]);
+        builder.set_priority(v, compressed[it - distinct.begin()]);
     }
 
     return builder.build();
