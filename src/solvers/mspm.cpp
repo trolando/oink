@@ -263,9 +263,10 @@ MSPMSolver::solve(int node, int str)
                 bool escapes = false;
                 for (auto curedge = outs(from); *curedge != -1; curedge++) {
                     int to = *curedge;
-                    if (cover[to] < 0) continue; // disabled or already solved
-                    // if (cover[to] != 0) LOGIC_ERROR; // should have been covered
-                    // ^--- it can escape, happens when alternating!
+                    if (cover[to] == -2) continue;                              // disabled: not in subgame
+                    if (cover[to] == -1 and game.getWinner(to) == pl) continue; // solved, stays in pl's region
+                    // a successor solved for the opponent, covered, or unsolved is an escape
+                    // (covered can happen when alternating)
                     escapes = true;
                     break;
                 }
@@ -359,6 +360,7 @@ MSPMSolver::run()
 {
     // determine k = highest priority + 1
     k = priority(nodecount()-1)+1;
+    if (k < 2) k = 2; // both players' measures are always indexed, so reserve at least pm[0] and pm[1]
 
     // now create the data structure, for each node
     pms = new int[k*nodecount()];
@@ -482,9 +484,14 @@ MSPMSolver::run()
                         bool escapes = false;
                         for (auto curedge = outs(from); *curedge != -1; curedge++) {
                             int to = *curedge;
-                            if (cover[to] < 0) continue;
-                            if (cover[to] != 0) LOGIC_ERROR;
-                            escapes = true;
+                            if (cover[to] == -2) continue;              // disabled: not in subgame
+                            if (cover[to] == -1) {                      // solved
+                                if (game.getWinner(to) == pl) continue; // stays in pl's region
+                                escapes = true;                         // won by opponent: escape
+                                break;
+                            }
+                            if (cover[to] != 0) LOGIC_ERROR;            // covered (>0) unexpected here
+                            escapes = true;                             // unsolved: escape
                             break;
                         }
                         if (escapes) continue;
