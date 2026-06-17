@@ -219,15 +219,33 @@ Some algorithms can solve the two binary counters games in polynomial time:
 
 ## Usage
 
-Oink is compiled using CMake.
-Optionally, use `ccmake` to set options.
-By default, Oink does not compile the extra tools, only the library `liboink` and the main tools `oink` and `test_solvers`.
-Oink requires several Boost libraries.
+### Prerequisites
+
+- A C++17 compiler (GCC 9 or newer, Clang, or MSVC) and CMake 3.14 or newer.
+- [Lace](https://github.com/trolando/lace), the work-stealing framework used by the parallel solvers. By default CMake downloads it automatically with `git` during configuration, so the first build needs network access. To build offline, install Lace yourself and CMake will pick it up via `find_package(lace)`.
+- Optional: the `zlib`, `libbz2` and `liblzma` development packages enable transparent decompression of `.gz`, `.bz2` and `.xz` parity games. They are detected automatically; a missing library simply disables that input format.
+
+Oink does **not** require Boost.
+
+### Building
+
+Oink uses an out-of-tree CMake build. By default it builds the library `liboink`, the main tool `oink`, the test runner `test_solvers` and the example program (use `ccmake` or `-D` options such as `OINK_BUILD_EXTRA_TOOLS=ON` to change this).
+
 ```
-mkdir build && cd build
-cmake .. && make
-ctest
+cmake -S . -B build
+cmake --build build -j
+ctest --test-dir build
 ```
+
+### Getting started
+
+Solve one of the bundled example games and verify the solution:
+
+```
+./build/oink -v examples/abcg_arbiter.tlsf.ehoa.pg
+```
+
+Add `-p` to print which vertices each player wins.
 
 Oink provides usage instructions via `oink --help`. Typically, Oink is provided a parity game either
 via stdin (default) or from a file. The file may be zipped using the gzip or bzip2 format, which is detected if the
@@ -250,3 +268,50 @@ Typical options are:
 - `--dot <dotfile>` writes a .dot file of the game as loaded.
 - `-p` writes the vertices won by even/odd to stdout.
 - `-t` (once or multiple times) increases verbosity level.
+
+## Using Oink as a library
+
+After `cmake --install build`, Oink ships a CMake package and a pkg-config file, so a consuming project can use it directly:
+
+```cmake
+find_package(oink REQUIRED)
+target_link_libraries(my_app PRIVATE oink::oink)
+```
+
+A minimal end-to-end example — parse a parity game, solve it, and print the winner and strategy of each vertex — is in [`examples/simple.cpp`](examples/simple.cpp), which the build compiles to `oink-example-simple`:
+
+```
+./build/oink-example-simple examples/abcg_arbiter.tlsf.ehoa.pg
+```
+
+For complete standalone consumer projects (CMake and pkg-config), see `test/install/consumer-cmake` and `test/install/consumer-pkgconfig`.
+
+## Testing an external solver
+
+The `test_solvers` tool can run and **verify** an external solver — not only Oink's built-in ones — against a directory (or a list) of parity games. This is the easiest way to check your own solver for correctness against the bundled corpus.
+
+Use `--external name:command` (or `-e`), where `command` is how your solver is invoked, with two placeholders:
+
+- `%I` — **input**: the parity game (in PGSolver format) that `test_solvers` writes for each game.
+- `%O` — **output**: the file your solver must write its solution to.
+
+For every game, `test_solvers` writes the game to `%I`, runs your command, reads the solution back from `%O`, and verifies the winning regions and strategies. For example:
+
+```
+./build/test_solvers tests --external "mysolver:mysolver %I %O"
+./build/test_solvers tests -e "py:python3 solve.py %I %O"
+```
+
+`name` is just a label used in the report (the first `:` separates it from the command). You can list several `--external` solvers, and mix in built-in ones (e.g. add `--tl`) to compare in the same run.
+
+### Solution format
+
+Your solver reads a parity game in PGSolver format (the same format as the bundled `.pg` games) from `%I`, and writes a solution to `%O`. The solution has one line per vertex:
+
+```
+paritysol <count>;            # optional header line, ignored on input
+<vertex> <winner>;            # winner is 0 (Even) or 1 (Odd)
+<vertex> <winner> <strategy>; # include <strategy> only when the winner owns the vertex
+```
+
+`<strategy>` is the successor the winning player moves to; it is required exactly when `<winner>` equals the vertex's owner, and omitted otherwise. Every vertex must appear (a full solution is expected).
