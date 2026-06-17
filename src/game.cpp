@@ -311,13 +311,13 @@ Game::vec_has_edge(int from, int to)
 }
 
 bool
-Game::has_edge(int from, int to)
+Game::has_edge(int from, int to) const
 {
     return find_edge(from, to) != -1;
 }
 
 int
-Game::find_edge(int from, int to)
+Game::find_edge(int from, int to) const
 {
     for (int idx = _firstouts[from]; _outedges[idx] != -1; idx++) {
         if (_outedges[idx] == to) return idx;

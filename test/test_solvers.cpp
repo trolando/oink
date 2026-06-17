@@ -233,6 +233,7 @@ test_solver(Game &game, const std::string& solverid, double &time, std::ostream 
     game.copy_solution(copy);
 
     try {
+        game.ensure_sorted(); // Verifier requires a game sorted by priority
         Verifier v(game, log);
         v.verify(true, true, true);
     } catch (std::runtime_error &err) {
