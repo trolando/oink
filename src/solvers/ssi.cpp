@@ -34,12 +34,16 @@ SSISolver::si_val_less(int a, int b)
 {
     // if a == b, then of course return false
     if (a == b) return false;
-    const int *a_val = val + k*a;
-    const int *b_val = val + k*b;
+    // a or b may be -1 (a halted/empty valuation, treated as all zeroes). Only
+    // form the offset pointer for a real vertex: computing val+k*(-1) would be an
+    // out-of-bounds pointer (undefined behavior) even though it is never read, and
+    // an optimizing compiler may exploit that to drop the a/b == -1 guards below.
+    const int *a_val = a == -1 ? nullptr : val + k*a;
+    const int *b_val = b == -1 ? nullptr : val + k*b;
     // find highest priority where they differ
     for (int i=k-1; i>=0; i--) {
-        const int a_i = a == -1 ? 0 : a_val[i];
-        const int b_i = b == -1 ? 0 : b_val[i];
+        const int a_i = a_val == nullptr ? 0 : a_val[i];
+        const int b_i = b_val == nullptr ? 0 : b_val[i];
         if (a_i == b_i) continue;
         if (i&1) return a_i > b_i; // for odd priorities
         else return a_i < b_i;     // for even priorities
@@ -58,7 +62,10 @@ SSISolver::compute_vals_ll(int side)
     C = G;
 
     // find all halting vertices and set the linked list of in edges
-    std::fill(first_in, first_in+nodecount(), '\xff');
+    // -1 marks "no in-edge". Use the int literal, not '\xff': the latter is a
+    // char that converts to 255 (not -1) where char is unsigned (e.g. aarch64),
+    // which breaks the "from != -1" walk below and causes a non-terminating loop.
+    std::fill(first_in, first_in+nodecount(), -1);
     for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
         int s = S[v];
         if (H[s]) {
