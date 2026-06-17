@@ -25,6 +25,9 @@ endif()
 # the test driver), so no compiled Boost components are required.
 find_package(Boost REQUIRED CONFIG)
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 # Main library target
 add_library(oink STATIC)
 add_library(oink::oink ALIAS oink)
@@ -68,7 +71,7 @@ target_include_directories(oink
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(oink PUBLIC pthread lace::lace)
+target_link_libraries(oink PUBLIC Threads::Threads lace::lace)
 
 # Optional transparent decompression of input parity games (.gz/.bz2/.xz).
 # These are private implementation details of the parser: each backend is
@@ -185,13 +188,18 @@ macro(set_target_props NAME)
     target_link_libraries(${NAME} oink::oink)
 endmacro(set_target_props)
 
-add_executable(solve)
-target_sources(solve PRIVATE src/tools/solve.cpp src/tools/getrss.c)
-set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
-set_target_props(solve)
+# Command-line tools. On by default; downstream consumers that embed Oink as a
+# library (e.g. via add_subdirectory) can disable them with -DOINK_BUILD_TOOLS=OFF.
+option(OINK_BUILD_TOOLS "Build the Oink command-line tools" ON)
+
+if(OINK_BUILD_TOOLS)
+    add_executable(solve)
+    target_sources(solve PRIVATE src/tools/solve.cpp src/tools/getrss.c)
+    set_target_properties(solve PROPERTIES OUTPUT_NAME oink)
+    set_target_props(solve)
+endif()
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    option(OINK_BUILD_TOOLS "Build basic Oink tools" ON)
     option(OINK_BUILD_EXTRA_TOOLS "Build extra Oink tools" OFF)
     option(OINK_BUILD_TESTS "Build tests" ON)
 
@@ -343,7 +351,7 @@ set_target_properties(oink PROPERTIES
 
 include(GNUInstallDirs)
 
-install(TARGETS oink solve
+install(TARGETS oink
     EXPORT oink-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -351,6 +359,13 @@ install(TARGETS oink solve
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
 )
+
+if(OINK_BUILD_TOOLS)
+    install(TARGETS solve
+        EXPORT oink-targets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
 
 install(EXPORT oink-targets
     FILE oink-targets.cmake
@@ -360,13 +375,9 @@ install(EXPORT oink-targets
 
 include(CMakePackageConfigHelpers)
 
-# Emit find_dependency() calls for the compression backends that were enabled,
-# so downstream find_package(oink) can resolve oink's private link deps.
-set(OINK_CONFIG_FIND_DEPS "")
-foreach(dep IN LISTS OINK_COMPRESSION_DEPS)
-    string(APPEND OINK_CONFIG_FIND_DEPS "find_dependency(${dep})\n")
-endforeach()
-
+# oink-config.cmake.in resolves Threads and lace unconditionally and loops over
+# OINK_COMPRESSION_DEPS (set during backend detection above) for the optional
+# compression libraries that were enabled in this build.
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/oink-config.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config.cmake
