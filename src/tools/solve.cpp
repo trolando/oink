@@ -27,6 +27,7 @@
 #include "oink/pgparser.hpp"
 #include "verifier.hpp"
 #include "oink/io.hpp"
+#include "oink/version.hpp"
 #include "tools/getrss.h"
 
 using namespace pg;
@@ -174,6 +175,7 @@ int main(int argc, char **argv)
     cxxopts::Options opts(argv[0], "Parity game solver");
     opts.add_options()
         ("help", "Print help")
+        ("version", "Print version and exit")
         ("t,trace", "Generate trace (with increasing verbosity)")
         ("v,verify", "Verify solution")
         ("p,print", "Print solution to stdout")
@@ -208,6 +210,12 @@ int main(int argc, char **argv)
 
     if (options.count("help")) {
         std::cout << opts.help() << std::endl;
+        return 0;
+    }
+
+    if (options.count("version")) {
+        std::cout << "oink " << pg::version() << std::endl;
+        std::cout << "compressed input: " << supported_input_formats() << std::endl;
         return 0;
     }
 

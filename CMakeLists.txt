@@ -38,7 +38,13 @@ find_package(Threads REQUIRED)
 # Main library target
 add_library(oink STATIC)
 add_library(oink::oink ALIAS oink)
-set_target_properties(oink PROPERTIES VERSION ${oink_VERSION} SOVERSION ${oink_VERSION_MAJOR})
+
+# Generate the version header from the single source of truth: project(VERSION).
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.hpp.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/oink/version.hpp
+    @ONLY
+)
 
 set(OINK_HDRS
     include/oink/oink.hpp
@@ -74,6 +80,7 @@ target_include_directories(oink
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
     $<BUILD_INTERFACE:${Boost_INCLUDE_DIRS}>
     $<INSTALL_INTERFACE:include>
 )
@@ -371,6 +378,11 @@ install(TARGETS oink
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
+)
+
+# The generated version header is not part of PUBLIC_HEADER; install it directly.
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/oink/version.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/oink
 )
 
 if(OINK_BUILD_TOOLS)
