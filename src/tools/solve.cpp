@@ -357,6 +357,7 @@ int main(int argc, char **argv)
     if (options.count("v")) {
         try {
             out << "verifying solution..." << std::endl;
+            pg.ensure_sorted(); // Verifier requires a game sorted by priority
             Verifier v(pg, out);
             double vbegin = wctime();
             v.verify(true, true, true);

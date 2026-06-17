@@ -25,7 +25,9 @@ namespace pg {
 class Verifier
 {
 public:
-    Verifier(Game& game, std::ostream &logger) : game(game), logger(logger) { }
+    // The game must already be sorted by priority (call game.ensure_sorted()
+    // before constructing the Verifier); verification only reads the game.
+    Verifier(const Game& game, std::ostream &logger) : game(game), logger(logger) { }
 
     // TODO: make a std::exception class for verification exceptions?
 
@@ -40,7 +42,7 @@ public:
     int numberOfStrategies(void) { return n_strategies; }
 
 protected:
-    Game& game; // TODO: this should be "const"
+    const Game& game;
     std::ostream &logger;
     int n_strategies = 0;
 };

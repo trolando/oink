@@ -33,11 +33,9 @@ namespace pg {
 void
 Verifier::verify(bool fullgame, bool even, bool odd)
 {
-    // ensure the vertices are ordered properly
-    game.ensure_sorted();
-    // ensure that the arrays are built
-    game.build_in_array(false);
-
+    // The caller must pass a game that is already sorted by priority; the SCC
+    // search below relies on vertices being ordered by priority. Verification
+    // only reads outgoing edges, so no incoming-edge array is needed.
     const int n_vertices = game.vertexcount();
 
     /**

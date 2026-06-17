@@ -138,13 +138,13 @@ public:
     /**
      * Check if a certain edge exists.
      */
-    bool has_edge(int from, int to);
+    bool has_edge(int from, int to) const;
 
     /**
      * Get the index of an edge in the edge array (or -1 if not found)
      * NOTE: uses the edge arrays.
      */
-    int find_edge(int from, int to);
+    int find_edge(int from, int to) const;
 
     /**
      * Parse a [full or partial] pgsolver solution.
@@ -480,7 +480,7 @@ public:
      * @param v the vertex
      * @return a helper class
      */
-    _label_vertex label_vertex(int v)
+    _label_vertex label_vertex(int v) const
     {
         return _label_vertex(*this, v);
     }
