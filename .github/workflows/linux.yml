@@ -1,0 +1,99 @@
+name: Linux
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gcc-build:
+    name: 'Linux ${{matrix.name}} ${{matrix.build_type}}'
+    runs-on: ${{matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: GCC-9,  os: ubuntu-22.04,  cc: gcc-9,  cxx: g++-9,  pkg: gcc-9 g++-9,   build_type: RelWithDebInfo }
+          - { name: GCC-14, os: ubuntu-latest, cc: gcc-14, cxx: g++-14, pkg: gcc-14 g++-14, build_type: RelWithDebInfo }
+          - { name: GCC-14, os: ubuntu-latest, cc: gcc-14, cxx: g++-14, pkg: gcc-14 g++-14, build_type: Debug }
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y cmake ninja-build pkg-config zlib1g-dev libbz2-dev liblzma-dev ${{matrix.pkg}}
+    - name: Configure
+      run: |
+        export CC=${{matrix.cc}} CXX=${{matrix.cxx}}
+        cmake -S . -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
+          -DCMAKE_INSTALL_PREFIX=$HOME/oink-install \
+          -DOINK_BUILD_TESTS=ON
+    - name: Build
+      run: cmake --build build
+    - name: Test
+      run: ctest --test-dir build --output-on-failure -VV --timeout 60
+    - name: Install
+      run: cmake --install build
+    - name: Run CMake consumer test
+      working-directory: test/install/consumer-cmake
+      run: |
+        export CMAKE_PREFIX_PATH=$HOME/oink-install
+        bash test.sh
+    - name: Run pkg-config consumer test
+      working-directory: test/install/consumer-pkgconfig
+      run: |
+        export PKG_CONFIG_PATH=$HOME/oink-install/lib/pkgconfig
+        bash test.sh
+
+  clang-build:
+    name: 'Linux Clang-18 ${{matrix.build_type}}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [RelWithDebInfo, Debug]
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y cmake ninja-build clang-18 zlib1g-dev libbz2-dev liblzma-dev
+    - name: Configure
+      run: |
+        export CC=clang-18 CXX=clang++-18
+        cmake -S . -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
+          -DOINK_BUILD_TESTS=ON
+    - name: Build
+      run: cmake --build build
+    - name: Test
+      run: ctest --test-dir build --output-on-failure -VV --timeout 60
+
+  asan:
+    name: 'Linux ASan/UBSan ${{matrix.cc}}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cc: gcc-14,   cxx: g++-14,     pkg: gcc-14 g++-14 }
+          - { cc: clang-18, cxx: clang++-18, pkg: clang-18 }
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y cmake ninja-build zlib1g-dev libbz2-dev liblzma-dev ${{matrix.pkg}}
+    - name: Configure
+      run: |
+        export CC=${{matrix.cc}} CXX=${{matrix.cxx}}
+        cmake -S . -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DOINK_BUILD_TESTS=ON \
+          -DOINK_ENABLE_SANITIZERS=ON
+    - name: Build
+      run: cmake --build build
+    - name: Test
+      run: ctest --test-dir build --output-on-failure -VV --timeout 60
