@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <climits>
+
 #include "rtl.hpp"
 
 #define RECURSIVE_CLOSED_REGIONS 1

@@ -15,6 +15,7 @@
  */
 
 #include <algorithm>
+#include <climits>
 #include <stdexcept>
 #include <map>
 #include <set>
