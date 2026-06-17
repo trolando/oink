@@ -87,12 +87,16 @@ target_link_libraries(oink PUBLIC Threads::Threads lace::lace)
 # independent, a missing library simply disables that format (reported as an
 # informational message at configure time), and the dependency does not appear
 # in Oink's public headers.
+# OINK_COMPRESSION_DEPS feeds find_dependency() in the CMake package config;
+# OINK_PC_EXTRA_LIBS feeds Libs.private in the pkg-config file.
 set(OINK_COMPRESSION_DEPS "")
+set(OINK_PC_EXTRA_LIBS "")
 find_package(ZLIB)
 if(ZLIB_FOUND)
     target_link_libraries(oink PRIVATE ZLIB::ZLIB)
     target_compile_definitions(oink PRIVATE OINK_HAVE_ZLIB=1)
     list(APPEND OINK_COMPRESSION_DEPS ZLIB)
+    string(APPEND OINK_PC_EXTRA_LIBS " -lz")
     message(STATUS "Oink: gzip (.gz) input support enabled")
 else()
     message(STATUS "Oink: gzip (.gz) input support disabled (zlib not found)")
@@ -103,6 +107,7 @@ if(BZIP2_FOUND)
     target_link_libraries(oink PRIVATE BZip2::BZip2)
     target_compile_definitions(oink PRIVATE OINK_HAVE_BZIP2=1)
     list(APPEND OINK_COMPRESSION_DEPS BZip2)
+    string(APPEND OINK_PC_EXTRA_LIBS " -lbz2")
     message(STATUS "Oink: bzip2 (.bz2) input support enabled")
 else()
     message(STATUS "Oink: bzip2 (.bz2) input support disabled (libbz2 not found)")
@@ -113,6 +118,7 @@ if(LibLZMA_FOUND)
     target_link_libraries(oink PRIVATE LibLZMA::LibLZMA)
     target_compile_definitions(oink PRIVATE OINK_HAVE_LZMA=1)
     list(APPEND OINK_COMPRESSION_DEPS LibLZMA)
+    string(APPEND OINK_PC_EXTRA_LIBS " -llzma")
     message(STATUS "Oink: xz (.xz) input support enabled")
 else()
     message(STATUS "Oink: xz (.xz) input support disabled (liblzma not found)")
@@ -415,5 +421,17 @@ install(
         ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/cmake/oink-config-version.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/oink
+)
+
+# pkg-config file for non-CMake consumers. OINK_PC_EXTRA_LIBS (the enabled
+# compression libs) goes into Libs.private for static linking; lace is pulled
+# in via Requires.
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/oink.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/oink.pc
+    @ONLY
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/oink.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
 )
 
