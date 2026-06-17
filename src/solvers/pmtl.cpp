@@ -1062,6 +1062,8 @@ PMTLSolver::run()
     delete[] order;
     delete pm0;
     delete pm1;
+    delete pm0b;
+    delete pm1b;
 }
 
 }
