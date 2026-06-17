@@ -17,6 +17,11 @@
 #ifndef BITSET_HPP
 #define BITSET_HPP
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
 #include <oink/libpopcnt.h>
 
 namespace pg
@@ -63,59 +68,26 @@ public:
         void do_assign(bool x) { x ? do_set() : do_reset(); }
     };
 
-    bitset()
-    {
-        _size = 0;
-        _bitssize = 0;
-        _allocsize = 0;
-        _bits = NULL;
-    }
+    bitset() : _size(0) { }
 
-    bitset(size_t newsize)
-    {
-        _size = newsize;
-        _bitssize = (_size+63)/64;
-        _allocsize = _bitssize * 8;
-        _bits = new uint64_t[_bitssize];
-        std::fill(_bits, _bits+_bitssize, '\0');
-    }
+    bitset(size_t newsize) : bits_((newsize+63)/64, 0), _size(newsize) { }
 
-    bitset(const bitset &other)
-    {
-        _size = other._size;
-        _bitssize = other._bitssize;
-        _allocsize = _bitssize * 8;
-        _bits = new uint64_t[_bitssize];
-        std::copy(other._bits, other._bits+_bitssize, _bits);
-    }
+    bitset(const bitset &other) = default;
 
-    ~bitset()
-    {
-        if (_bits != NULL) delete[] _bits;
-    }
+    ~bitset() = default;
 
     /**
-     * After resizing the *new* bits _can_ be undefined.
+     * After resizing, any new bits are zero.
      */
     void resize(size_t newsize)
     {
-        if (_allocsize == 0) {
-            bitset b(newsize);
-            swap(b);
-        } else if (newsize <= _allocsize*8) {
-            // fits in allocated array already
-            _size = newsize;
-            _bitssize = (newsize+63)/64;
-            zero_unused_bits(); // only zeroes the last used block...
-        } else {
-            bitset b(newsize);
-            std::copy(_bits, _bits+_bitssize, b._bits);
-            swap(b);
-        }
+        _size = newsize;
+        bits_.resize((newsize+63)/64);
+        zero_unused_bits();
     }
 
 private:
-    inline size_t num_blocks(void) const { return _bitssize; }
+    inline size_t num_blocks(void) const { return bits_.size(); }
     inline size_t block_index(size_t pos) const { return pos / 64; }
     inline size_t bit_index(size_t pos) const { return pos % 64; }
     inline uint64_t bit_mask(size_t pos) const { return uint64_t(1) << bit_index(pos); }
@@ -124,26 +96,31 @@ private:
     inline void zero_unused_bits()
     {
         size_t extra = count_extra_bits();
-        if (extra != 0) _bits[num_blocks()-1] &= ((uint64_t(1) << extra) - 1);
+        if (extra != 0) bits_[num_blocks()-1] &= ((uint64_t(1) << extra) - 1);
     }
 
 public:
+    /** Low-level access to the underlying 64-bit blocks. */
+    [[nodiscard]] uint64_t* data() noexcept { return bits_.data(); }
+    [[nodiscard]] const uint64_t* data() const noexcept { return bits_.data(); }
+    [[nodiscard]] std::size_t block_count() const noexcept { return bits_.size(); }
+
     __attribute__((always_inline)) bitset& reset(void)
     {
-        std::fill(_bits, _bits+num_blocks(), '\0');
+        std::fill(bits_.begin(), bits_.end(), uint64_t(0));
         return *this;
     }
 
     __attribute__((always_inline)) bitset& set(void)
     {
-        std::fill(_bits, _bits+num_blocks(), static_cast<uint64_t>(~0));
+        std::fill(bits_.begin(), bits_.end(), static_cast<uint64_t>(~0));
         zero_unused_bits();
         return *this;
     }
 
     inline bitset& flip(void)
     {
-        for (size_t i=0; i<num_blocks(); i++) _bits[i] = ~_bits[i];
+        for (size_t i=0; i<num_blocks(); i++) bits_[i] = ~bits_[i];
         zero_unused_bits();
         return *this;
     }
@@ -155,12 +132,12 @@ public:
 
     std::size_t count(void) const
     {
-        return popcnt(_bits, num_blocks()*8);
+        return popcnt(bits_.data(), num_blocks()*8);
     }
 
     inline bool any(void) const
     {
-        uint64_t *p = _bits;
+        const uint64_t *p = bits_.data();
         std::size_t len = num_blocks();
         while (len-- != 0) if (*p++) return true;
         return false;
@@ -176,11 +153,11 @@ public:
         if (empty()) return true;
         size_t extra = count_extra_bits();
         if (extra == 0) {
-            uint64_t *p = _bits;
+            const uint64_t *p = bits_.data();
             std::size_t len = num_blocks();
             while (len-- != 0) if (*p++ != static_cast<uint64_t>(~0)) return false;
         } else {
-            uint64_t *p = _bits;
+            const uint64_t *p = bits_.data();
             std::size_t len = num_blocks()-1;
             while (len-- != 0) if (*p++ != static_cast<uint64_t>(~0)) return false;
             const uint64_t last_mask = (uint64_t(1)<<extra)-1;
@@ -203,22 +180,22 @@ public:
 
     inline void reset(size_t pos)
     {
-        _bits[block_index(pos)] &= ~bit_mask(pos);
+        bits_[block_index(pos)] &= ~bit_mask(pos);
     }
 
     inline void set(size_t pos)
     {
-        _bits[block_index(pos)] |= bit_mask(pos);
+        bits_[block_index(pos)] |= bit_mask(pos);
     }
 
     inline bool test(size_t pos) const
     {
-        return (_bits[block_index(pos)] & bit_mask(pos)) != 0;
+        return (bits_[block_index(pos)] & bit_mask(pos)) != 0;
     }
 
     reference operator[](size_t pos)
     {
-        return reference(_bits[block_index(pos)], bit_index(pos));
+        return reference(bits_[block_index(pos)], bit_index(pos));
     }
 
     inline bool operator[](size_t pos) const
@@ -235,8 +212,8 @@ public:
 
     bitset& operator-=(const bitset& other)
     {
-        uint64_t *p = _bits;
-        const uint64_t *q = other._bits;
+        uint64_t *p = bits_.data();
+        const uint64_t *q = other.bits_.data();
         std::size_t len = num_blocks();
         while (len-- != 0) (*p++) &= ~(*q++);
         return *this;
@@ -244,8 +221,8 @@ public:
 
     bitset& operator&=(const bitset& other)
     {
-        uint64_t *p = _bits;
-        const uint64_t *q = other._bits;
+        uint64_t *p = bits_.data();
+        const uint64_t *q = other.bits_.data();
         std::size_t len = num_blocks();
         while (len-- != 0) (*p++) &= (*q++);
         return *this;
@@ -253,8 +230,8 @@ public:
 
     bitset& operator|=(const bitset &other)
     {
-        uint64_t *p = _bits;
-        const uint64_t *q = other._bits;
+        uint64_t *p = bits_.data();
+        const uint64_t *q = other.bits_.data();
         std::size_t len = num_blocks();
         while (len-- != 0) (*p++) |= (*q++);
         return *this;
@@ -262,8 +239,8 @@ public:
 
     bitset& operator^=(const bitset &other)
     {
-        uint64_t *p = _bits;
-        const uint64_t *q = other._bits;
+        uint64_t *p = bits_.data();
+        const uint64_t *q = other.bits_.data();
         std::size_t len = num_blocks();
         while (len-- != 0) (*p++) ^= (*q++);
         return *this;
@@ -271,8 +248,8 @@ public:
 
     bool operator==(const bitset &other) const
     {
-        const uint64_t *p = _bits;
-        const uint64_t *q = other._bits;
+        const uint64_t *p = bits_.data();
+        const uint64_t *q = other.bits_.data();
         std::size_t len = num_blocks();
         while (len-- != 0) if ((*p++) != (*q++)) return false;
         return true;
@@ -285,16 +262,14 @@ public:
 
     inline void swap(bitset &other)
     {
+        bits_.swap(other.bits_);
         std::swap(_size, other._size);
-        std::swap(_bitssize, other._bitssize);
-        std::swap(_allocsize, other._allocsize);
-        std::swap(_bits, other._bits);
     }
 
     bool intersects(const bitset& other) const
     {
-        const uint64_t *p = _bits;
-        const uint64_t *q = other._bits;
+        const uint64_t *p = bits_.data();
+        const uint64_t *q = other.bits_.data();
         std::size_t len = num_blocks();
         while (len-- != 0) if ((*p++) & (*q++)) return true;
         return false;
@@ -303,9 +278,9 @@ public:
     size_t find_first() const
     {
         size_t i = 0;
-        while (i < num_blocks() and _bits[i] == 0) i++;
+        while (i < num_blocks() and bits_[i] == 0) i++;
         if (i == num_blocks()) return npos;
-        else return i*64 + __builtin_ffsll(_bits[i]) - 1;
+        else return i*64 + __builtin_ffsll(bits_[i]) - 1;
     }
 
     size_t find_last() const
@@ -314,7 +289,7 @@ public:
 
         size_t i = num_blocks()-1;
         for (;;) {
-            if (_bits[i] != 0) return i*64 + bsr(_bits[i]);
+            if (bits_[i] != 0) return i*64 + bsr(bits_[i]);
             if (i == 0) return npos;
             i--;
         }
@@ -325,14 +300,14 @@ public:
         if (pos == npos or (pos+1) >= _size) return npos;
         pos++;
         size_t i = block_index(pos);
-        uint64_t m = _bits[i] & (~uint64_t(0) << bit_index(pos));
+        uint64_t m = bits_[i] & (~uint64_t(0) << bit_index(pos));
         if (m) {
             return i*64 + __builtin_ffsll(m) - 1;
         } else {
             i += 1;
-            while (i < num_blocks() and _bits[i] == 0) i++;
+            while (i < num_blocks() and bits_[i] == 0) i++;
             if (i == num_blocks()) return npos;
-            else return i*64 + __builtin_ffsll(_bits[i]) - 1;
+            else return i*64 + __builtin_ffsll(bits_[i]) - 1;
         }
     }
 
@@ -340,14 +315,14 @@ public:
     {
         if (pos == 0 or pos == npos) return npos;
         size_t i = block_index(pos);
-        uint64_t m = _bits[i] & ~((~uint64_t(0)) << (int)bit_index(pos));
+        uint64_t m = bits_[i] & ~((~uint64_t(0)) << (int)bit_index(pos));
         if (m) {
             return i*64 + bsr(m);
         } else {
             if (i == 0) return npos;
             i -= 1;
             for (;;) {
-                if (_bits[i] != 0) return i*64 + bsr(_bits[i]);
+                if (bits_[i] != 0) return i*64 + bsr(bits_[i]);
                 if (i == 0) return npos;
                 i--;
             }
@@ -357,9 +332,8 @@ public:
     static const size_t npos = static_cast<size_t>(-1);
 
 protected:
-    uint64_t *_bits;
-    size_t _size, _bitssize;
-    size_t _allocsize;
+    std::vector<uint64_t> bits_;
+    size_t _size = 0;
 };
 
 inline bitset operator^(const bitset& x, const bitset& y)
