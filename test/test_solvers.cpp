@@ -386,6 +386,8 @@ main(int argc, char **argv)
     int final_res = 0;
     double time;
     long total=0;
+    double total_load_time=0.0;   // time spent opening/decompressing input files
+    double total_parse_time=0.0;  // time spent parsing input files
 
     std::map<std::string, double> times;
     std::map<std::string, int> sgood;
@@ -419,9 +421,16 @@ main(int argc, char **argv)
             std::string filename = cp.filename().string();
             std::cout << filename << ": " << std::flush;
             try {
+                double t_open = wctime();
                 auto in = open_input(cp.string());
+                double t_loaded = wctime();
                 Game game = PGParser::parse_pgsolver_renumber(*in, opt_loops);
+                double t_parsed = wctime();
+                total_load_time += t_loaded - t_open;
+                total_parse_time += t_parsed - t_loaded;
                 total++;
+                std::cout << "\033[38;5;8m[load " << std::fixed << std::setprecision(3)
+                          << (t_loaded - t_open) << "s parse " << (t_parsed - t_loaded) << "s]\033[m ";
                 for (const auto& id : solvers) {
                     std::cout << std::flush;
                     log.str("");
@@ -549,6 +558,8 @@ main(int argc, char **argv)
     if (opt_workers >= 0) lace_stop();
 
     std::cout << "\033[38;5;226msummary\033[m: " << total << " games" << std::endl;
+    std::cout << "\033[38;5;226mloading\033[m: " << std::fixed << std::setprecision(3)
+              << total_load_time << "s reading, " << total_parse_time << "s parsing" << std::endl;
     std::cout << "\033[38;5;226msolvers\033[m:";
     for (const auto& id : solvers) {
         if (sgood[id] == total) std::cout << " \033[38;5;82m";
