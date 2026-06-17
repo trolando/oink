@@ -35,8 +35,10 @@ public:
 
 protected:
     int *region_;
+    int reset0, reset1;
 
     int getRegionStatus(int index, int priority);
+    bool checkRegion(int priority) override; // region_-aware recovery check
 };
 
 }

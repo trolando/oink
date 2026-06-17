@@ -70,6 +70,44 @@ RRDPSolver::getRegionStatus(int i, int p)
     return lowest; // -1 if dominion, <region> otherwise
 }
 
+/**
+ * RR recovery check, but region_-aware: a region escape is "to a lower region" only when its
+ * effective region max(region[to], region_[to]) is below p, consistent with getRegionStatus.
+ */
+bool
+RRDPSolver::checkRegion(int p)
+{
+    if (regions[p].empty()) return true;
+
+    auto &Rp = regions[p];
+    Rp.erase(std::remove_if(Rp.begin(), Rp.end(),
+        [&](const int n) {return region[n] > p;}), Rp.end());
+
+    for (auto j : Rp) {
+        if (disabled[j]) {
+            return false;
+        } else if (priority(j) == p) {
+            // an escape node; if its strategy leaves the region, drop it
+            if (strategy[j] != -1 && region[strategy[j]] != p) strategy[j] = -1;
+        } else if (owner(j) == (p&1)) {
+            // not-top winner: strategy must stay in the region
+            if (strategy[j] == -1) return false;
+            if (region[strategy[j]] != p) return false;
+        } else {
+            // not-top loser: must not be able to escape to a lower (effective) region
+            for (auto curedge = outs(j); *curedge != -1; curedge++) {
+                int to = *curedge;
+                if (disabled[to]) continue;
+                int r = region[to];
+                if (region_[to] > r) r = region_[to]; // effective region (delayed-promotion-aware)
+                if (r < p) return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 void
 RRDPSolver::run()
 {
@@ -86,6 +124,10 @@ RRDPSolver::run()
     for (int i=0; i<nodecount(); i++) region_[i] = -1;
     for (int i=0; i<nodecount(); i++) strategy[i] = -1;
 
+    // initialize reset values
+    reset0 = -1;
+    reset1 = -1;
+
     // start loop at last node (highest priority)
     int i = nodecount() - 1;
 
@@ -101,6 +143,12 @@ RRDPSolver::run()
      * Two loops: the outer (normal) loop, and the inner (promotion-chain) loop.
      * The outer loop does region setup and attractor on the full region.
      * The inner loop only attracts from the promoted region.
+     *
+     * RR-DP combines the delayed-promotion reset discipline (reset0/reset1, as in DP)
+     * with region recovery (checkRegion, as in RR): a region is reset only when the delayed-
+     * promotion discipline demands it AND checkRegion cannot recover it. checkRegion is made
+     * delayed-promotion-aware (it consults region_) so its recovery decision is consistent
+     * with the rest of the algorithm; this lets RR-DP skip resets that DP would perform.
      */
 
     while (true) {
@@ -113,12 +161,13 @@ RRDPSolver::run()
             for (int i=0; i<nodecount(); i++) if (max < region_[i]) max = region_[i];
             if (max == -1) break; // done
 
+            // perform delayed promotions of highest player
             if (trace) logger << "performing delayed promotions of player " << (max&1) << std::endl;
             performances++;
             for (int i=0; i<nodecount(); i++) {
                 if (region[i] == -2) continue;
                 if (region_[i] != -1) {
-                    if ((region[i]&1) == (max&1)) {
+                    if ((region_[i]&1) == (max&1)) {
                         region[i] = region_[i];
                         regions[region[i]].push_back(i);
                     }
@@ -126,28 +175,50 @@ RRDPSolver::run()
                 }
             }
             P.clear();
+            // increase reset value if needed
+            if (max&1) {
+                if (max > reset0) reset0 = max-1;
+                promotions += del1;
+                discarded += del0;
+            } else {
+                if (max > reset1) reset1 = max-1;
+                promotions += del0;
+                discarded += del1;
+            }
             if (trace) logger << "finished performing delayed promotions" << std::endl;
             i = inverse[max];
-            promotions += (max&1) ? del1 : del0;
-            discarded += (max&1) ? del0 : del1;
-            del0 = del1 = 0;
+            del1 = del0 = 0;
             continue;
         }
 
         // if empty, possibly reset and continue with next
         if (priority(i) != p) {
-            if (!regions[p].empty()) resetRegion(p);
+            if (!regions[p].empty()) {
+                resetRegion(p);
+                // but then we must also reset everything lower...
+                if (p&1) reset1 = p-2;
+                else reset0 = p-2;
+            }
             continue;
         }
 
         inverse[p] = i;
 
-        // RR-DP: only reset the region if:
-        // - current node is promoted or attracted
-        // - or region is empty
-        // - or region does not fulfill conditions
-        // This is checked by checkRegion()
-        if (setupRegion(i, priority(i), !checkRegion(p))) {
+        // PPP-DP: reset if lower than value
+        bool reset = false;
+        if (p&1) {
+            if (p <= reset1) {
+                reset = true;
+                reset1 = p-2;
+            }
+        } else {
+            if (p <= reset0) {
+                reset = true;
+                reset0 = p-2;
+            }
+        }
+        // RR-DP: recover the region (skip even a discipline-mandated reset) when checkRegion approves
+        if (setupRegion(i, p, reset && !checkRegion(p))) {
             // region not empty, maybe promote
             while (true) {
                 if (trace >= 2) reportRegion(p);
@@ -161,18 +232,22 @@ RRDPSolver::run()
                     setDominion(p);
                     // restart algorithm and break inner loop
                     i = nodecount() - 1;
-                    // reset everything... (sadly)
-                    // for (int j=0; j<nodecount(); j++) region[j] = disabled[j] ? -2 : priority(j);
-                    // for (int j=0; j<nodecount(); j++) strategy[j] = -1;
                     for (int j=0; j<nodecount(); j++) region_[j] = -1;
+                    reset0 = priority(nodecount()-1);
+                    reset1 = priority(nodecount()-1);
+                    if (reset0&1) reset0--;
+                    else reset1--;
                     P.clear();
                     del0 = del1 = 0;
                     break;
                 } else {
+                    // check if maybe already delayed
+                    if (res == region_[i]) break;
                     // check if we are locked or not
                     bool locked = false;
                     for (auto l : P) {
                         if ((l&1) != (res&1) && l < res) {
+                            // locked for reason a
                             locked = true;
                             break;
                         }
@@ -209,12 +284,18 @@ RRDPSolver::run()
                     } else {
                         // found promotion, perform it
                         promote(p, res);
-                        // add promotion to P
+                        // increase reset value if needed
+                        if (res&1) {
+                            if (res > reset0) reset0 = res-1;
+                        } else {
+                            if (res > reset1) reset1 = res-1;
+                        }
+                        // update the set of promotion targets P
                         P.erase(std::remove(P.begin(), P.end(), p), P.end());
                         P.push_back(res);
                         // remove from region_ below res
-                        for (int i=0; i<nodecount(); i++) if (region[i] != 2 && region_[i] <= res) region_[i] = -1;
-                        // continue loop with higher priority
+                        for (int i=0; i<nodecount(); i++) if (region[i] != -2 && region_[i] <= res) region_[i] = -1;
+                        // continue loop with the promotion target
                         i = inverse[res];
                         p = res;
                     }
