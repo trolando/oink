@@ -36,6 +36,7 @@ set(OINK_HDRS
     include/oink/player.hpp
     include/oink/solution.hpp
     include/oink/span.hpp
+    include/oink/subgame_view.hpp
     include/oink/solvers.hpp
     include/oink/solver.hpp
     include/oink/bitset.hpp

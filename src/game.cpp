@@ -20,6 +20,7 @@
 #include <ctime>
 
 #include "oink/game.hpp"
+#include "oink/subgame_view.hpp"
 
 #define USE_MMAP 1
 
@@ -639,13 +640,14 @@ Game::extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game)
     // check if there are any dead ends (not allowed)
     // also count the number of edges in the subgame
 
-    int nv = mask.count();
+    SubgameView view(*this, mask);
+    int nv = view.size();
     int ne = 0;
     for (int v=0; v<n_vertices; v++) {
-        if (mask[v]) {
+        if (view.contains(v)) {
             bool bad = true;
             for (auto curedge = outs(v); *curedge != -1; curedge++) {
-                if (mask[*curedge]) {
+                if (view.contains(*curedge)) {
                     bad = false;
                     ne++;
                 }
@@ -671,7 +673,7 @@ Game::extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game)
 
     int vertices = 0;
     for (int v=0; v<n_vertices; v++) {
-        if (!mask[v]) continue;
+        if (!view.contains(v)) continue;
 
         // update game_to_subgame and subgame_to_game
         int w = vertices++;
@@ -688,7 +690,7 @@ Game::extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game)
         int v = subgame_to_game[w];
         res->e_start(w);
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
-            if (mask[*curedge]) res->e_add(w, game_to_subgame[*curedge]);
+            if (view.contains(*curedge)) res->e_add(w, game_to_subgame[*curedge]);
         }
         res->e_finish();
     }
