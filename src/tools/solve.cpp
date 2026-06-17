@@ -239,8 +239,12 @@ int main(int argc, char **argv)
     try {
         if (options.count("input")) {
             std::string filename = options["input"].as<std::string>();
+            // time opening (and, for compressed input, decompressing) the file
+            auto open_begin = wctime();
             auto in = open_input(filename);
-            // time it
+            auto open_end = wctime();
+            out << "reading input took " << std::fixed << (open_end-open_begin) << " sec." << std::endl;
+            // time parsing
             auto begin = wctime();
             pg = PGParser::parse_pgsolver_renumber(*in, options.count("no-loops") == 0 and options.count("no") == 0);
             auto end = wctime();
