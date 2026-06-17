@@ -62,7 +62,10 @@ SSISolver::compute_vals_ll(int side)
     C = G;
 
     // find all halting vertices and set the linked list of in edges
-    std::fill(first_in, first_in+nodecount(), '\xff');
+    // -1 marks "no in-edge". Use the int literal, not '\xff': the latter is a
+    // char that converts to 255 (not -1) where char is unsigned (e.g. aarch64),
+    // which breaks the "from != -1" walk below and causes a non-terminating loop.
+    std::fill(first_in, first_in+nodecount(), -1);
     for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
         int s = S[v];
         if (H[s]) {
