@@ -19,6 +19,7 @@
 #include <vector>
 #include <queue>
 #include <cassert>
+#include <cstring>
 
 #include "zlk.hpp"
 #include "lace.h"

@@ -15,6 +15,7 @@
  */
 
 #include <cassert>
+#include <cstring>
 
 #include "psi.hpp"
 #include "lace.h"
