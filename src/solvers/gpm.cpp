@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 
 #include "gpm.hpp"
 #include "oink/uintqueue.hpp"
