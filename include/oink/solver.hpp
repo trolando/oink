@@ -17,11 +17,26 @@
 #ifndef SOLVER_HPP
 #define SOLVER_HPP
 
+#include <cstdint>
+#include <optional>
+
 #include "oink/game.hpp"
 #include "oink/oink.hpp"
 #include "oink/error.hpp"
 
 namespace pg {
+
+/**
+ * Explicit configuration for a solver. Bundles the solver-facing settings that
+ * were previously read individually from Oink, as a step towards making solver
+ * dependencies explicit instead of reaching into Oink for everything.
+ */
+struct SolverConfig
+{
+    int workers = -1;             // requested workers for parallel solvers (-1 sequential, 0 autodetect)
+    int trace = 0;                // verbosity (0 normal, 1 trace, 2 debug)
+    std::optional<uint64_t> seed; // optional seed for randomized solvers
+};
 
 /**
  * Base class for the parity game solvers.
@@ -48,6 +63,7 @@ public:
 protected:
     Game& game;
     std::ostream &logger;
+    SolverConfig config;
     int trace = 0;
 
     const bitset &disabled; // TODO change into subgame
