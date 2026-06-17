@@ -7,6 +7,10 @@ project(oink
     LANGUAGES C CXX
 )
 
+# Build Oink (and the bundled lace) tuned to the build machine's CPU. Off by
+# default so packaged binaries stay portable; enable for local benchmarking.
+option(OINK_BUILD_NATIVE "Optimize for the build CPU (-march=native; not portable)" OFF)
+
 # Dependencies
 include(FetchContent)
 if(NOT TARGET lace::lace)
@@ -17,6 +21,9 @@ if(NOT TARGET lace::lace)
         GIT_REPOSITORY https://github.com/trolando/lace.git
         GIT_TAG        v2.3.2
     )
+    # Keep the bundled lace's CPU tuning consistent with Oink's. Uses the cache
+    # default so an explicit -DLACE_NATIVE_OPT still wins.
+    set(LACE_NATIVE_OPT ${OINK_BUILD_NATIVE} CACHE BOOL "Enable -march=native in lace")
     FetchContent_MakeAvailable(lace)
   endif()
 endif()
@@ -109,9 +116,15 @@ else()
     message(STATUS "Oink: xz (.xz) input support disabled (liblzma not found)")
 endif()
 
-option(OINK_BUILD_NATIVE "Use -march=native flag for compiling Oink" ON)
+# OINK_BUILD_NATIVE is declared near the top so it can be propagated to lace.
 if(OINK_BUILD_NATIVE)
-    target_compile_options(oink PRIVATE "-march=native")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-march=native" OINK_HAS_MARCH_NATIVE)
+    if(OINK_HAS_MARCH_NATIVE)
+        target_compile_options(oink PRIVATE -march=native)
+    else()
+        message(WARNING "OINK_BUILD_NATIVE is ON but the compiler does not support -march=native")
+    endif()
 endif()
 
 option(OINK_ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
