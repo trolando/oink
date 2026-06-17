@@ -17,7 +17,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <unistd.h>
 
 #include "pmtl.hpp"
 #include "oink/uintqueue.hpp"
