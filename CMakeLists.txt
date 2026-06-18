@@ -221,6 +221,7 @@ target_sources(oink
     src/solvers/qpt.cpp
     src/solvers/tl.cpp
     src/solvers/tlpar.cpp
+    src/solvers/tlj.cpp
     src/solvers/rtl.cpp
     src/solvers/zlkpp.cpp
     src/solvers/ptl.cpp
@@ -402,6 +403,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverTLPAR1 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlpar -w 1 --force-parallel)
         add_test(NAME TestSolverTLPARpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlpar -w 0 --force-parallel -c parmin=1,chunk=4)
         add_test(NAME TestSolverTLPARcfg COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlpar --tlpar=parmin=1,chunk=4 -w 0 --force-parallel)
+        add_test(NAME TestSolverTLJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlj)
         add_test(NAME TestSolverRTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --rtl)
         add_test(NAME TestSolverORTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ortl)
         add_test(NAME TestSolverPTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ptl)
