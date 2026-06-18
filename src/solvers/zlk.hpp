@@ -17,6 +17,7 @@
 #ifndef ZLK_HPP
 #define ZLK_HPP
 
+#include <atomic>
 #include <queue>
 #include <lace.h>
 
@@ -37,7 +38,9 @@ public:
     int *inverse;
     int max_prio;
 
-    int *region;
+    // Shared synchronisation word per vertex (see zlk.cpp for the DIS/BOT/counter/r
+    // encoding). Mutated concurrently by the parallel attractor, so it must be atomic.
+    std::atomic<int> *region;
     int *winning;
     int *strategy;
 

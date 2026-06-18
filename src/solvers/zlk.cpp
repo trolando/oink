@@ -58,69 +58,78 @@ void attractParT_CALL(lace_worker* lace, int pl, int cur, int r, ZLKSolver* s)
 void
 ZLKSolver::attractParT(lace_worker* lace, int pl, int cur, int r)
 {
-    int c = 0;
+    using std::memory_order_relaxed;
+    using std::memory_order_acquire;
+    using std::memory_order_acq_rel;
+
     par_helper* ours = pvec[lace_worker_id()];
+
+    int c = 0;          // number of spawned, not-yet-synced children
 
     // attract to <cur>
     for (auto curedge = ins(cur); *curedge != -1; curedge++) {
         int from = *curedge;
-        int _r = region[from];
+        int _r = region[from].load(memory_order_relaxed);
         if (_r == DIS or _r >= 0) continue; // not in subgame, or attracted
 
+        bool attracted = false;
+
         if (owner(from) == pl) {
-            // owned by same parity, use CAS to claim it
+            // Owned by same parity: claim it with a CAS. region[from] is either BOT
+            // (claim it) or already r (another worker won); the CAS re-validates.
             while (true) {
-                if (__sync_bool_compare_and_swap(&region[from], _r, r)) {
-                    winning[from] = pl;
+                if (region[from].compare_exchange_weak(_r, r,
+                        memory_order_acq_rel, memory_order_acquire)) {
                     strategy[from] = cur;
-                    ours->items[ours->count++] = from;
-                    attractParT_SPAWN(lace, pl, from, r, this);
-                    c++;
+                    attracted = true;
                     break;
                 }
-                _r = *(volatile int*)&region[from];
-                if (_r >= 0) break;
+                if (_r >= 0) break; // someone else attracted it
+                // _r is still a sub-game value (BOT); retry
             }
         } else {
-            // owned by other parity
-            volatile int* ptr = &region[from];
-            bool attracted = false;
-
-            _r = __sync_add_and_fetch(ptr, 1); // update _r
-            if (_r == (BOT+1)) {
-                // we are the first, do add_and_fetch with the count
-                int count = 0;
-                for (auto curedge = outs(from); *curedge != -1; curedge++) {
-                    int to = *curedge;
-                    if (region[to] == DIS) continue; // do not count disabled
-                    if (region[to] >= 0 and region[to] < r) continue; // do not count supgame
-                    count--; // count to negative
-                }
-                // now set count (in a CAS loop)
-                int new_r = count; // +1 -1 (count negative to -1)
-                while (true) {
-                    if (new_r == -1) {
-                        // we're the last, so set to r
-                        if (__sync_bool_compare_and_swap(ptr, _r, r)) attracted = true;
-                        break;
+            // Owned by other parity: register one more attracted successor in the
+            // escape counter stored in region[from]. The encoding is
+            //   BOT -> -K -> -K+1 -> ... -> -2 -> r
+            // where K is the number of live successors; reaching the step that would
+            // hit -1 instead transitions to r (the vertex can no longer escape).
+            // Every transition is a CAS, so a concurrent head-claim in attractPar()
+            // can never corrupt the counter (unlike an unconditional fetch-and-add).
+            std::atomic<int>* ptr = &region[from];
+            while (true) {
+                if (_r == DIS or _r >= 0) break; // left sub-game / already attracted
+                int next;
+                if (_r == BOT) {
+                    // tentatively first to arrive: count live successors (negative)
+                    int count = 0;
+                    for (auto e = outs(from); *e != -1; e++) {
+                        int rt = region[*e].load(memory_order_acquire);
+                        if (rt == DIS) continue;          // disabled
+                        if (rt >= 0 and rt < r) continue; // already in a higher region
+                        count--;
                     }
-                    if (__sync_bool_compare_and_swap(ptr, _r, new_r)) break;
-                    _r = *ptr;
-                    if (_r >= 0) break; // someone else moved to r!
-                    // someone else did add and fetch, recompute and try again
-                    new_r = count - (BOT - _r) - 1;
+                    // count == -K, K >= 1 (the successor we came from counts). With a
+                    // single live successor this very visit attracts.
+                    next = (count == -1) ? r : count;
+                } else {
+                    // a negative counter in [-K, -2]; the step reaching -1 attracts
+                    next = (_r == -2) ? r : (_r + 1);
                 }
-            } else if (_r == -1) {
-                // another CAS because we may be competing with attractPar
-                if (__sync_bool_compare_and_swap(ptr, -1, r)) attracted = true;
+                if (ptr->compare_exchange_weak(_r, next,
+                        memory_order_acq_rel, memory_order_acquire)) {
+                    if (next == r) attracted = true;
+                    break;
+                }
+                // CAS failed: _r now holds the observed value; retry
             }
-            if (attracted) {
-                winning[from] = pl;
-                strategy[from] = -1;
-                ours->items[ours->count++] = from;
-                attractParT_SPAWN(lace, pl, from, r, this);
-                c++;
-            }
+            if (attracted) strategy[from] = -1;
+        }
+
+        if (attracted) {
+            winning[from] = pl;
+            ours->items[ours->count++] = from;
+            attractParT_SPAWN(lace, pl, from, r, this);
+            c++;
         }
     }
 
@@ -136,6 +145,11 @@ int attractPar_CALL(lace_worker* lace, int i, int r, std::vector<int>* R, ZLKSol
 int
 ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
 {
+    using std::memory_order_relaxed;
+    using std::memory_order_acquire;
+    using std::memory_order_acq_rel;
+    using std::memory_order_release;
+
     const int pr = priority(i);
     const int pl = pr & 1;
 
@@ -147,7 +161,7 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
     int spawn_count = 0;
 
     for (; i>=0; i--) {
-        int _r = region[i];
+        int _r = region[i].load(memory_order_relaxed);
         if (_r == DIS or _r >= 0) continue; // not in subgame or attracted
         if (!to_inversion and priority(i) != pr) break;
         if ((priority(i)&1) != pl) { // search until parity inversion
@@ -158,22 +172,22 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
             else continue; // already done
         }
 
-        // if c != 0, then we compete with attractParT and must use compare and swap
+        // if spawn_count != 0, then we compete with attractParT and must use a CAS
         if (spawn_count == 0) {
-            region[i] = r; // just set, no competing threads
+            region[i].store(r, memory_order_release); // just set, no competing threads
         } else {
             // competing threads! use compare and swap [in a loop]
+            bool claimed = false;
             while (true) {
-                if (__sync_bool_compare_and_swap(&region[i], _r, r)) {
-                    _r = r;
+                if (region[i].compare_exchange_weak(_r, r,
+                        memory_order_acq_rel, memory_order_acquire)) {
+                    claimed = true;
                     break;
                 }
-                _r = *(volatile int*)&region[i];
-                if (_r < 0) continue;
-                _r = BOT;
-                break;
+                if (_r >= 0) break; // someone else claimed it (to r)
+                // _r is still a sub-game value (BOT or a counter); retry
             }
-            if (_r == BOT) continue; // someone else claimed!
+            if (!claimed) continue; // someone else claimed!
         }
 
         winning[i] = pl;
@@ -208,6 +222,10 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
 int
 ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
 {
+    // Sequential attractor (the -w -1 path). region[] is std::atomic for the parallel
+    // attractor; here only one thread touches it, so all accesses use relaxed order.
+    using std::memory_order_relaxed;
+
     const int pr = priority(i);
     const int pl = pr & 1;
 
@@ -216,13 +234,14 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
      */
 
     for (; i>=0; i--) {
-        if (region[i] == DIS or region[i] >= 0) continue; // cannot be attracted
+        const int ri = region[i].load(memory_order_relaxed);
+        if (ri == DIS or ri >= 0) continue; // cannot be attracted
 
         // uncomment the next line to attract until lower priority instead of until inversion
         if (!to_inversion and priority(i) != pr) break; // until other priority
         if ((priority(i)&1) != pl) break; // until parity inversion (Maks Verver optimization)
 
-        region[i] = r;
+        region[i].store(r, memory_order_relaxed);
         winning[i] = pl;
         strategy[i] = -1; // head nodes do not have a strategy yet!
         Q.push(i);
@@ -238,11 +257,12 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
             // attract to <cur>
             for (auto curedge = ins(cur); *curedge != -1; curedge++) {
                 int from = *curedge;
-                if (from >= i or region[from] == DIS or region[from] >= 0) continue; // cannot be attracted
+                const int rf = region[from].load(memory_order_relaxed);
+                if (from >= i or rf == DIS or rf >= 0) continue; // cannot be attracted
 
                 if (owner(from) == pl) {
                     // owned by same parity
-                    region[from] = r;
+                    region[from].store(r, memory_order_relaxed);
                     winning[from] = pl;
                     strategy[from] = cur;
                     Q.push(from);
@@ -251,21 +271,22 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
 #endif
                 } else {
                     // owned by other parity
-                    int count = region[from];
+                    int count = rf;
                     if (count == BOT) {
                         // compute count (to negative)
                         count = 1;
                         auto curedge = outs(from);
                         for (int to = *curedge; to != -1; to = *++curedge) {
-                            if (region[to] == DIS) continue;
-                            if (region[to] >= 0 and region[to] < r) continue;
+                            const int rt = region[to].load(memory_order_relaxed);
+                            if (rt == DIS) continue;
+                            if (rt >= 0 and rt < r) continue;
                             count--;
                         }
                     } else {
                         count++;
                     }
                     if (count == 0) {
-                        region[from] = r;
+                        region[from].store(r, memory_order_relaxed);
                         winning[from] = pl;
                         strategy[from] = -1;
                         Q.push(from);
@@ -273,7 +294,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
                         if (trace >= 2) logger << KC"forced\033[m " << label_vertex(from) << std::endl;
 #endif
                     } else {
-                        region[from] = count;
+                        region[from].store(count, memory_order_relaxed);
                     }
                 }
             }
@@ -289,6 +310,9 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
 int
 ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vector<int> *R)
 {
+    // Sequential; region[] accesses use relaxed order (single thread, see attractExt).
+    using std::memory_order_relaxed;
+
     int count = 0;
 
     const int pr = priority(i);
@@ -314,7 +338,7 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
             bool can_escape = false;
             auto curedge = outs(i);
             for (int to = *curedge; to != -1; to = *++curedge) {
-                if (region[to] < r) continue; // not in subgame, or -1/-2
+                if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or -1/-2
                 if (winning[to] != pl) continue; // not an escape
                 can_escape = true;
                 break;
@@ -331,7 +355,7 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
             // "winner" attraction
             auto curedge = outs(i);
             for (int to = *curedge; to != -1; to = *++curedge) {
-                if (region[to] < r) continue; // not in subgame, or -1/-2
+                if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or -1/-2
                 if (winning[to] == pl) continue; // not attracting
 #ifndef NDEBUG
                 if (trace >= 2) logger << KC"attracted distraction\033[m " << label_vertex(i) << std::endl;
@@ -353,14 +377,14 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
         ++count;
 
         R->push_back(cur);
-        region[cur] = r;
+        region[cur].store(r, memory_order_relaxed);
         winning[cur] = 1-pl;
 
         // attract to <cur>
         auto curedge = ins(cur);
         for (int from = *curedge; from != -1; from = *++curedge) {
             // if (region[from] == -1) LOGIC_ERROR;
-            if (region[from] < r) continue; // not in subgame, or disabled
+            if (region[from].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
             if (winning[from] != pl) continue; // already lost
 
             if (owner(from) != pl) {
@@ -369,7 +393,7 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
                 if (trace >= 2) logger << KC"attracted\033[m " << label_vertex(from) << std::endl;
 #endif
                 // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", from, priority(from), 1-pl);
-                region[from] = r;
+                region[from].store(r, memory_order_relaxed);
                 winning[from] = 1-pl;
                 strategy[from] = cur;
                 Q.push(from);
@@ -379,7 +403,7 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
                 auto curedge = outs(from);
                 for (int to = *curedge; to != -1; to = *++curedge) {
                     // if (region[to] == -1) LOGIC_ERROR;
-                    if (region[to] < r) continue; // not in subgame, or disabled
+                    if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
                     if (winning[to] != pl) continue; // not an escape
                     can_escape = true;
                     break;
@@ -389,7 +413,7 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
                 if (trace >= 2) logger << KC"forced\033[m " << label_vertex(from) << std::endl;
 #endif
                 // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", from, priority(from), 1-pl);
-                region[from] = r;
+                region[from].store(r, memory_order_relaxed);
                 winning[from] = 1-pl;
                 strategy[from] = -1;
                 Q.push(from);
@@ -406,7 +430,7 @@ ZLKSolver::run()
     iterations = 0;
 
     // allocate and initialize data structures
-    region = new int[nodecount()];
+    region = new std::atomic<int>[nodecount()];
     winning = new int[nodecount()];
     strategy = new int[nodecount()];
 
@@ -421,7 +445,7 @@ ZLKSolver::run()
     // get number of nodes and create and initialize inverse array
     max_prio = -1;
     for (int n=nodecount()-1; n>=0; n--) {
-        region[n] = disabled[n] ? DIS : BOT;
+        region[n].store(disabled[n] ? DIS : BOT, std::memory_order_relaxed);
         if (disabled[n]) continue;
         const int pr = priority(n);
         if (max_prio == -1) {
@@ -473,7 +497,7 @@ ZLKSolver::run()
 #ifndef NDEBUG
         const int h = hsize / 3;
         if (i < 0) LOGIC_ERROR; // just a sanity check
-        if (region[i] == DIS) LOGIC_ERROR; // just a sanity check
+        if (region[i].load(std::memory_order_relaxed) == DIS) LOGIC_ERROR; // just a sanity check
         if (h*3 != hsize or (int)levels.size() != h) LOGIC_ERROR; // just a sanity check
 #endif
 
@@ -581,7 +605,7 @@ ZLKSolver::run()
                     strategy[v] = -1;
                     auto curedge = outs(v);
                     for (int to = *curedge; to != -1; to = *++curedge) {
-                        if (region[to] < r) continue; // not in subgame
+                        if (region[to].load(std::memory_order_relaxed) < r) continue; // not in subgame
                         if (winning[to] != pl) continue; // not winning
                         strategy[v] = to;
                         break;
@@ -610,12 +634,12 @@ ZLKSolver::run()
                 for (int v : *A) {
                     if (winning[v] != pl) continue; // only reset for <pl>
                     if (v > new_i) new_i = v;
-                    region[v] = BOT;
+                    region[v].store(BOT, std::memory_order_relaxed);
                 }
                 for (int v : Wm) {
                     if (winning[v] != pl) continue;
                     if (v > new_i) new_i = v;
-                    region[v] = BOT;
+                    region[v].store(BOT, std::memory_order_relaxed);
                 }
                 if (new_i == -1) {
                     /**
@@ -692,7 +716,7 @@ ZLKSolver::run()
 
     // done
     for (int i=0; i<nodecount(); i++) {
-        if (region[i] == DIS) continue;
+        if (region[i].load(std::memory_order_relaxed) == DIS) continue;
 #ifndef NDEBUG
         if (winning[i] == -1) LOGIC_ERROR;
 #endif
