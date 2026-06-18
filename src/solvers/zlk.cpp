@@ -65,6 +65,7 @@ ZLKSolver::attractParT(lace_worker* lace, int pl, int cur, int r)
     par_helper* ours = pvec[lace_worker_id()];
 
     int c = 0;          // number of spawned, not-yet-synced children
+    int pending = -1;   // last attracted vertex; recursed into inline (tail-call)
 
     // attract to <cur>
     for (auto curedge = ins(cur); *curedge != -1; curedge++) {
@@ -128,11 +129,14 @@ ZLKSolver::attractParT(lace_worker* lace, int pl, int cur, int r)
         if (attracted) {
             winning[from] = pl;
             ours->items[ours->count++] = from;
-            attractParT_SPAWN(lace, pl, from, r, this);
-            c++;
+            // Tail-call: spawn the previously attracted child, recurse into this one
+            // inline at the end. This keeps the last edge of each chain off the deque.
+            if (pending != -1) { attractParT_SPAWN(lace, pl, pending, r, this); c++; }
+            pending = from;
         }
     }
 
+    if (pending != -1) attractParT_CALL(lace, pl, pending, r, this);
     while (c) { attractParT_SYNC(lace); c--; }
 }
 
