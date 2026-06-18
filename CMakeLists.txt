@@ -66,6 +66,47 @@ if(OINK_BUILD_NATIVE)
     target_compile_options(oink PRIVATE "-march=native")
 endif()
 
+option(OINK_ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
+if(OINK_ENABLE_SANITIZERS)
+    target_compile_options(oink PUBLIC
+        $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+            -fsanitize=address,undefined
+            -fno-omit-frame-pointer
+            -g>
+    )
+    target_link_options(oink PUBLIC
+        $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+            -fsanitize=address,undefined>
+    )
+endif()
+
+# ThreadSanitizer is a separate option: it detects data races (which ASan/UBSan do
+# not) and cannot be combined with them. Use this to verify the parallel solvers.
+option(OINK_ENABLE_TSAN "Enable the thread sanitizer (data-race detection)" OFF)
+if(OINK_ENABLE_TSAN)
+    if(OINK_ENABLE_SANITIZERS)
+        message(FATAL_ERROR "OINK_ENABLE_TSAN cannot be combined with OINK_ENABLE_SANITIZERS")
+    endif()
+    target_compile_options(oink PUBLIC
+        $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+            -fsanitize=thread
+            -fno-omit-frame-pointer
+            -g>
+    )
+    target_link_options(oink PUBLIC
+        $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+            -fsanitize=thread>
+    )
+endif()
+
+option(OINK_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
+if(OINK_WARNINGS_AS_ERRORS)
+    target_compile_options(oink PRIVATE
+        $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:-Werror>
+        $<$<CXX_COMPILER_ID:MSVC>:/WX>
+    )
+endif()
+
 target_sources(oink
   PRIVATE
     # Core files

@@ -51,6 +51,45 @@ jobs:
       run:  |
         ctest -C ${{ matrix.build_type }} -VV --timeout 30
 
+  linux-asan:
+    name: 'Linux ASan/UBSan ${{matrix.cc.cc}}-${{matrix.cc.v}}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc:
+        - { cc: gcc, v: 14, cxx: g++}
+        - { cc: clang, v: 18, cxx: clang++ }
+    env:
+      cc: ${{matrix.cc.cc}}-${{matrix.cc.v}}
+      cxx: ${{matrix.cc.cxx}}-${{matrix.cc.v}}
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install packages
+      run: |
+        sudo apt update
+        sudo apt install cmake cmake-data build-essential libboost-all-dev
+        if [ "${{ matrix.cc.cc }}" == "gcc" ] ;
+        then
+          sudo apt install ${{matrix.cc.cc}}-${{matrix.cc.v}} ${{matrix.cc.cxx}}-${{matrix.cc.v}}
+        else
+          sudo apt install ${{matrix.cc.cc}}-${{matrix.cc.v}}
+        fi
+
+    - name: CMake Build
+      run: |
+        export CC=${{env.cc}}
+        export CXX=${{env.cxx}}
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Debug -DOINK_ENABLE_SANITIZERS=ON
+        cmake --build ${{github.workspace}}/build --config Debug
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      run: |
+        ctest -C Debug -VV --timeout 30
+
   macos-build:
     name: 'OSX ${{matrix.cc.cc}}@${{matrix.cc.v || matrix.cc.xcode}} ${{matrix.build_type}}'
     runs-on: macos-latest
