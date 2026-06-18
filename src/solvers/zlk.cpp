@@ -41,14 +41,6 @@ ZLKSolver::~ZLKSolver()
     delete[] inverse;
 }
 
-typedef struct
-{
-    int count;
-    int items[];
-} par_helper;
-
-par_helper** pvec;
-
 VOID_TASK_4(attractParT, int, pl, int, cur, int, r, ZLKSolver*, s)
 void attractParT_CALL(lace_worker* lace, int pl, int cur, int r, ZLKSolver* s)
 {
@@ -62,7 +54,7 @@ ZLKSolver::attractParT(lace_worker* lace, int pl, int cur, int r)
     using std::memory_order_acquire;
     using std::memory_order_acq_rel;
 
-    par_helper* ours = pvec[lace_worker_id()];
+    auto& ours = pvec[lace_worker_id()].items;
 
     int c = 0;          // number of spawned, not-yet-synced children
     int pending = -1;   // last attracted vertex; recursed into inline (tail-call)
@@ -128,7 +120,7 @@ ZLKSolver::attractParT(lace_worker* lace, int pl, int cur, int r)
 
         if (attracted) {
             winning[from] = pl;
-            ours->items[ours->count++] = from;
+            ours.push_back(from);
             // Tail-call: spawn the previously attracted child, recurse into this one
             // inline at the end. This keeps the last edge of each chain off the deque.
             if (pending != -1) { attractParT_SPAWN(lace, pl, pending, r, this); c++; }
@@ -157,11 +149,11 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
     const int pr = priority(i);
     const int pl = pr & 1;
 
-    // initialize pvec (set count to 0) for all workers
+    // reset all per-worker buffers (keeping their reserved capacity)
     const int W = lace_worker_count();
-    for (int j=0; j<W; j++) pvec[j]->count = 0;
+    for (int j=0; j<W; j++) pvec[j].items.clear();
 
-    par_helper* ours = pvec[lace_worker_id()];
+    auto& ours = pvec[lace_worker_id()].items;
     int spawn_count = 0;
 
     for (; i>=0; i--) {
@@ -196,7 +188,7 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
 
         winning[i] = pl;
         strategy[i] = -1; // head nodes have no strategy (for now)
-        ours->items[ours->count++] = i;
+        ours.push_back(i);
         attractParT_SPAWN(lace, pl, i, r, this);
         spawn_count++;
     }
@@ -204,20 +196,17 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
     // first SYNC on all children (if any)
     while (spawn_count) { attractParT_SYNC(lace); spawn_count--; }
 
-    // update R
+    // update R (the per-worker buffers are stable now that all children have synced)
     size_t to_reserve = R->size();
-    for (int j=0; j<W; j++) to_reserve += pvec[j]->count;
+    for (int j=0; j<W; j++) to_reserve += pvec[j].items.size();
     R->reserve(to_reserve);
 
     for (int j=0; j<W; j++) {
-        par_helper* x = pvec[j];
-        for (int k=0; k<x->count; k++) {
+        auto& items = pvec[j].items;
 #ifndef NDEBUG
-            if (trace >= 2) logger << "attracted " << x->items[k] << " (" << priority(x->items[k]) << ")" << std::endl;
+        if (trace >= 2) for (int v : items) logger << "attracted " << v << " (" << priority(v) << ")" << std::endl;
 #endif
-            R->push_back(x->items[k]);
-        }
-        x->count = 0;
+        R->insert(R->end(), items.begin(), items.end());
     }
 
     return i;
@@ -434,17 +423,17 @@ ZLKSolver::run()
     iterations = 0;
 
     // allocate and initialize data structures
-    region = new std::atomic<int>[nodecount()];
-    winning = new int[nodecount()];
-    strategy = new int[nodecount()];
+    region = std::make_unique<std::atomic<int>[]>(nodecount());
+    winning = std::make_unique<int[]>(nodecount());
+    strategy = std::make_unique<int[]>(nodecount());
 
     std::vector<int> history;
     std::vector<int> W0, W1;
     std::vector<std::vector<int>> levels;
 
     // initialize arrays
-    memset(winning, -1, sizeof(int[nodecount()]));
-    memset(strategy, -1, sizeof(int[nodecount()]));
+    memset(winning.get(), -1, sizeof(int[nodecount()]));
+    memset(strategy.get(), -1, sizeof(int[nodecount()]));
 
     // get number of nodes and create and initialize inverse array
     max_prio = -1;
@@ -476,10 +465,10 @@ ZLKSolver::run()
     bool usePar = lace_worker_count() != 0;
 
     if (usePar) {
-        // initialize Lace and also allocate space for pvec for each worker
+        // allocate a scratch buffer per Lace worker, each reserved to nodecount()
         const int W = lace_worker_count();
-        pvec = (par_helper**)malloc(sizeof(par_helper*[W]));
-        for (int i=0; i<W; i++) pvec[i] = (par_helper*)malloc(sizeof(par_helper) + sizeof(int[nodecount()]));
+        pvec.resize(W);
+        for (int j=0; j<W; j++) pvec[j].items.reserve(nodecount());
     }
 
     // initialize first level (i, r=0, phase=0)
@@ -712,11 +701,7 @@ ZLKSolver::run()
         }
     }
 
-    if (usePar) {
-        const int W = lace_worker_count();
-        for (int i=0; i<W; i++) free(pvec[i]);
-        free(pvec);
-    }
+    if (usePar) pvec.clear();
 
     // done
     for (int i=0; i<nodecount(); i++) {
@@ -727,9 +712,9 @@ ZLKSolver::run()
         Solver::solve(i, winning[i], strategy[i]);
     }
 
-    delete[] region;
-    delete[] winning;
-    delete[] strategy;
+    region.reset();
+    winning.reset();
+    strategy.reset();
 
     logger << "solved with " << iterations << " iterations." << std::endl;
 }

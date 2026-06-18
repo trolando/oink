@@ -18,7 +18,9 @@
 #define ZLK_HPP
 
 #include <atomic>
+#include <memory>
 #include <queue>
+#include <vector>
 #include <lace.h>
 
 #include "oink/solver.hpp"
@@ -40,14 +42,25 @@ public:
 
     // Shared synchronisation word per vertex (see zlk.cpp for the DIS/BOT/counter/r
     // encoding). Mutated concurrently by the parallel attractor, so it must be atomic.
-    std::atomic<int> *region;
-    int *winning;
-    int *strategy;
+    std::unique_ptr<std::atomic<int>[]> region;
+    // Winner and strategy per vertex. Each vertex is claimed (in region[]) by exactly
+    // one worker, which is then the sole writer here; reads happen only in the
+    // sequential phases after the Lace tasks have fully joined, so these stay plain.
+    std::unique_ptr<int[]> winning;
+    std::unique_ptr<int[]> strategy;
 
     bool to_inversion = true;
     bool only_recompute_when_attracted = true;
 
     uintqueue Q;
+
+    // Per-worker scratch buffer collecting the vertices a worker attracts during one
+    // parallel attractor pass. One entry per Lace worker; cache-line aligned so that
+    // concurrent push_back from different workers does not false-share the headers.
+    struct alignas(64) par_buffer {
+        std::vector<int> items;
+    };
+    std::vector<par_buffer> pvec;
 
     int attractExt(int i, int r, std::vector<int> *R);
     int attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R);
