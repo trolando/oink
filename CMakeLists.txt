@@ -202,6 +202,7 @@ target_sources(oink
     src/solvers/fpi.cpp
     src/solvers/fpim.cpp
     src/solvers/fpj.cpp
+    src/solvers/fpjm.cpp
     src/solvers/psi.cpp
     src/solvers/ssi.cpp
     src/solvers/spm.cpp
@@ -358,6 +359,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverFPIM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpim)
         add_test(NAME TestSolverFPJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpj)
         add_test(NAME TestSolverFPJG COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjg)
+        add_test(NAME TestSolverFPJM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjm)
         # test strategy iteration
         add_test(NAME TestSolverPSIs COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w -1)
         add_test(NAME TestSolverPSIp COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w 0)
