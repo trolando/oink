@@ -117,10 +117,22 @@ public:
 
     /**
      * Apply a vertex permutation (same convention as Game::permute) so the
-     * solution stays consistent with a permuted game. The multi-strategy is
-     * indexed by edge-array position and is permutation-invariant, so only the
-     * per-vertex state and the single strategy targets are remapped. <mapping>
-     * is not modified.
+     * solution stays consistent with a permuted game. Only the per-vertex state
+     * and the single strategy targets are remapped.
+     *
+     * IMPORTANT, two preconditions:
+     *  - <mapping> is NOT modified here, but Game::permute() destroys its mapping
+     *    in place (it is a cycle-sort). So call solution.permute(mapping) BEFORE
+     *    game.permute(mapping) (or pass each its own copy).
+     *  - The multi-strategy (edges_) is indexed by edge-array position and is
+     *    intentionally left untouched: it is correct only because the game is
+     *    permuted with the SAME mapping right after (the bits are permutation-
+     *    invariant — blocks don't move; firstout pointers and edge targets move
+     *    with the vertices). A solution-only renumber (without permuting its
+     *    game) leaves the multi / strategy_targets() path reading the OLD edge
+     *    layout while the single strategy is in the new numbering — inconsistent.
+     *    The single strategy is self-contained; the multi strategy is only
+     *    meaningful relative to its game's current edge layout.
      */
     void permute(const int* mapping)
     {
@@ -209,6 +221,16 @@ private:
     bool has_multi_ = false;    // whether a multi-strategy is recorded
     const Game* game_ = nullptr; // for interpreting edges_ (the game must outlive this)
 };
+
+/**
+ * Permute a game and its solution together, consistently (the safe way to
+ * renumber a solution). Equivalent to solution.permute(mapping) followed by
+ * game.permute(mapping), but guarantees the required order: Game::permute()
+ * destroys <mapping> in place, so the solution must be permuted first. Because
+ * the multi-strategy is only meaningful relative to its game's edge layout
+ * (see Solution::permute), prefer this over permuting either alone.
+ */
+void permute(Game& game, Solution& solution, int* mapping);
 
 }
 

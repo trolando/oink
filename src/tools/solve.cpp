@@ -386,8 +386,7 @@ int main(int argc, char **argv)
     // game and the solution together so output is in the input numbering.
     pg::Solution sol = en.solution();
     if (options.count("output") or options.count("p")) {
-        sol.permute(mapping); // does not consume mapping
-        pg.permute(mapping);  // consumes mapping
+        pg::permute(pg, sol, mapping); // permutes solution then game, in the safe order
     }
 
     if (options.count("output")) {

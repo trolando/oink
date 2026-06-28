@@ -42,6 +42,13 @@ Solution::has_strategy_edge_to(int v, int to) const
 }
 
 void
+permute(Game& game, Solution& solution, int* mapping)
+{
+    solution.permute(mapping); // non-destructive; must run before game.permute
+    game.permute(mapping);     // destroys mapping in place
+}
+
+void
 Solution::strategy_targets(int v, std::vector<int>& out) const
 {
     const int s = strategy_[v];
