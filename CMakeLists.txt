@@ -200,6 +200,7 @@ target_sources(oink
     src/solvers/rrdp.cpp
     src/solvers/ppq.cpp
     src/solvers/fpi.cpp
+    src/solvers/fpim.cpp
     src/solvers/fpj.cpp
     src/solvers/psi.cpp
     src/solvers/ssi.cpp
@@ -354,6 +355,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         # test fixpoint algorithms
         add_test(NAME TestSolverFPIpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w 0)
         add_test(NAME TestSolverFPIseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w -1)
+        add_test(NAME TestSolverFPIM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpim)
         add_test(NAME TestSolverFPJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpj)
         add_test(NAME TestSolverFPJG COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjg)
         # test strategy iteration

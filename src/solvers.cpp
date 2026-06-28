@@ -23,6 +23,7 @@
 #include "solvers/dp.hpp"
 #include "solvers/rrdp.hpp"
 #include "solvers/fpi.hpp"
+#include "solvers/fpim.hpp"
 #include "solvers/fpj.hpp"
 #include "solvers/psi.hpp"
 #include "solvers/ssi.hpp"
@@ -61,6 +62,7 @@ Solvers::Solvers()
     _add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink& oink, Game& game) { return std::make_unique<RRDPSolver>(oink, game); });
     _add("ppq", "qpt Zielonka accelerated by priority promotion", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPQSolver>(oink, game); });
     _add("fpi", "fixpoint iteration", 1, [] (Oink& oink, Game& game) { return std::make_unique<FPISolver>(oink, game); });
+    _add("fpim", "fixpoint iteration (multi-strategy)", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPIMSolver>(oink, game); });
     _add("fpj", "fixpoint iteration with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPJSolver>(oink, game); });
     _add("fpjg", "greedy fixpoint iteration with justifications", 1, [] (Oink& oink, Game& game) { return std::make_unique<FPJGSolver>(oink, game); });
     _add("psi", "parallel strategy improvement", 1, [] (Oink& oink, Game& game) { return std::make_unique<PSISolver>(oink, game); });
