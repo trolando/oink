@@ -345,6 +345,12 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         set_target_props(test_game)
         add_test(NAME TestGame COMMAND test_game)
 
+        # Verifier unit tests (must reject bad strategies)
+        add_executable(test_verifier)
+        target_sources(test_verifier PRIVATE test/test_verifier.cpp)
+        set_target_props(test_verifier)
+        add_test(NAME TestVerifier COMMAND test_verifier)
+
         # test fixpoint algorithms
         add_test(NAME TestSolverFPIpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w 0)
         add_test(NAME TestSolverFPIseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w -1)
