@@ -78,20 +78,18 @@ struct Stats {
 };
 
 static Stats
-collect(const Game& g, bool multi)
+collect(const Game& g)
 {
     Stats s;
-    const int* base = g.outedges();
+    std::vector<int> moves;
     for (int v = 0; v < g.nodecount(); v++) {
         if (!g.isSolved(v)) continue;
         if (g.getWinner(v) == 0) s.even_won++;
         if (g.getWinner(v) != g.owner(v)) continue; // only winner-owned carry a strategy
-        int cnt = 0;
-        if (multi) {
-            for (auto e = g.outs(v); *e != -1; e++) if (g.isStrategyEdgeIndex(e - base)) cnt++;
-        } else {
-            cnt = (g.getStrategy(v) != -1) ? 1 : 0;
-        }
+        // strategyTargets dispatches single vs multi uniformly (the consumer API)
+        moves.clear();
+        g.strategyTargets(v, moves);
+        const int cnt = (int)moves.size();
         if (cnt > 0) {
             s.strat_vertices++;
             s.total_edges += cnt;
@@ -115,18 +113,17 @@ verify_ok(Game& g)
 static void
 print_strategy(const Game& g, const char* tag)
 {
-    const int* base = g.outedges();
     std::cout << "  [" << tag << "]\n";
+    std::vector<int> moves;
     for (int v = 0; v < g.nodecount(); v++) {
         std::cout << "    v" << v << " (prio " << g.priority(v) << ", "
                   << (g.owner(v) ? "Odd" : "Even") << ") won by "
                   << (g.getWinner(v) ? "Odd" : "Even");
         if (g.getWinner(v) == g.owner(v)) {
+            moves.clear();
+            g.strategyTargets(v, moves);
             std::cout << "  strategy {";
-            bool first = true;
-            for (auto e = g.outs(v); *e != -1; e++) {
-                if (g.isStrategyEdgeIndex(e - base)) { std::cout << (first ? "" : ",") << *e; first = false; }
-            }
+            for (size_t i = 0; i < moves.size(); i++) std::cout << (i ? "," : "") << moves[i];
             std::cout << "}";
         }
         std::cout << "\n";
@@ -210,8 +207,8 @@ benchmark(const std::vector<fs::path>& files)
         Game gj  = solve_with(g, "fpj",  t_fpj);
         Game gjm = solve_with(g, "fpjm", t_fpjm);
 
-        Stats si = collect(gi, false), sim = collect(gim, true);
-        Stats sj = collect(gj, false), sjm = collect(gjm, true);
+        Stats si = collect(gi), sim = collect(gim);
+        Stats sj = collect(gj), sjm = collect(gjm);
 
         bool ok = (si.even_won == sim.even_won) && (si.even_won == sj.even_won)
                && (si.even_won == sjm.even_won)
