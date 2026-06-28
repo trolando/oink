@@ -56,28 +56,34 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         if (winner == 1 and !odd) continue; // whatever
 
         if (winner == game.owner(v)) {
-            if (game.hasMultiStrategyFor(v)) {
-                // multi-strategy: check that *every* recorded strategy edge
-                // stays in the dominion (each edge is a real move by construction)
+            int str = game.getStrategy(v);
+            if (str != -1) {
+                // single strategy: check it stays in the dominion
+                if (!game.has_edge(v, str)) {
+                    throw std::runtime_error("strategy is not a valid move");
+                } else if (!game.isSolved(str) or game.getWinner(str) != winner) {
+                    throw std::runtime_error("strategy leaves dominion");
+                }
+                n_strategies++; // number of checked strategies
+            } else {
+                // sentinel: -1 with winner==owner means the moves are in the
+                // multi-strategy (if one exists); a winner-owned vertex with
+                // neither a single strategy nor a multi-strategy is an error.
+                if (!game.hasMultiStrategy()) {
+                    throw std::runtime_error("winning vertex has no strategy");
+                }
+                // check that *every* recorded edge stays in the dominion
                 const int* outbase = game.outedges();
+                int count = 0;
                 for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
                     if (!game.isStrategyEdgeIndex(curedge - outbase)) continue;
                     const int to = *curedge;
                     if (!game.isSolved(to) or game.getWinner(to) != winner) {
                         throw std::runtime_error("strategy leaves dominion");
                     }
+                    count++;
                 }
-                n_strategies++; // number of checked strategies (>=1 by hasMultiStrategyFor)
-            } else {
-                // if winner, check whether the strategy stays in the dominion
-                int str = game.getStrategy(v);
-                if (str == -1) {
-                    throw std::runtime_error("winning vertex has no strategy");
-                } else if (!game.has_edge(v, str)) {
-                    throw std::runtime_error("strategy is not a valid move");
-                } else if (!game.isSolved(str) or game.getWinner(str) != winner) {
-                    throw std::runtime_error("strategy leaves dominion");
-                }
+                if (count == 0) throw std::runtime_error("winning vertex has no strategy");
                 n_strategies++; // number of checked strategies
             }
         } else {
@@ -145,10 +151,10 @@ Verifier::verify(bool fullgame, bool even, bool odd)
              */
             int min = low[v];
             bool pushed = false;
-            if (game.hasMultiStrategyFor(v)) {
-                // multi-strategy: the winner may use *any* recorded strategy edge,
-                // so follow all of them (like the loser's all-edges branch below,
-                // but restricted to the strategy edges)
+            if (game.hasMultiStrategy() && game.getStrategy(v) == -1 && game.getWinner(v) == game.owner(v)) {
+                // sentinel: -1 with winner==owner means a multi-strategy. The winner
+                // may use *any* recorded strategy edge, so follow all of them (like
+                // the loser's all-edges branch below, but restricted to strategy edges)
                 const int* outbase = game.outedges();
                 for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
                     if (!game.isStrategyEdgeIndex(curedge - outbase)) continue;
@@ -229,8 +235,8 @@ Verifier::verify(bool fullgame, bool even, bool odd)
             }
 
             bool self_strategy;
-            if (game.hasMultiStrategyFor(v)) {
-                // winner uses a self-loop only if v->v is a recorded strategy edge
+            if (game.hasMultiStrategy() && game.getStrategy(v) == -1 && game.getWinner(v) == game.owner(v)) {
+                // multi-strategy (sentinel): self-loop only if v->v is a strategy edge
                 self_strategy = game.hasStrategyEdgeTo(v, v);
             } else if (game.getStrategy(v) != -1) {
                 self_strategy = (game.getStrategy(v) == v);

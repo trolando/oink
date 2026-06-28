@@ -218,9 +218,9 @@ main()
             {2, Player::Even, {1}},
             {2, Player::Even, {2}},
         });
-        g.solve(0, 0, 1);
-        g.solve(1, 0, 1);
-        g.solve(2, 0, 2);
+        g.solve(0, 0, -1); // -1 sentinel: moves are in the multi-strategy
+        g.solve(1, 0, -1);
+        g.solve(2, 0, -1);
         g.initMultiStrategy();
         add_strat(g, 0, 1); add_strat(g, 0, 2); // both moves are winning
         add_strat(g, 1, 1);
@@ -235,9 +235,9 @@ main()
             {2, Player::Even, {1}},    // Even-won self-loop
             {2, Player::Even, {1, 0}}, // claimed Even, but one move goes to Odd-won 0
         });
-        g.solve(0, 1, 0);
-        g.solve(1, 0, 1);
-        g.solve(2, 0, 1);
+        g.solve(0, 1, -1);
+        g.solve(1, 0, -1);
+        g.solve(2, 0, -1);
         g.initMultiStrategy();
         add_strat(g, 0, 0);
         add_strat(g, 1, 1);
@@ -260,8 +260,8 @@ main()
     // self-loop forms an odd cycle the loser wins -> must be rejected.
     {
         Game g = trap_game();
-        g.solve(0, 0, 1);
-        g.solve(1, 0, 1);
+        g.solve(0, 0, -1);
+        g.solve(1, 0, -1);
         g.initMultiStrategy();
         add_strat(g, 0, 0); add_strat(g, 0, 1); // self-loop included: BAD
         add_strat(g, 1, 1);
@@ -271,41 +271,41 @@ main()
     // GOOD: same game, but the multi-strategy records only the winning escape.
     {
         Game g = trap_game();
-        g.solve(0, 0, 1);
-        g.solve(1, 0, 1);
+        g.solve(0, 0, -1);
+        g.solve(1, 0, -1);
         g.initMultiStrategy();
         add_strat(g, 0, 1); // only the escape: GOOD
         add_strat(g, 1, 1);
         expect_accept("multi/escape only accepted", g);
     }
 
-    // Fallback: with a multi-strategy present, a winning vertex that has no
-    // recorded multi edge (e.g. solved by a preprocessor) is checked against its
-    // single strategy. A valid single strategy should still pass.
+    // Mixed: single and multi vertices coexist in one solution. The dispatch is
+    // per vertex via the sentinel: vertex 0 (-1) reads the multi-strategy, vertex
+    // 1 (strategy set) reads the single strategy. Both valid -> accept.
     {
         Game g = make_game({
             {2, Player::Even, {0}},
             {2, Player::Even, {1}},
         });
-        g.solve(0, 0, 0);
-        g.solve(1, 0, 1);
-        g.initMultiStrategy();
-        add_strat(g, 0, 0); // only vertex 0 has a multi edge; vertex 1 falls back
-        expect_accept("multi/fallback to single ok", g);
-    }
-
-    // Fallback: a vertex with no multi edge and an invalid single strategy (-1)
-    // must still be rejected.
-    {
-        Game g = make_game({
-            {2, Player::Even, {0}},
-            {2, Player::Even, {1}},
-        });
-        g.solve(0, 0, 0);
-        g.solve(1, 0, -1); // winning but no strategy
+        g.solve(0, 0, -1);  // multi
+        g.solve(1, 0, 1);   // single (e.g. produced by a preprocessor/attractor)
         g.initMultiStrategy();
         add_strat(g, 0, 0);
-        expect_reject("multi/fallback no strategy", g, "no strategy");
+        expect_accept("multi/mixed single and multi ok", g);
+    }
+
+    // A vertex won by its owner with the -1 sentinel but no recorded multi edge
+    // must be rejected (it claims a win with no move at all).
+    {
+        Game g = make_game({
+            {2, Player::Even, {0}},
+            {2, Player::Even, {1}},
+        });
+        g.solve(0, 0, -1);
+        g.solve(1, 0, -1); // winning, sentinel, but no multi edge recorded
+        g.initMultiStrategy();
+        add_strat(g, 0, 0);
+        expect_reject("multi/sentinel without edge rejected", g, "no strategy");
     }
 
     if (failures) {

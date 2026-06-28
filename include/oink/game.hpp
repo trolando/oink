@@ -462,6 +462,13 @@ public:
      * at index firstout(v)+k. It is populated by the multi-strategy solvers
      * (fpim, fpjm) and validated by the Verifier; it stays empty (no overhead)
      * for every other solver.
+     *
+     * Single and multi solutions share one convention (the "sentinel"): the
+     * single strategy in Solution is primary. For a vertex won by its owner,
+     * strategy(v) != -1 means a plain single move; strategy(v) == -1 means "the
+     * winning moves are in the multi-strategy". (A single solver never leaves a
+     * won vertex at -1, so -1 with winner==owner unambiguously means multi.)
+     * strategyTargets() applies this dispatch so consumers read either uniformly.
      */
 
     /**
@@ -495,17 +502,28 @@ public:
     [[nodiscard]] bool isStrategyEdgeIndex(int idx) const { return multi_strategy_.has(idx); }
 
     /**
-     * Whether vertex <v> has at least one recorded multi-strategy edge.
-     * (Used by the verifier to fall back to the single strategy for vertices
-     * solved without a multi-strategy, e.g. by a preprocessor.)
+     * Append the winning strategy moves of vertex <v> to <out>: the single
+     * strategy if one is set, otherwise (a vertex won by its owner whose single
+     * strategy is the -1 sentinel) the recorded multi-strategy edges. A losing or
+     * unsolved vertex contributes nothing. This is the uniform way for a consumer
+     * to read the strategy, regardless of which solver produced the solution.
      */
-    [[nodiscard]] bool hasMultiStrategyFor(int v) const
+    void strategyTargets(int v, std::vector<int>& out) const
     {
-        if (!has_multi_strategy_) return false;
-        const int f = _firstouts[v];
-        const int c = _outcount[v];
-        for (int k=0; k<c; k++) if (multi_strategy_.has((size_t)f + k)) return true;
-        return false;
+        const int s = solution_.strategy(v);
+        if (s != -1) { out.push_back(s); return; }
+        if (has_multi_strategy_ && solution_.is_solved(v) && solution_.winner(v) == owner(v)) {
+            const int f = _firstouts[v];
+            const int c = _outcount[v];
+            for (int k=0; k<c; k++) if (multi_strategy_.has((size_t)f + k)) out.push_back(_outedges[f + k]);
+        }
+    }
+
+    [[nodiscard]] std::vector<int> strategyTargets(int v) const
+    {
+        std::vector<int> r;
+        strategyTargets(v, r);
+        return r;
     }
 
     /**

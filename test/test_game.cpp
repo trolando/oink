@@ -19,6 +19,7 @@
  */
 
 #include <iostream>
+#include <vector>
 
 #include "oink/game.hpp"
 #include "oink/game_builder.hpp"
@@ -86,6 +87,26 @@ main()
         }
         check("in_to_out maps every in-edge", checked == h.edgecount());
         check("in_to_out endpoints aligned", aligned);
+    }
+
+    // strategyTargets dispatches per vertex via the -1 sentinel: a single move,
+    // the multi-strategy set, or nothing (loser/unsolved).
+    {
+        GameBuilder b(3);
+        b.set_priority(0, 2); b.set_owner(0, Player::Even); b.add_edge(0, 1); b.add_edge(0, 2);
+        b.set_priority(1, 2); b.set_owner(1, Player::Even); b.add_edge(1, 1);
+        b.set_priority(2, 2); b.set_owner(2, Player::Odd);  b.add_edge(2, 2);
+        Game h = b.build();
+        h.initMultiStrategy();
+        h.solve(0, 0, -1);        // won by owner, sentinel -> read multi
+        h.addStrategyEdge(0, 0);  // edge 0->1
+        h.addStrategyEdge(0, 1);  // edge 0->2
+        h.solve(1, 0, 1);         // won by owner, single move
+        h.solve(2, 0, -1);        // owner Odd, won by Even -> loser, no strategy
+
+        check("strategyTargets single", (h.strategyTargets(1) == std::vector<int>{1}));
+        check("strategyTargets multi", (h.strategyTargets(0) == std::vector<int>{1, 2}));
+        check("strategyTargets loser empty", h.strategyTargets(2).empty());
     }
 
     if (failures) {

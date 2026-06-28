@@ -413,7 +413,13 @@ Game::write_sol(std::ostream &out)
     for (int i=0; i<n_vertices; i++) {
         if (solution_.is_solved(i)) {
             out << i << " " << (solution_.winner(i) ? "1" : "0");
-            if (solution_.winner(i) == _owner[i] and solution_.strategy(i) != -1) out << " " << solution_.strategy(i);
+            if (solution_.winner(i) == _owner[i]) {
+                // pgsolver allows one successor: the single strategy, or (for a
+                // multi-strategy, where it is the -1 sentinel) a representative move
+                int str = solution_.strategy(i);
+                if (str == -1 and has_multi_strategy_) str = firstStrategyEdge(i);
+                if (str != -1) out << " " << str;
+            }
             out << ";" << std::endl;
         }
     }
