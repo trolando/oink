@@ -18,19 +18,31 @@
 #define SOLUTION_HPP
 
 #include <algorithm>
+#include <cstddef>
 #include <vector>
 
 #include <oink/bitset.hpp>
 
 namespace pg {
 
+class Game;
+
 /**
  * Holds the mutable solver output for a parity game: for each vertex whether it
- * has been solved, its winner (0 for Even, 1 for Odd), and the strategy edge.
+ * has been solved, its winner (0 for Even, 1 for Odd), and the strategy.
  *
- * This separates solver state from the (eventually immutable) Game structure.
- * The winner of an unsolved vertex is undefined; the strategy of a vertex is
- * the next vertex to play to, or -1 for none.
+ * A solution natively represents both single and multi strategies. The single
+ * strategy (one move per vertex) is primary. A vertex won by its owner with
+ * single strategy -1 (the "sentinel") instead takes its winning moves from the
+ * multi-strategy: a set of outgoing edges (the maximal permissive strategy),
+ * stored as a bitset indexed by position in the game's outgoing edge array
+ * (out-edge k of v is at index firstout(v)+k). A single solver never leaves a
+ * won vertex at -1, so -1 with winner==owner unambiguously means multi.
+ * strategyTargets() applies this dispatch so both kinds read uniformly.
+ *
+ * Interpreting the multi-strategy needs the game's edge layout, so a Solution
+ * that carries one references its Game (which must outlive it); the index-based
+ * edge operations used in solver hot loops need no Game.
  */
 class Solution
 {
@@ -41,7 +53,8 @@ public:
 
     /**
      * Resize to <vertex_count> vertices. Existing entries are preserved; new
-     * vertices are unsolved with strategy -1.
+     * vertices are unsolved with strategy -1. (Does not touch the multi-strategy,
+     * which is sized to the edge array; see init_multi.)
      */
     void resize(int vertex_count)
     {
@@ -51,13 +64,15 @@ public:
     }
 
     /**
-     * Mark all vertices as unsolved and clear all strategies.
+     * Mark all vertices as unsolved and clear all strategies (single and multi).
      */
     void reset()
     {
         solved_.reset();
         winner_.reset();
         std::fill(strategy_.begin(), strategy_.end(), -1);
+        edges_.reset();
+        has_multi_ = false;
     }
 
     [[nodiscard]] int vertex_count() const noexcept { return (int)strategy_.size(); }
@@ -77,8 +92,8 @@ public:
     [[nodiscard]] int* strategy_data() noexcept { return strategy_.data(); }
 
     /**
-     * Mark vertex <v> as solved, won by <winner> (0 or 1), with the given
-     * <strategy> (the next vertex to play to, or -1 for none).
+     * Mark vertex <v> as solved, won by <winner> (0 or 1), with the given single
+     * <strategy> (the next vertex to play to, or -1 for none / multi sentinel).
      */
     void solve(int v, int winner, int strategy) noexcept
     {
@@ -93,6 +108,8 @@ public:
     /** Swap the solution state of two vertices (used when permuting vertices). */
     void swap_vertices(int a, int b) noexcept
     {
+        // The multi-strategy is indexed by edge-array position (not by vertex) and
+        // is permutation-invariant, so only the per-vertex state is swapped here.
         bool sa = solved_[a]; solved_[a] = (bool)solved_[b]; solved_[b] = sa;
         bool wa = winner_[a]; winner_[a] = (bool)winner_[b]; winner_[b] = wa;
         std::swap(strategy_[a], strategy_[b]);
@@ -104,12 +121,73 @@ public:
         solved_.swap(other.solved_);
         winner_.swap(other.winner_);
         strategy_.swap(other.strategy_);
+        edges_.swap(other.edges_);
+        std::swap(has_multi_, other.has_multi_);
+        std::swap(game_, other.game_);
     }
+
+    /* --- multi-strategy --- */
+
+    /**
+     * Whether this solution carries a multi-strategy.
+     */
+    [[nodiscard]] bool has_multi() const noexcept { return has_multi_; }
+
+    /**
+     * Associate the game (used to interpret the edge-indexed multi-strategy). The
+     * game must outlive the solution. Set automatically by the owning Game.
+     */
+    void set_game(const Game* g) noexcept { game_ = g; }
+
+    /**
+     * Allocate (sized to the edge array) and clear the multi-strategy.
+     */
+    void init_multi(const Game* g, std::size_t edge_array_size)
+    {
+        game_ = g;
+        edges_.resize(edge_array_size);
+        edges_.reset();
+        has_multi_ = true;
+    }
+
+    /**
+     * Edge operations by out-edge array index (idx = firstout(v)+k). These need no
+     * game and are used in the solver hot loops.
+     */
+    void add_edge_index(std::size_t idx) { edges_.set(idx); }
+    void remove_edge_index(std::size_t idx) { edges_.reset(idx); }
+    [[nodiscard]] bool has_edge_index(std::size_t idx) const { return edges_.test(idx); }
+    void clear_edge_range(std::size_t start, std::size_t count)
+    {
+        for (std::size_t i = 0; i < count; i++) edges_.reset(start + i);
+    }
+
+    /**
+     * Game-aware multi-strategy queries (need the game's edge layout).
+     */
+
+    /** First recorded strategy target of <v>, or -1 if none. */
+    [[nodiscard]] int first_strategy_edge(int v) const;
+
+    /** Whether the edge <v> -> <to> is a recorded strategy edge. */
+    [[nodiscard]] bool has_strategy_edge_to(int v, int to) const;
+
+    /**
+     * Append the winning strategy moves of <v> to <out>: the single strategy if
+     * one is set, otherwise (a vertex won by its owner with the -1 sentinel) the
+     * recorded multi-strategy edges. A losing or unsolved vertex contributes
+     * nothing. This is the uniform way to read a strategy, single or multi.
+     */
+    void strategy_targets(int v, std::vector<int>& out) const;
 
 private:
     bitset solved_;             // set if vertex is solved
     bitset winner_;             // for solved vertices, 1 if won by Odd, else 0
-    std::vector<int> strategy_; // strategy per vertex, or -1 for none
+    std::vector<int> strategy_; // single strategy per vertex, or -1 (none / multi sentinel)
+
+    bitset edges_;              // multi-strategy: set of strategy edges (empty unless has_multi_)
+    bool has_multi_ = false;    // whether a multi-strategy is recorded
+    const Game* game_ = nullptr; // for interpreting edges_ (the game must outlive this)
 };
 
 }

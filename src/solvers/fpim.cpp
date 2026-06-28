@@ -32,7 +32,7 @@ FPIMSolver::~FPIMSolver()
 /**
  * Update the block [i, i+n). For each undecided vertex, compute its one-step
  * winner. Unlike FPI, we do not stop at the first winning move: we record
- * *every* outgoing edge to a co-winning vertex in the game's MultiStrategy,
+ * *every* outgoing edge to a co-winning vertex in the solution's multi-strategy,
  * and remember the first one as the representative single strategy.
  */
 int

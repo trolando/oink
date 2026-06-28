@@ -79,6 +79,35 @@ main()
     check("reset unsolves", s.solved().count() == 0);
     check("reset clears strategy", s.strategy(0) == -1 and s.strategy(4) == -1);
 
+    // The multi-strategy edge set (index-based ops are game-agnostic). first/
+    // strategy_targets need a Game, so they are covered by the Game/Verifier tests.
+    {
+        Solution m;
+        check("no multi by default", !m.has_multi());
+        m.init_multi(nullptr, 10); // game pointer not needed for index ops
+        check("has multi after init", m.has_multi() and m.solved().count() == 0);
+        check("init clears edges", !m.has_edge_index(0) and !m.has_edge_index(9));
+
+        m.add_edge_index(2);
+        m.add_edge_index(3);
+        m.add_edge_index(7);
+        check("add edges", m.has_edge_index(2) and m.has_edge_index(3) and m.has_edge_index(7));
+        check("others untouched", !m.has_edge_index(1) and !m.has_edge_index(4));
+        m.remove_edge_index(3);
+        check("remove one edge", !m.has_edge_index(3) and m.has_edge_index(2));
+
+        // clear_edge_range clears a contiguous block (one vertex's edges)
+        m.add_edge_index(3); m.add_edge_index(4); m.add_edge_index(5);
+        m.clear_edge_range(2, 4); // indices 2..5
+        check("clear_edge_range", !m.has_edge_index(2) and !m.has_edge_index(3)
+                                  and !m.has_edge_index(4) and !m.has_edge_index(5));
+        check("clear_edge_range keeps outside", m.has_edge_index(7));
+
+        // reset clears the multi-strategy too.
+        m.reset();
+        check("reset clears multi", !m.has_multi() and !m.has_edge_index(7));
+    }
+
     if (failures) {
         std::cerr << failures << " solution test(s) failed" << std::endl;
         return 1;

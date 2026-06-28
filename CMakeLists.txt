@@ -50,7 +50,6 @@ set(OINK_HDRS
     include/oink/io.hpp
     include/oink/player.hpp
     include/oink/solution.hpp
-    include/oink/multistrategy.hpp
     include/oink/span.hpp
     include/oink/subgame_view.hpp
     include/oink/solvers.hpp
@@ -181,6 +180,7 @@ target_sources(oink
   PRIVATE
     # Core files
     src/game.cpp
+    src/solution.cpp
     src/game_builder.cpp
     src/io.cpp
     src/pgparser.cpp
@@ -331,12 +331,6 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         target_sources(test_solution PRIVATE test/test_solution.cpp)
         set_target_props(test_solution)
         add_test(NAME TestSolution COMMAND test_solution)
-
-        # MultiStrategy class unit tests
-        add_executable(test_multistrategy)
-        target_sources(test_multistrategy PRIVATE test/test_multistrategy.cpp)
-        set_target_props(test_multistrategy)
-        add_test(NAME TestMultiStrategy COMMAND test_multistrategy)
 
         # GameBuilder unit tests
         add_executable(test_builder)

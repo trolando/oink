@@ -145,8 +145,7 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
     is_ordered = other.is_ordered;
 
     solution_ = other.solution_;
-    multi_strategy_ = other.multi_strategy_;
-    has_multi_strategy_ = other.has_multi_strategy_;
+    solution_.set_game(this); // the multi-strategy references its own game
 
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
@@ -417,7 +416,7 @@ Game::write_sol(std::ostream &out)
                 // pgsolver allows one successor: the single strategy, or (for a
                 // multi-strategy, where it is the -1 sentinel) a representative move
                 int str = solution_.strategy(i);
-                if (str == -1 and has_multi_strategy_) str = firstStrategyEdge(i);
+                if (str == -1 and solution_.has_multi()) str = solution_.first_strategy_edge(i);
                 if (str != -1) out << " " << str;
             }
             out << ";" << std::endl;
@@ -732,8 +731,9 @@ Game::swap(Game &other)
     std::swap(_firstins, other._firstins);
     std::swap(_incount, other._incount);
     solution_.swap(other.solution_);
-    multi_strategy_.bits().swap(other.multi_strategy_.bits());
-    std::swap(has_multi_strategy_, other.has_multi_strategy_);
+    // the multi-strategy references its own game, so re-point after the swap
+    solution_.set_game(this);
+    other.solution_.set_game(&other);
     std::swap(is_ordered, other.is_ordered);
     std::swap(v_allocated, other.v_allocated);
     std::swap(e_allocated, other.e_allocated);
@@ -744,44 +744,16 @@ void
 Game::reset_solution()
 {
     solution_.reset();
-    multi_strategy_ = MultiStrategy();
-    has_multi_strategy_ = false;
 }
 
 void
 Game::copy_solution(Game &other)
 {
     solution_ = other.solution_;
-    multi_strategy_ = other.multi_strategy_;
-    has_multi_strategy_ = other.has_multi_strategy_;
+    solution_.set_game(this); // the multi-strategy references its own game
 }
 
 void
-Game::initMultiStrategy()
-{
-    multi_strategy_.resize(e_size);
-    multi_strategy_.reset();
-    has_multi_strategy_ = true;
-}
-
-void
-Game::buildMultiStrategyFromSolution()
-{
-    initMultiStrategy();
-    for (int v=0; v<n_vertices; v++) {
-        if (!solution_.is_solved(v)) continue;
-        if (solution_.winner(v) != _owner[v]) continue;
-        const int str = solution_.strategy(v);
-        if (str == -1) continue;
-        const int f = _firstouts[v];
-        const int c = _outcount[v];
-        for (int k=0; k<c; k++) {
-            if (_outedges[f + k] == str) { multi_strategy_.add((size_t)f + k); break; }
-        }
-    }
-}
-
-void 
 Game::e_sizeup(void)
 {
     e_allocated += e_allocated/2 + 1; // +1 so it always grows (e.g. from size 1)

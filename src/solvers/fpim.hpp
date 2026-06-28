@@ -25,8 +25,8 @@ namespace pg {
  * Multi-strategy variant of the (sequential) distraction fixpoint iteration
  * solver FPI. Identical algorithm, but instead of selecting a single winning
  * move per vertex it records *all* moves that are winning at the point the
- * vertex is decided, in the game's MultiStrategy. A representative single
- * strategy is still reported so the standard solution stays valid.
+ * vertex is decided, in the solution's multi-strategy. Won vertices report the
+ * -1 sentinel single strategy; their moves are read from the multi-strategy.
  */
 class FPIMSolver : public Solver
 {

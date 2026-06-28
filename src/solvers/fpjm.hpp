@@ -25,10 +25,10 @@ namespace pg {
  * Multi-strategy variant of the fixpoint-iteration-with-justifications solver
  * FPJ (sequential, non-greedy). Identical algorithm, but instead of recording a
  * single winning move per vertex it records *all* moves that are winning at the
- * point the vertex is justified, in the game's MultiStrategy. A justified
- * vertex is invalidated when *any* of its recorded strategy edges is reset. A
- * representative single strategy is still reported so the standard solution
- * stays valid.
+ * point the vertex is justified, in the solution's multi-strategy. A justified
+ * vertex is invalidated only when its *last* recorded strategy edge is pruned.
+ * Won vertices report the -1 sentinel single strategy; their moves are read from
+ * the multi-strategy.
  */
 class FPJMSolver : public Solver
 {
