@@ -522,6 +522,39 @@ public:
     }
 
     /**
+     * Remove the strategy edge at out-edge array index <idx>.
+     * Used by fpjm to prune a single justification in O(1) (the index comes from
+     * the in->out edge map, see build_in_to_out / inToOut).
+     */
+    void removeStrategyEdgeIndex(int idx) { multi_strategy_.remove(idx); }
+
+    /**
+     * Return the first recorded strategy target of vertex <v>, or -1 if none.
+     * Used to pick a representative single strategy.
+     */
+    [[nodiscard]] int firstStrategyEdge(int v) const
+    {
+        const int f = _firstouts[v];
+        const int c = _outcount[v];
+        for (int k=0; k<c; k++) if (multi_strategy_.has((size_t)f + k)) return _outedges[f + k];
+        return -1;
+    }
+
+    /**
+     * Build the incoming-edge array together with a parallel "in -> out" map:
+     * inToOut()[s] is the out-edge array index of the edge whose incoming-edge
+     * slot is <s> (i.e. inedges()[s] == source, and the edge is source -> w).
+     * This lets a solver that walks ins(w) prune the corresponding strategy edge
+     * in O(1) instead of scanning the source's outgoing edges. Used by fpjm.
+     */
+    void build_in_to_out();
+
+    /**
+     * The in->out edge index map (see build_in_to_out). Indexed like inedges().
+     */
+    [[nodiscard]] const int* inToOut() const { return _in_to_out.data(); }
+
+    /**
      * Build a (singleton) multi-strategy from the current single Solution: every
      * solved vertex won by its owner contributes its single strategy edge. This
      * translates a Strategy into a MultiStrategy.
@@ -580,6 +613,7 @@ private:
     std::vector<int> _inedges;    // incoming edges as array (empty until build_in_array)
     std::vector<int> _firstins;   // first incoming edge of each vertex
     std::vector<int> _incount;    // incoming edge count of each vertex
+    std::vector<int> _in_to_out;  // scratch: in-edge slot -> out-edge index (built on demand)
 
     std::vector<std::vector<int>> _outvec; // outgoing edges as vector (for construction)
 

@@ -861,4 +861,38 @@ Game::build_in_array(bool rebuild)
     }
 }
 
+void
+Game::build_in_to_out()
+{
+    // Build the in-edge array and a parallel map to out-edge indices in one pass,
+    // so the two arrays are guaranteed to be aligned slot-for-slot.
+    _inedges.assign(e_size, 0);
+    _in_to_out.assign(e_size, -1);
+    _firstins.assign(n_vertices, 0);
+    _incount.assign(n_vertices, 0);
+
+    for (int v=0; v<n_vertices; v++) {
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            _incount[*curedge]++;
+        }
+    }
+
+    unsigned long pos = 0;
+    for (int v=0; v<n_vertices; v++) {
+        _firstins[v] = pos + _incount[v]; // start at end!!
+        _inedges[_firstins[v]] = -1;
+        pos += (_incount[v] + 1);
+    }
+
+    const int* base = _outedges.data();
+    for (int v=0; v<n_vertices; v++) {
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            int to = *curedge;
+            const int slot = --_firstins[to];
+            _inedges[slot] = v;
+            _in_to_out[slot] = (int)(curedge - base);
+        }
+    }
+}
+
 }
