@@ -311,6 +311,9 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
         add_executable(tc+ src/tools/tc+.cpp)
         set_target_props(tc+)
+
+        add_executable(multistrat src/tools/multistrat.cpp)
+        set_target_props(multistrat)
     endif()
 
     if(OINK_BUILD_TESTS)
