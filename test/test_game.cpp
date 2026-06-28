@@ -97,16 +97,21 @@ main()
         b.set_priority(1, 2); b.set_owner(1, Player::Even); b.add_edge(1, 1);
         b.set_priority(2, 2); b.set_owner(2, Player::Odd);  b.add_edge(2, 2);
         Game h = b.build();
-        h.initMultiStrategy();
-        h.solve(0, 0, -1);        // won by owner, sentinel -> read multi
-        h.addStrategyEdge(0, 0);  // edge 0->1
-        h.addStrategyEdge(0, 1);  // edge 0->2
-        h.solve(1, 0, 1);         // won by owner, single move
-        h.solve(2, 0, -1);        // owner Odd, won by Even -> loser, no strategy
+        Solution sol(h.nodecount());
+        sol.init_multi(&h, h.edgeArraySize());
+        sol.solve(0, 0, -1);                       // won by owner, sentinel -> read multi
+        sol.add_edge_index(h.firstout(0) + 0);     // edge 0->1
+        sol.add_edge_index(h.firstout(0) + 1);     // edge 0->2
+        sol.solve(1, 0, 1);                        // won by owner, single move
+        sol.solve(2, 0, -1);                       // owner Odd, won by Even -> loser, no strategy
 
-        check("strategyTargets single", (h.strategyTargets(1) == std::vector<int>{1}));
-        check("strategyTargets multi", (h.strategyTargets(0) == std::vector<int>{1, 2}));
-        check("strategyTargets loser empty", h.strategyTargets(2).empty());
+        std::vector<int> t0, t1, t2;
+        sol.strategy_targets(0, t0);
+        sol.strategy_targets(1, t1);
+        sol.strategy_targets(2, t2);
+        check("strategyTargets single", (t1 == std::vector<int>{1}));
+        check("strategyTargets multi", (t0 == std::vector<int>{1, 2}));
+        check("strategyTargets loser empty", t2.empty());
     }
 
     if (failures) {

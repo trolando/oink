@@ -45,23 +45,23 @@ Verifier::verify(bool fullgame, bool even, bool odd)
      */
     for (int v=0; v < n_vertices; v++) {
         // (for full solutions) check whether every vertex is won
-        if (!game.isSolved(v)) {
+        if (!solution.is_solved(v)) {
             if (fullgame) throw std::runtime_error("not every vertex is won");
             else continue;
         }
 
-        const bool winner = game.getWinner(v) ;
+        const bool winner = getWinner(v) ;
 
         if (winner == 0 and !even) continue; // whatever
         if (winner == 1 and !odd) continue; // whatever
 
         if (winner == game.owner(v)) {
-            int str = game.getStrategy(v);
+            int str = solution.strategy(v);
             if (str != -1) {
                 // single strategy: check it stays in the dominion
                 if (!game.has_edge(v, str)) {
                     throw std::runtime_error("strategy is not a valid move");
-                } else if (!game.isSolved(str) or game.getWinner(str) != winner) {
+                } else if (!solution.is_solved(str) or getWinner(str) != winner) {
                     throw std::runtime_error("strategy leaves dominion");
                 }
                 n_strategies++; // number of checked strategies
@@ -69,16 +69,16 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 // sentinel: -1 with winner==owner means the moves are in the
                 // multi-strategy (if one exists); a winner-owned vertex with
                 // neither a single strategy nor a multi-strategy is an error.
-                if (!game.hasMultiStrategy()) {
+                if (!solution.has_multi()) {
                     throw std::runtime_error("winning vertex has no strategy");
                 }
                 // check that *every* recorded edge stays in the dominion
                 const int* outbase = game.outedges();
                 int count = 0;
                 for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
-                    if (!game.isStrategyEdgeIndex(curedge - outbase)) continue;
+                    if (!solution.has_edge_index(curedge - outbase)) continue;
                     const int to = *curedge;
-                    if (!game.isSolved(to) or game.getWinner(to) != winner) {
+                    if (!solution.is_solved(to) or getWinner(to) != winner) {
                         throw std::runtime_error("strategy leaves dominion");
                     }
                     count++;
@@ -89,13 +89,13 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         } else {
             // if loser, check whether the loser can escape
             for (int to : game.out_edges(v)) {
-                if (!game.isSolved(to) or game.getWinner(to) != winner) {
+                if (!solution.is_solved(to) or getWinner(to) != winner) {
                     logger << "escape edge from " << game.label_vertex(v) << " to " << game.label_vertex(to) << std::endl;
                     throw std::runtime_error("loser can escape");
                 }
             }
             // and of course check that no strategy is set
-            if (game.getStrategy(v) != -1) throw std::runtime_error("losing vertex has strategy");
+            if (solution.strategy(v) != -1) throw std::runtime_error("losing vertex has strategy");
         }
     }
 
@@ -112,10 +112,10 @@ Verifier::verify(bool fullgame, bool even, bool odd)
 
     for (int top = n_vertices - 1; top >= 0; top--) {
         // only if a dominion
-        if (!game.isSolved(top)) continue;
+        if (!solution.is_solved(top)) continue;
 
         int prio = game.priority(top);
-        int winner = game.getWinner(top);
+        int winner = getWinner(top);
 
         // only compute SCC for a (probably) top vertex
         if (winner == 0 and !even) continue; // don't check even dominions
@@ -151,13 +151,13 @@ Verifier::verify(bool fullgame, bool even, bool odd)
              */
             int min = low[v];
             bool pushed = false;
-            if (game.hasMultiStrategy() && game.getStrategy(v) == -1 && game.getWinner(v) == game.owner(v)) {
+            if (solution.has_multi() && solution.strategy(v) == -1 && getWinner(v) == game.owner(v)) {
                 // sentinel: -1 with winner==owner means a multi-strategy. The winner
                 // may use *any* recorded strategy edge, so follow all of them (like
                 // the loser's all-edges branch below, but restricted to strategy edges)
                 const int* outbase = game.outedges();
                 for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
-                    if (!game.isStrategyEdgeIndex(curedge - outbase)) continue;
+                    if (!solution.has_edge_index(curedge - outbase)) continue;
                     int to = *curedge;
                     // skip if to higher priority
                     if (game.priority(to) > prio) continue;
@@ -174,8 +174,8 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                         if (low[to] < min) min = low[to];
                     }
                 }
-            } else if (game.getStrategy(v) != -1) {
-                int to = game.getStrategy(v);
+            } else if (solution.strategy(v) != -1) {
+                int to = solution.strategy(v);
                 if (game.priority(to) > prio) {
                     // skip if to higher priority
                 } else if (done[to] == prio) {
@@ -235,11 +235,11 @@ Verifier::verify(bool fullgame, bool even, bool odd)
             }
 
             bool self_strategy;
-            if (game.hasMultiStrategy() && game.getStrategy(v) == -1 && game.getWinner(v) == game.owner(v)) {
+            if (solution.has_multi() && solution.strategy(v) == -1 && getWinner(v) == game.owner(v)) {
                 // multi-strategy (sentinel): self-loop only if v->v is a strategy edge
-                self_strategy = game.hasStrategyEdgeTo(v, v);
-            } else if (game.getStrategy(v) != -1) {
-                self_strategy = (game.getStrategy(v) == v);
+                self_strategy = solution.has_strategy_edge_to(v, v);
+            } else if (solution.strategy(v) != -1) {
+                self_strategy = (solution.strategy(v) == v);
             } else {
                 // loser: any self-edge keeps v in its own SCC
                 self_strategy = game.has_edge(v, v);

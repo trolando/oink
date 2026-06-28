@@ -16,9 +16,12 @@
 
 #include <iostream>
 #include <fstream>
+#include <vector>
 #include <sys/time.h>
 
 #include "oink/game.hpp"
+#include "oink/solution.hpp"
+#include "oink/io.hpp"
 #include "verifier.hpp"
 #include "oink/pgparser.hpp"
 
@@ -47,14 +50,22 @@ main(int argc, const char **argv)
         inp.close();
         std::cout << "game loaded." << std::endl;
 
+        Solution sol(pg.nodecount());
+        sol.set_game(&pg);
         std::ifstream inpsol(argv[2]);
-        pg.parse_solution(inpsol);
+        parse_solution(pg, sol, inpsol);
         inpsol.close();
         std::cout << "solution loaded." << std::endl;
 
-        pg.sort();
+        // The verifier needs a game sorted by priority; sort the game and bring
+        // the solution into the same (sorted) numbering.
+        std::vector<int> mapping(pg.nodecount());
+        pg.sort(mapping.data());
+        std::vector<int> forward(pg.nodecount());
+        for (int i=0; i<pg.nodecount(); i++) forward[mapping[i]] = i;
+        sol.permute(forward.data());
 
-        Verifier v(pg, std::cout);
+        Verifier v(pg, sol, std::cout);
         auto begin = wctime();
         v.verify(true);
         auto end = wctime();

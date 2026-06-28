@@ -72,23 +72,23 @@ make_game(std::initializer_list<V> verts)
 
 /** Add the strategy edge v->to to the (already initialized) multi-strategy. */
 static void
-add_strat(Game& g, int v, int to)
+add_strat(Game& g, Solution& s, int v, int to)
 {
     const int* o = g.outs(v);
     for (int k = 0; o[k] != -1; k++) {
-        if (o[k] == to) { g.addStrategyEdge(v, k); return; }
+        if (o[k] == to) { s.add_edge_index(g.firstout(v) + k); return; }
     }
     std::cerr << "test bug: no edge " << v << "->" << to << std::endl;
     failures++;
 }
 
-/** Assert that verifying <g> throws (a runtime_error whose message contains <want>). */
+/** Assert that verifying <g>/<s> throws (a runtime_error whose message contains <want>). */
 static void
-expect_reject(const char* name, Game& g, const std::string& want)
+expect_reject(const char* name, Game& g, const Solution& s, const std::string& want)
 {
     std::stringstream log;
     g.ensure_sorted();
-    Verifier ver(g, log);
+    Verifier ver(g, s, log);
     try {
         ver.verify(true, true, true);
     } catch (std::runtime_error& e) {
@@ -105,13 +105,13 @@ expect_reject(const char* name, Game& g, const std::string& want)
     failures++;
 }
 
-/** Assert that verifying <g> succeeds (no throw). */
+/** Assert that verifying <g>/<s> succeeds (no throw). */
 static void
-expect_accept(const char* name, Game& g)
+expect_accept(const char* name, Game& g, const Solution& s)
 {
     std::stringstream log;
     g.ensure_sorted();
-    Verifier ver(g, log);
+    Verifier ver(g, s, log);
     try {
         ver.verify(true, true, true);
     } catch (std::runtime_error& e) {
@@ -133,9 +133,10 @@ main()
             {0, Player::Even, {1}},
             {0, Player::Even, {0}},
         });
-        g.solve(0, 0, 1);
-        g.solve(1, 0, 0);
-        expect_accept("single/good even cycle", g);
+        Solution s(g.nodecount());
+        s.solve(0, 0, 1);
+        s.solve(1, 0, 0);
+        expect_accept("single/good even cycle", g, s);
     }
 
     // BAD: a winning (owner == winner) vertex with no strategy.
@@ -144,9 +145,10 @@ main()
             {0, Player::Even, {1}},
             {0, Player::Even, {0}},
         });
-        g.solve(0, 0, -1); // winner Even == owner, but strategy -1
-        g.solve(1, 0, 0);
-        expect_reject("single/winner no strategy", g, "no strategy");
+        Solution s(g.nodecount());
+        s.solve(0, 0, -1); // winner Even == owner, but strategy -1
+        s.solve(1, 0, 0);
+        expect_reject("single/winner no strategy", g, s, "no strategy");
     }
 
     // BAD: strategy that is not an outgoing edge.
@@ -155,9 +157,10 @@ main()
             {0, Player::Even, {0}}, // only a self-loop
             {0, Player::Even, {1}},
         });
-        g.solve(0, 0, 1); // 1 is not a successor of 0
-        g.solve(1, 0, 1);
-        expect_reject("single/strategy not a move", g, "not a valid move");
+        Solution s(g.nodecount());
+        s.solve(0, 0, 1); // 1 is not a successor of 0
+        s.solve(1, 0, 1);
+        expect_reject("single/strategy not a move", g, s, "not a valid move");
     }
 
     // BAD: strategy that leaves the dominion (points into the other player's region).
@@ -166,9 +169,10 @@ main()
             {0, Player::Even, {0, 1}}, // even self-loop, plus edge to the odd region
             {1, Player::Odd,  {1}},
         });
-        g.solve(0, 0, 1); // Even claims to win 0 but moves to Odd-won 1
-        g.solve(1, 1, 1);
-        expect_reject("single/strategy leaves dominion", g, "leaves dominion");
+        Solution s(g.nodecount());
+        s.solve(0, 0, 1); // Even claims to win 0 but moves to Odd-won 1
+        s.solve(1, 1, 1);
+        expect_reject("single/strategy leaves dominion", g, s, "leaves dominion");
     }
 
     // BAD: a losing vertex that nonetheless has a strategy recorded.
@@ -177,10 +181,11 @@ main()
             {1, Player::Even, {1}}, // Even-owned but forced into the odd region
             {1, Player::Odd,  {1}},
         });
-        g.solve(0, 1, -1); // 0 is won by Odd (owner Even is the loser)
-        g.solve(1, 1, 1);
-        g.getStrategy()[0] = 1; // force a strategy on the losing vertex
-        expect_reject("single/loser has strategy", g, "losing vertex has strategy");
+        Solution s(g.nodecount());
+        s.solve(0, 1, -1); // 0 is won by Odd (owner Even is the loser)
+        s.solve(1, 1, 1);
+        s.strategy_data()[0] = 1; // force a strategy on the losing vertex
+        expect_reject("single/loser has strategy", g, s, "losing vertex has strategy");
     }
 
     // BAD: a losing vertex that can escape to a vertex won by the other player.
@@ -190,10 +195,11 @@ main()
             {1, Player::Odd,  {1}},
             {2, Player::Even, {2}},
         });
-        g.solve(0, 1, -1); // claim 0 won by Odd
-        g.solve(1, 1, 1);
-        g.solve(2, 0, 2);
-        expect_reject("single/loser can escape", g, "loser can escape");
+        Solution s(g.nodecount());
+        s.solve(0, 1, -1); // claim 0 won by Odd
+        s.solve(1, 1, 1);
+        s.solve(2, 0, 2);
+        expect_reject("single/loser can escape", g, s, "loser can escape");
     }
 
     // BAD: an odd self-loop claimed as an Even win. Passes the local checks (the
@@ -203,8 +209,9 @@ main()
         Game g = make_game({
             {1, Player::Even, {0}}, // odd priority, self-loop
         });
-        g.solve(0, 0, 0); // Even claims to win via the odd self-loop
-        expect_reject("single/loser can win (odd self-loop)", g, "loser can win");
+        Solution s(g.nodecount());
+        s.solve(0, 0, 0); // Even claims to win via the odd self-loop
+        expect_reject("single/loser can win (odd self-loop)", g, s, "loser can win");
     }
 
     /* ---------------------------------------------------------------------- *
@@ -218,14 +225,15 @@ main()
             {2, Player::Even, {1}},
             {2, Player::Even, {2}},
         });
-        g.solve(0, 0, -1); // -1 sentinel: moves are in the multi-strategy
-        g.solve(1, 0, -1);
-        g.solve(2, 0, -1);
-        g.initMultiStrategy();
-        add_strat(g, 0, 1); add_strat(g, 0, 2); // both moves are winning
-        add_strat(g, 1, 1);
-        add_strat(g, 2, 2);
-        expect_accept("multi/good two moves", g);
+        Solution s(g.nodecount());
+        s.solve(0, 0, -1); // -1 sentinel: moves are in the multi-strategy
+        s.solve(1, 0, -1);
+        s.solve(2, 0, -1);
+        s.init_multi(&g, g.edgeArraySize());
+        add_strat(g, s, 0, 1); add_strat(g, s, 0, 2); // both moves are winning
+        add_strat(g, s, 1, 1);
+        add_strat(g, s, 2, 2);
+        expect_accept("multi/good two moves", g, s);
     }
 
     // BAD: one of the recorded strategy edges leaves the dominion.
@@ -235,14 +243,15 @@ main()
             {2, Player::Even, {1}},    // Even-won self-loop
             {2, Player::Even, {1, 0}}, // claimed Even, but one move goes to Odd-won 0
         });
-        g.solve(0, 1, -1);
-        g.solve(1, 0, -1);
-        g.solve(2, 0, -1);
-        g.initMultiStrategy();
-        add_strat(g, 0, 0);
-        add_strat(g, 1, 1);
-        add_strat(g, 2, 1); add_strat(g, 2, 0); // 2->0 leaves the dominion
-        expect_reject("multi/edge leaves dominion", g, "leaves dominion");
+        Solution s(g.nodecount());
+        s.solve(0, 1, -1);
+        s.solve(1, 0, -1);
+        s.solve(2, 0, -1);
+        s.init_multi(&g, g.edgeArraySize());
+        add_strat(g, s, 0, 0);
+        add_strat(g, s, 1, 1);
+        add_strat(g, s, 2, 1); add_strat(g, s, 2, 0); // 2->0 leaves the dominion
+        expect_reject("multi/edge leaves dominion", g, s, "leaves dominion");
     }
 
     // The self-loop trap, as a multi-strategy. Same game solved two ways:
@@ -260,23 +269,25 @@ main()
     // self-loop forms an odd cycle the loser wins -> must be rejected.
     {
         Game g = trap_game();
-        g.solve(0, 0, -1);
-        g.solve(1, 0, -1);
-        g.initMultiStrategy();
-        add_strat(g, 0, 0); add_strat(g, 0, 1); // self-loop included: BAD
-        add_strat(g, 1, 1);
-        expect_reject("multi/self-loop trap rejected", g, "loser can win");
+        Solution s(g.nodecount());
+        s.solve(0, 0, -1);
+        s.solve(1, 0, -1);
+        s.init_multi(&g, g.edgeArraySize());
+        add_strat(g, s, 0, 0); add_strat(g, s, 0, 1); // self-loop included: BAD
+        add_strat(g, s, 1, 1);
+        expect_reject("multi/self-loop trap rejected", g, s, "loser can win");
     }
 
     // GOOD: same game, but the multi-strategy records only the winning escape.
     {
         Game g = trap_game();
-        g.solve(0, 0, -1);
-        g.solve(1, 0, -1);
-        g.initMultiStrategy();
-        add_strat(g, 0, 1); // only the escape: GOOD
-        add_strat(g, 1, 1);
-        expect_accept("multi/escape only accepted", g);
+        Solution s(g.nodecount());
+        s.solve(0, 0, -1);
+        s.solve(1, 0, -1);
+        s.init_multi(&g, g.edgeArraySize());
+        add_strat(g, s, 0, 1); // only the escape: GOOD
+        add_strat(g, s, 1, 1);
+        expect_accept("multi/escape only accepted", g, s);
     }
 
     // Mixed: single and multi vertices coexist in one solution. The dispatch is
@@ -287,11 +298,12 @@ main()
             {2, Player::Even, {0}},
             {2, Player::Even, {1}},
         });
-        g.solve(0, 0, -1);  // multi
-        g.solve(1, 0, 1);   // single (e.g. produced by a preprocessor/attractor)
-        g.initMultiStrategy();
-        add_strat(g, 0, 0);
-        expect_accept("multi/mixed single and multi ok", g);
+        Solution s(g.nodecount());
+        s.solve(0, 0, -1);  // multi
+        s.solve(1, 0, 1);   // single (e.g. produced by a preprocessor/attractor)
+        s.init_multi(&g, g.edgeArraySize());
+        add_strat(g, s, 0, 0);
+        expect_accept("multi/mixed single and multi ok", g, s);
     }
 
     // A vertex won by its owner with the -1 sentinel but no recorded multi edge
@@ -301,11 +313,12 @@ main()
             {2, Player::Even, {0}},
             {2, Player::Even, {1}},
         });
-        g.solve(0, 0, -1);
-        g.solve(1, 0, -1); // winning, sentinel, but no multi edge recorded
-        g.initMultiStrategy();
-        add_strat(g, 0, 0);
-        expect_reject("multi/sentinel without edge rejected", g, "no strategy");
+        Solution s(g.nodecount());
+        s.solve(0, 0, -1);
+        s.solve(1, 0, -1); // winning, sentinel, but no multi edge recorded
+        s.init_multi(&g, g.edgeArraySize());
+        add_strat(g, s, 0, 0);
+        expect_reject("multi/sentinel without edge rejected", g, s, "no strategy");
     }
 
     if (failures) {

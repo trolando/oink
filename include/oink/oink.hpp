@@ -113,6 +113,13 @@ public:
      */
     void flush(void);
 
+    /**
+     * The solution being built (solved/winner/strategy). Owned by Oink; the game
+     * it solves is pure input. Read it after run() to obtain the result.
+     */
+    [[nodiscard]] Solution& solution() noexcept { return solution_; }
+    [[nodiscard]] const Solution& solution() const noexcept { return solution_; }
+
 protected:
     /**
      * Solve winner-controlled winning cycles.
@@ -157,7 +164,8 @@ protected:
     void solveLoop(void);
     friend void _solve_loop(Oink*); // access point from a Lace worker
 
-    Game *game;              // game being solved
+    Game *game;              // game being solved (pure input)
+    Solution solution_;      // the solution being built (Oink owns it)
     std::ostream &logger;    // logger for trace/debug messages
     std::optional<std::string> solver; // which solver to use
     int workers = -1;        // number of workers, 0 = autodetect, -1 = use non parallel

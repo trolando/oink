@@ -80,6 +80,28 @@ protected:
     void solve(int node, int winner, int strategy) { oink.solve(node, winner, strategy); }
     void flush() { oink.flush(); }
 
+    /** The solution being built (owned by Oink). */
+    [[nodiscard]] Solution& solution() { return oink.solution(); }
+    [[nodiscard]] const Solution& solution() const { return oink.solution(); }
+
+    /**
+     * Access to the solution being built (owned by Oink). Solvers read these as
+     * working memory during solving and finalize via solve().
+     */
+    [[nodiscard]] bool isSolved(int v) const { return oink.solution().is_solved(v); }
+    [[nodiscard]] long count_unsolved() const { return game.nodecount() - (long)oink.solution().solved().count(); }
+    [[nodiscard]] int getWinner(int v) const { const Solution& s = oink.solution(); return s.is_solved(v) ? s.winner(v) : -1; }
+    [[nodiscard]] int getStrategy(int v) const { return oink.solution().strategy(v); }
+    [[nodiscard]] int* getStrategy() { return oink.solution().strategy_data(); }
+
+    /** Multi-strategy access (used by fpim/fpjm). */
+    [[nodiscard]] bool hasMultiStrategy() const { return oink.solution().has_multi(); }
+    void initMultiStrategy() { oink.solution().init_multi(&game, game.edgeArraySize()); }
+    void addStrategyEdge(int v, int k) { oink.solution().add_edge_index((std::size_t)game.firstout(v) + k); }
+    void clearStrategyEdges(int v) { oink.solution().clear_edge_range(game.firstout(v), game.outcount(v)); }
+    [[nodiscard]] bool isStrategyEdgeIndex(int idx) const { return oink.solution().has_edge_index(idx); }
+    void removeStrategyEdgeIndex(int idx) { oink.solution().remove_edge_index(idx); }
+
 private:
     Oink& oink;
 };

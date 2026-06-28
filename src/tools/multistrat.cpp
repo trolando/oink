@@ -48,14 +48,16 @@ using namespace pg;
 namespace fs = std::filesystem;
 
 // Solve a copy of <g> with <solver> (sequential, no preprocessing so the whole
-// game is handled by the solver and the multi-strategy is complete). <ms> is set
-// to the milliseconds spent in run().
-static Game
-solve_with(const Game& g, const std::string& solver, double& ms)
+// game is handled by the solver and the multi-strategy is complete). The solved
+// game is written to the caller-owned <out> (so it outlives the local Oink), and
+// the solution is returned (its multi-strategy references <out>). <ms> is set to
+// the milliseconds spent in run().
+static Solution
+solve_with(const Game& g, const std::string& solver, Game& out, double& ms)
 {
-    Game copy(g);
+    out = g;
     std::stringstream log;
-    Oink ok(copy, log);
+    Oink ok(out, log);
     ok.setSolver(solver);
     ok.setRenumber();
     ok.setSolveSingle(false);
@@ -66,7 +68,9 @@ solve_with(const Game& g, const std::string& solver, double& ms)
     ok.run();
     auto t1 = std::chrono::high_resolution_clock::now();
     ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    return copy;
+    Solution sol = ok.solution();
+    sol.set_game(&out); // re-point to the caller-owned game
+    return sol;
 }
 
 struct Stats {
@@ -78,17 +82,17 @@ struct Stats {
 };
 
 static Stats
-collect(const Game& g)
+collect(const Game& g, const Solution& sol)
 {
     Stats s;
     std::vector<int> moves;
     for (int v = 0; v < g.nodecount(); v++) {
-        if (!g.isSolved(v)) continue;
-        if (g.getWinner(v) == 0) s.even_won++;
-        if (g.getWinner(v) != g.owner(v)) continue; // only winner-owned carry a strategy
-        // strategyTargets dispatches single vs multi uniformly (the consumer API)
+        if (!sol.is_solved(v)) continue;
+        if (sol.winner(v) == 0) s.even_won++;
+        if (sol.winner(v) != g.owner(v)) continue; // only winner-owned carry a strategy
+        // strategy_targets dispatches single vs multi uniformly (the consumer API)
         moves.clear();
-        g.strategyTargets(v, moves);
+        sol.strategy_targets(v, moves);
         const int cnt = (int)moves.size();
         if (cnt > 0) {
             s.strat_vertices++;
@@ -101,27 +105,27 @@ collect(const Game& g)
 }
 
 static bool
-verify_ok(Game& g)
+verify_ok(Game& g, const Solution& sol)
 {
     std::stringstream log;
     g.ensure_sorted();
-    Verifier v(g, log);
+    Verifier v(g, sol, log);
     try { v.verify(true, true, true); } catch (std::runtime_error&) { return false; }
     return true;
 }
 
 static void
-print_strategy(const Game& g, const char* tag)
+print_strategy(const Game& g, const Solution& sol, const char* tag)
 {
     std::cout << "  [" << tag << "]\n";
     std::vector<int> moves;
     for (int v = 0; v < g.nodecount(); v++) {
         std::cout << "    v" << v << " (prio " << g.priority(v) << ", "
                   << (g.owner(v) ? "Odd" : "Even") << ") won by "
-                  << (g.getWinner(v) ? "Odd" : "Even");
-        if (g.getWinner(v) == g.owner(v)) {
+                  << (sol.winner(v) ? "Odd" : "Even");
+        if (sol.winner(v) == g.owner(v)) {
             moves.clear();
-            g.strategyTargets(v, moves);
+            sol.strategy_targets(v, moves);
             std::cout << "  strategy {";
             for (size_t i = 0; i < moves.size(); i++) std::cout << (i ? "," : "") << moves[i];
             std::cout << "}";
@@ -146,8 +150,8 @@ demo()
         }
         Game g = b.build();
         std::cout << "Example 1: K4 of even vertices (each has 3 winning moves)\n";
-        Game s = solve_with(g, "fpim", ms); print_strategy(s, "fpim");
-        Game s2 = solve_with(g, "fpjm", ms); print_strategy(s2, "fpjm");
+        Game g_s; Solution s = solve_with(g, "fpim", g_s, ms); print_strategy(g_s, s, "fpim");
+        Game g_s2; Solution s2 = solve_with(g, "fpjm", g_s2, ms); print_strategy(g_s2, s2, "fpjm");
         std::cout << "\n";
     }
 
@@ -161,8 +165,8 @@ demo()
         b.set_priority(1, 2); b.set_owner(1, Player::Even); b.add_edge(1, 1);
         Game g = b.build();
         std::cout << "Example 2: self-loop trap (v0 odd self-loop excluded, only escape kept)\n";
-        Game s = solve_with(g, "fpim", ms); print_strategy(s, "fpim");
-        Game s2 = solve_with(g, "fpjm", ms); print_strategy(s2, "fpjm");
+        Game g_s; Solution s = solve_with(g, "fpim", g_s, ms); print_strategy(g_s, s, "fpim");
+        Game g_s2; Solution s2 = solve_with(g, "fpjm", g_s2, ms); print_strategy(g_s2, s2, "fpjm");
         std::cout << "\n";
     }
 
@@ -175,7 +179,7 @@ demo()
         b.set_priority(1, 0); b.set_owner(1, Player::Even); b.add_edge(1, 2);
         Game g = b.build();
         std::cout << "Example 3: mixed (v0 has choice {2,3}, v1 forced {2})\n";
-        Game s = solve_with(g, "fpim", ms); print_strategy(s, "fpim");
+        Game g_s; Solution s = solve_with(g, "fpim", g_s, ms); print_strategy(g_s, s, "fpim");
         std::cout << "\n";
     }
 }
@@ -202,17 +206,19 @@ benchmark(const std::vector<fs::path>& files)
         } catch (...) { continue; }
 
         double t_fpi, t_fpim, t_fpj, t_fpjm;
-        Game gi  = solve_with(g, "fpi",  t_fpi);
-        Game gim = solve_with(g, "fpim", t_fpim);
-        Game gj  = solve_with(g, "fpj",  t_fpj);
-        Game gjm = solve_with(g, "fpjm", t_fpjm);
+        Game gi, gim, gj, gjm;
+        Solution si_sol  = solve_with(g, "fpi",  gi,  t_fpi);
+        Solution sim_sol = solve_with(g, "fpim", gim, t_fpim);
+        Solution sj_sol  = solve_with(g, "fpj",  gj,  t_fpj);
+        Solution sjm_sol = solve_with(g, "fpjm", gjm, t_fpjm);
 
-        Stats si = collect(gi), sim = collect(gim);
-        Stats sj = collect(gj), sjm = collect(gjm);
+        Stats si = collect(gi, si_sol), sim = collect(gim, sim_sol);
+        Stats sj = collect(gj, sj_sol), sjm = collect(gjm, sjm_sol);
 
         bool ok = (si.even_won == sim.even_won) && (si.even_won == sj.even_won)
                && (si.even_won == sjm.even_won)
-               && verify_ok(gi) && verify_ok(gj) && verify_ok(gim) && verify_ok(gjm);
+               && verify_ok(gi, si_sol) && verify_ok(gj, sj_sol)
+               && verify_ok(gim, sim_sol) && verify_ok(gjm, sjm_sol);
         if (!ok) n_bad++;
 
         long im_extra = sim.total_edges - sim.strat_vertices;

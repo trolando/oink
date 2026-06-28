@@ -19,6 +19,7 @@
 
 #include <istream>
 #include "oink/game.hpp"
+#include "oink/solution.hpp"
 
 namespace pg {
 
@@ -26,8 +27,10 @@ class Verifier
 {
 public:
     // The game must already be sorted by priority (call game.ensure_sorted()
-    // before constructing the Verifier); verification only reads the game.
-    Verifier(const Game& game, std::ostream &logger) : game(game), logger(logger) { }
+    // before constructing the Verifier); verification reads the game (structure)
+    // and the solution (solved/winner/strategy).
+    Verifier(const Game& game, const Solution& solution, std::ostream &logger)
+        : game(game), solution(solution), logger(logger) { }
 
     // TODO: make a std::exception class for verification exceptions?
 
@@ -43,8 +46,12 @@ public:
 
 protected:
     const Game& game;
+    const Solution& solution;
     std::ostream &logger;
     int n_strategies = 0;
+
+    // winner of a solved vertex (0 or 1), or -1 if unsolved
+    [[nodiscard]] int getWinner(int v) const { return solution.is_solved(v) ? solution.winner(v) : -1; }
 };
 
 }

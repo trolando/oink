@@ -45,7 +45,7 @@ FPIMSolver::updateBlock(int i, int n)
         if (distraction[i]) continue;
 
         // recomputing <i>: drop any strategy edges recorded on a previous pass
-        game.clearStrategyEdges(i);
+        clearStrategyEdges(i);
 
         // update whether current vertex <i> is a distraction by computing the one step winner
         const int o = owner(i);
@@ -58,7 +58,7 @@ FPIMSolver::updateBlock(int i, int n)
             if (winner_to == o) {
                 // good for the owner: record every such move in the multi-strategy
                 onestep_winner = o;
-                game.addStrategyEdge(i, k);
+                addStrategyEdge(i, k);
             }
         }
 
@@ -128,7 +128,7 @@ FPIMSolver::runSeq()
 
     // allocate the multi-strategy (set of all winning moves), unless a previous
     // call (e.g. on a different subgame) already did so
-    if (!game.hasMultiStrategy()) game.initMultiStrategy();
+    if (!hasMultiStrategy()) initMultiStrategy();
 
     int d = priority(nodecount()-1);
     int *p_start = new int[d+1];

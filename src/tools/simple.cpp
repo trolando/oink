@@ -18,6 +18,7 @@
 
 #include "oink/oink.hpp"
 #include "oink/pgparser.hpp"
+#include "oink/io.hpp"
 
 int
 main(int argc, char** argv)
@@ -49,10 +50,10 @@ main(int argc, char** argv)
      */
     if (argc > 2) {
         std::ofstream file(argv[2]);
-        pg.write_sol(file);
+        pg::write_solution(pg, solver.solution(), file);
         file.close();
     } else {
-        pg.write_sol(std::cout);
+        pg::write_solution(pg, solver.solution(), std::cout);
     }
 
     return 0;

@@ -115,6 +115,26 @@ public:
         std::swap(strategy_[a], strategy_[b]);
     }
 
+    /**
+     * Apply a vertex permutation (same convention as Game::permute) so the
+     * solution stays consistent with a permuted game. The multi-strategy is
+     * indexed by edge-array position and is permutation-invariant, so only the
+     * per-vertex state and the single strategy targets are remapped. <mapping>
+     * is not modified.
+     */
+    void permute(const int* mapping)
+    {
+        const int n = (int)strategy_.size();
+        for (int i=0; i<n; i++) if (strategy_[i] != -1) strategy_[i] = mapping[strategy_[i]];
+        std::vector<int> m(mapping, mapping + n);
+        for (int i=0; i<n; i++) {
+            while (m[i] != i) {
+                int k = m[i]; m[i] = m[k]; m[k] = k;
+                swap_vertices(i, k);
+            }
+        }
+    }
+
     /** Cheap swap (pointer swaps only). */
     void swap(Solution& other) noexcept
     {

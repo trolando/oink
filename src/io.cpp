@@ -15,11 +15,15 @@
  */
 
 #include "oink/io.hpp"
+#include "oink/game.hpp"
+#include "oink/solution.hpp"
 
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <streambuf>
+#include <string>
 #include <vector>
 
 #ifdef OINK_HAVE_ZLIB
@@ -201,6 +205,53 @@ std::string supported_input_formats()
     std::string s = fmts.front();
     for (std::size_t i = 1; i < fmts.size(); ++i) s += ", " + fmts[i];
     return s;
+}
+
+void
+write_solution(const Game& game, const Solution& solution, std::ostream& out)
+{
+    out << "paritysol " << solution.solved().count() << ";" << std::endl;
+    for (int i=0; i<game.nodecount(); i++) {
+        if (!solution.is_solved(i)) continue;
+        out << i << " " << (solution.winner(i) ? "1" : "0");
+        if (solution.winner(i) == game.owner(i)) {
+            // pgsolver allows one successor: the single strategy, or (for a
+            // multi-strategy, where it is the -1 sentinel) a representative move
+            int str = solution.strategy(i);
+            if (str == -1 and solution.has_multi()) str = solution.first_strategy_edge(i);
+            if (str != -1) out << " " << str;
+        }
+        out << ";" << std::endl;
+    }
+}
+
+void
+parse_solution(const Game& game, Solution& solution, std::istream& in)
+{
+    std::string line;
+    while (std::getline(in, line)) {
+        std::stringstream ss(line);
+        std::string token;
+        if (!(ss >> token)) continue;          // ignore empty line
+        if (token == "paritysol") continue;    // ignore banner
+
+        int ident = std::stoi(token);
+        if (ident < 0 || ident >= game.nodecount()) {
+            throw std::runtime_error("node index out of bounds");
+        }
+        if (solution.is_solved(ident)) throw std::runtime_error("node already solved");
+
+        int w;
+        if (!(ss >> w)) throw std::runtime_error("missing winner");
+        if (w != 0 && w != 1) throw std::runtime_error("invalid winner");
+
+        int str = -1;
+        if (w == game.owner(ident)) {
+            if (!(ss >> str)) throw std::runtime_error("missing strategy for winning node");
+            // validity of the strategy edge is checked by the verifier
+        }
+        solution.solve(ident, w, str);
+    }
 }
 
 } // namespace pg

@@ -263,17 +263,8 @@ int main(int argc, char **argv)
      * Parse the (partial) solution.
      */
 
-    try {
-        if (options.count("sol")) {
-            std::ifstream file(options["sol"].as<std::string>());
-            pg.parse_solution(file);
-            file.close();
-            out << "solution parsed." << std::endl;
-        }
-    } catch (std::runtime_error &err) {
-        out << "parsing error: " << err.what() << std::endl;
-        return -1;
-    }
+    // A partial solution (--sol) is parsed into Oink's solution after Oink is
+    // constructed (see below), since the solution now lives with the solver.
 
     /**
      * STEP 3
@@ -332,6 +323,19 @@ int main(int argc, char **argv)
         en.setSolverOptions(options["configure"].as<std::string>());
     }
 
+    // Parse a partial solution (--sol) into Oink's solution (in the now-sorted
+    // game's numbering). Oink picks up pre-solved vertices when run() is called.
+    if (options.count("sol")) {
+        try {
+            std::ifstream file(options["sol"].as<std::string>());
+            parse_solution(pg, en.solution(), file);
+            out << "solution parsed." << std::endl;
+        } catch (std::runtime_error &err) {
+            out << "parsing error: " << err.what() << std::endl;
+            return -1;
+        }
+    }
+
     /**
      * STEP 6
      * Run the solver and report the time.
@@ -358,7 +362,7 @@ int main(int argc, char **argv)
         try {
             out << "verifying solution..." << std::endl;
             pg.ensure_sorted(); // Verifier requires a game sorted by priority
-            Verifier v(pg, out);
+            Verifier v(pg, en.solution(), out);
             double vbegin = wctime();
             v.verify(true, true, true);
             double vend = wctime();
@@ -378,13 +382,19 @@ int main(int argc, char **argv)
      * Revert reindex if we need to output.
      */
 
-    if (options.count("output") or options.count("p")) pg.permute(mapping);
+    // Take a copy of the (Oink-owned) solution; revert the reindex on both the
+    // game and the solution together so output is in the input numbering.
+    pg::Solution sol = en.solution();
+    if (options.count("output") or options.count("p")) {
+        sol.permute(mapping); // does not consume mapping
+        pg.permute(mapping);  // consumes mapping
+    }
 
     if (options.count("output")) {
         // write solution to file
         if (options.count("output")) {
             std::ofstream file(options["output"].as<std::string>());
-            pg.write_sol(file);
+            write_solution(pg, sol, file);
         }
     }
 
@@ -392,7 +402,7 @@ int main(int argc, char **argv)
         // print winning nodes
         bool banner = false;
         for (int i=0; i<pg.nodecount(); i++) {
-            if (pg.isSolved(i) and pg.getWinner(i) == 0) {
+            if (sol.is_solved(i) and sol.winner(i) == 0) {
                 if (!banner) out << "won by even:";
                 banner = true;
                 // out << " " << i; // << "(" << pg.priority(i) << ")";
@@ -402,7 +412,7 @@ int main(int argc, char **argv)
         if (banner) out << std::endl;
         banner = false;
         for (int i=0; i<pg.nodecount(); i++) {
-            if (pg.isSolved(i) and pg.getWinner(i) == 1) {
+            if (sol.is_solved(i) and sol.winner(i) == 1) {
                 if (!banner) out << "won by odd:";
                 banner = true;
                 out << " " << pg.label_vertex(i);

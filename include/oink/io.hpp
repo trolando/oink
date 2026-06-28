@@ -19,9 +19,26 @@
 
 #include <istream>
 #include <memory>
+#include <ostream>
 #include <string>
 
 namespace pg {
+
+class Game;
+class Solution;
+
+/**
+ * Write a (partial) solution in pgsolver format. For a vertex won by its owner,
+ * writes the single strategy move, or — when the solution carries a multi-
+ * strategy (the -1 sentinel) — a representative move (pgsolver allows only one).
+ */
+void write_solution(const Game& game, const Solution& solution, std::ostream& out);
+
+/**
+ * Parse a [full or partial] pgsolver solution into <solution> (sized to the
+ * game and associated with it via Solution::set_game beforehand).
+ */
+void parse_solution(const Game& game, Solution& solution, std::istream& in);
 
 /**
  * Open `filename` for reading, transparently decompressing based on the file

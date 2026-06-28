@@ -29,8 +29,10 @@
 
 namespace pg {
 
-Oink::Oink(Game &game, std::ostream &out) : game(&game), logger(out), todo(game.vertexcount()), disabled(game.getSolved())
+Oink::Oink(Game &game, std::ostream &out) : game(&game), solution_(game.vertexcount()), logger(out), todo(game.vertexcount()), disabled(solution_.solved())
 {
+    // the solution carries the multi-strategy, which references its game
+    solution_.set_game(&game);
     // ensure the vertices are ordered properly
     game.ensure_sorted();
     // ensure arrays are built, but don't rebuild
@@ -318,10 +320,10 @@ Oink::solve(int node, int win, int strategy)
     // */
 
 #ifndef NDEBUG
-    if (game->isSolved(node) or disabled[node]) LOGIC_ERROR;
+    if (solution_.is_solved(node) or disabled[node]) LOGIC_ERROR;
 #endif
 
-    game->solve(node, win, strategy);
+    solution_.solve(node, win, game->owner(node) == win ? strategy : -1);
     disabled[node] = true; // disable
     todo.push(node);
 }
@@ -333,11 +335,11 @@ Oink::flush()
 
     while (todo.nonempty()) {
         int v = todo.pop();
-        bool winner = game->getWinner(v);
+        bool winner = solution_.winner(v);
 
         for (auto curedge = game->ins(v); *curedge != -1; curedge++) {
             int from = *curedge;
-            if (!game->isSolved(from) and !disabled[from]) {
+            if (!solution_.is_solved(from) and !disabled[from]) {
                 if (game->owner(from) == winner) {
                     // node of winner
                     solve(from, winner, v);
@@ -377,7 +379,7 @@ Oink::solveLoop()
     if (bottomSCC) {
         do {
             // disable all solved vertices
-            disabled = game->getSolved();  // copy assignment
+            disabled = solution_.solved();  // copy assignment
 
             // solve bottom SCC
             std::vector<int> sel;
@@ -387,7 +389,7 @@ Oink::solveLoop()
             for (int i : sel) disabled[i] = false;
 
             logger << "solving bottom SCC of " << sel.size() << " nodes (";
-            logger << game->count_unsolved() << " nodes left)" << std::endl;
+            logger << (game->nodecount() - (long)solution_.solved().count()) << " nodes left)" << std::endl;
 
             // solve current subgame
             auto s = Solvers::construct(*solver, *this, *game);
@@ -399,11 +401,11 @@ Oink::solveLoop()
 
             // flush the todo buffer
             flush();
-        } while (!game->game_solved());
+        } while (!((unsigned long)game->nodecount() == solution_.solved().count()));
     } else {
         do {
             // disable all solved vertices
-            disabled = game->getSolved();
+            disabled = solution_.solved();
 
             // solve current subgame
             auto s = Solvers::construct(*solver, *this, *game);
@@ -421,7 +423,7 @@ Oink::solveLoop()
             } else {
                 // flush the todo buffer
                 flush();
-                auto c = game->count_unsolved();
+                auto c = (game->nodecount() - (long)solution_.solved().count());
                 logger << c << " nodes left." << std::endl;
                 if (c == 0) return;
             }
@@ -453,9 +455,9 @@ Oink::run()
      * Deal with partial solutions
      * TODO: test this code, or maybe disable partial solutions and only accept full solutions for verification??
      */
-    if (game->getSolved().any()) {
+    if (solution_.solved().any()) {
         for (int v=0; v<game->vertexcount(); v++) {
-            if (game->isSolved(v)) todo.push(v);
+            if (solution_.is_solved(v)) todo.push(v);
         }
         flush();
     }
@@ -485,7 +487,7 @@ Oink::run()
 
     auto time_mid = high_resolution_clock::now();
 
-    if (game->game_solved()) {
+    if (((unsigned long)game->nodecount() == solution_.solved().count())) {
         double preprocess_time = duration_cast<duration<double>>(time_mid - time_before).count();
         logger << "preprocessing took " << std::fixed << std::setprecision(6) << preprocess_time << " sec." << std::endl;
         logger << "solved by preprocessor." << std::endl;
