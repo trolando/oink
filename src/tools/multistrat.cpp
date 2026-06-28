@@ -68,9 +68,7 @@ solve_with(const Game& g, const std::string& solver, Game& out, double& ms)
     ok.run();
     auto t1 = std::chrono::high_resolution_clock::now();
     ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    Solution sol = ok.solution();
-    sol.set_game(&out); // re-point to the caller-owned game
-    return sol;
+    return ok.solution(); // value type; <out> holds the matching (solved, sorted) game
 }
 
 struct Stats {
@@ -92,7 +90,7 @@ collect(const Game& g, const Solution& sol)
         if (sol.winner(v) != g.owner(v)) continue; // only winner-owned carry a strategy
         // strategy_targets dispatches single vs multi uniformly (the consumer API)
         moves.clear();
-        sol.strategy_targets(v, moves);
+        strategy_targets(g, sol, v, moves);
         const int cnt = (int)moves.size();
         if (cnt > 0) {
             s.strat_vertices++;
@@ -125,7 +123,7 @@ print_strategy(const Game& g, const Solution& sol, const char* tag)
                   << (sol.winner(v) ? "Odd" : "Even");
         if (sol.winner(v) == g.owner(v)) {
             moves.clear();
-            sol.strategy_targets(v, moves);
+            strategy_targets(g, sol, v, moves);
             std::cout << "  strategy {";
             for (size_t i = 0; i < moves.size(); i++) std::cout << (i ? "," : "") << moves[i];
             std::cout << "}";

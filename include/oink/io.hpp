@@ -35,8 +35,8 @@ class Solution;
 void write_solution(const Game& game, const Solution& solution, std::ostream& out);
 
 /**
- * Parse a [full or partial] pgsolver solution into <solution> (sized to the
- * game and associated with it via Solution::set_game beforehand).
+ * Parse a [full or partial] pgsolver solution into <solution> (which should be
+ * sized to the game's vertex count).
  */
 void parse_solution(const Game& game, Solution& solution, std::istream& in);
 

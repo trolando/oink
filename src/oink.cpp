@@ -31,8 +31,6 @@ namespace pg {
 
 Oink::Oink(Game &game, std::ostream &out) : game(&game), solution_(game.vertexcount()), logger(out), todo(game.vertexcount()), disabled(solution_.solved())
 {
-    // the solution carries the multi-strategy, which references its game
-    solution_.set_game(&game);
     // ensure the vertices are ordered properly
     game.ensure_sorted();
     // ensure arrays are built, but don't rebuild

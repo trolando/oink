@@ -218,7 +218,7 @@ write_solution(const Game& game, const Solution& solution, std::ostream& out)
             // pgsolver allows one successor: the single strategy, or (for a
             // multi-strategy, where it is the -1 sentinel) a representative move
             int str = solution.strategy(i);
-            if (str == -1 and solution.has_multi()) str = solution.first_strategy_edge(i);
+            if (str == -1 and solution.has_multi()) str = first_strategy_edge(game, solution, i);
             if (str != -1) out << " " << str;
         }
         out << ";" << std::endl;

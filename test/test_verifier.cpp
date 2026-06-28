@@ -229,7 +229,7 @@ main()
         s.solve(0, 0, -1); // -1 sentinel: moves are in the multi-strategy
         s.solve(1, 0, -1);
         s.solve(2, 0, -1);
-        s.init_multi(&g, g.edgeArraySize());
+        s.init_multi(g.edgeArraySize());
         add_strat(g, s, 0, 1); add_strat(g, s, 0, 2); // both moves are winning
         add_strat(g, s, 1, 1);
         add_strat(g, s, 2, 2);
@@ -247,7 +247,7 @@ main()
         s.solve(0, 1, -1);
         s.solve(1, 0, -1);
         s.solve(2, 0, -1);
-        s.init_multi(&g, g.edgeArraySize());
+        s.init_multi(g.edgeArraySize());
         add_strat(g, s, 0, 0);
         add_strat(g, s, 1, 1);
         add_strat(g, s, 2, 1); add_strat(g, s, 2, 0); // 2->0 leaves the dominion
@@ -272,7 +272,7 @@ main()
         Solution s(g.nodecount());
         s.solve(0, 0, -1);
         s.solve(1, 0, -1);
-        s.init_multi(&g, g.edgeArraySize());
+        s.init_multi(g.edgeArraySize());
         add_strat(g, s, 0, 0); add_strat(g, s, 0, 1); // self-loop included: BAD
         add_strat(g, s, 1, 1);
         expect_reject("multi/self-loop trap rejected", g, s, "loser can win");
@@ -284,7 +284,7 @@ main()
         Solution s(g.nodecount());
         s.solve(0, 0, -1);
         s.solve(1, 0, -1);
-        s.init_multi(&g, g.edgeArraySize());
+        s.init_multi(g.edgeArraySize());
         add_strat(g, s, 0, 1); // only the escape: GOOD
         add_strat(g, s, 1, 1);
         expect_accept("multi/escape only accepted", g, s);
@@ -301,7 +301,7 @@ main()
         Solution s(g.nodecount());
         s.solve(0, 0, -1);  // multi
         s.solve(1, 0, 1);   // single (e.g. produced by a preprocessor/attractor)
-        s.init_multi(&g, g.edgeArraySize());
+        s.init_multi(g.edgeArraySize());
         add_strat(g, s, 0, 0);
         expect_accept("multi/mixed single and multi ok", g, s);
     }
@@ -316,7 +316,7 @@ main()
         Solution s(g.nodecount());
         s.solve(0, 0, -1);
         s.solve(1, 0, -1); // winning, sentinel, but no multi edge recorded
-        s.init_multi(&g, g.edgeArraySize());
+        s.init_multi(g.edgeArraySize());
         add_strat(g, s, 0, 0);
         expect_reject("multi/sentinel without edge rejected", g, s, "no strategy");
     }

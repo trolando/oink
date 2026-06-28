@@ -98,7 +98,7 @@ main()
         b.set_priority(2, 2); b.set_owner(2, Player::Odd);  b.add_edge(2, 2);
         Game h = b.build();
         Solution sol(h.nodecount());
-        sol.init_multi(&h, h.edgeArraySize());
+        sol.init_multi(h.edgeArraySize());
         sol.solve(0, 0, -1);                       // won by owner, sentinel -> read multi
         sol.add_edge_index(h.firstout(0) + 0);     // edge 0->1
         sol.add_edge_index(h.firstout(0) + 1);     // edge 0->2
@@ -106,9 +106,9 @@ main()
         sol.solve(2, 0, -1);                       // owner Odd, won by Even -> loser, no strategy
 
         std::vector<int> t0, t1, t2;
-        sol.strategy_targets(0, t0);
-        sol.strategy_targets(1, t1);
-        sol.strategy_targets(2, t2);
+        strategy_targets(h, sol, 0, t0);
+        strategy_targets(h, sol, 1, t1);
+        strategy_targets(h, sol, 2, t2);
         check("strategyTargets single", (t1 == std::vector<int>{1}));
         check("strategyTargets multi", (t0 == std::vector<int>{1, 2}));
         check("strategyTargets loser empty", t2.empty());

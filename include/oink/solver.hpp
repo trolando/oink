@@ -96,7 +96,7 @@ protected:
 
     /** Multi-strategy access (used by fpim/fpjm). */
     [[nodiscard]] bool hasMultiStrategy() const { return oink.solution().has_multi(); }
-    void initMultiStrategy() { oink.solution().init_multi(&game, game.edgeArraySize()); }
+    void initMultiStrategy() { oink.solution().init_multi(game.edgeArraySize()); }
     void addStrategyEdge(int v, int k) { oink.solution().add_edge_index((std::size_t)game.firstout(v) + k); }
     void clearStrategyEdges(int v) { oink.solution().clear_edge_range(game.firstout(v), game.outcount(v)); }
     [[nodiscard]] bool isStrategyEdgeIndex(int idx) const { return oink.solution().has_edge_index(idx); }

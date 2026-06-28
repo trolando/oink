@@ -237,7 +237,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
             bool self_strategy;
             if (solution.has_multi() && solution.strategy(v) == -1 && getWinner(v) == game.owner(v)) {
                 // multi-strategy (sentinel): self-loop only if v->v is a strategy edge
-                self_strategy = solution.has_strategy_edge_to(v, v);
+                self_strategy = has_strategy_edge_to(game, solution, v, v);
             } else if (solution.strategy(v) != -1) {
                 self_strategy = (solution.strategy(v) == v);
             } else {

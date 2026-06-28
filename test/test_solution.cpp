@@ -84,7 +84,7 @@ main()
     {
         Solution m;
         check("no multi by default", !m.has_multi());
-        m.init_multi(nullptr, 10); // game pointer not needed for index ops
+        m.init_multi(10); // index ops are game-free
         check("has multi after init", m.has_multi() and m.solved().count() == 0);
         check("init clears edges", !m.has_edge_index(0) and !m.has_edge_index(9));
 

@@ -155,7 +155,6 @@ public:
         strategy_.swap(other.strategy_);
         edges_.swap(other.edges_);
         std::swap(has_multi_, other.has_multi_);
-        std::swap(game_, other.game_);
     }
 
     /* --- multi-strategy --- */
@@ -166,17 +165,11 @@ public:
     [[nodiscard]] bool has_multi() const noexcept { return has_multi_; }
 
     /**
-     * Associate the game (used to interpret the edge-indexed multi-strategy). The
-     * game must outlive the solution. Set automatically by the owning Game.
+     * Allocate (sized to the game's edge array, see Game::edgeArraySize) and clear
+     * the multi-strategy.
      */
-    void set_game(const Game* g) noexcept { game_ = g; }
-
-    /**
-     * Allocate (sized to the edge array) and clear the multi-strategy.
-     */
-    void init_multi(const Game* g, std::size_t edge_array_size)
+    void init_multi(std::size_t edge_array_size)
     {
-        game_ = g;
         edges_.resize(edge_array_size);
         edges_.reset();
         has_multi_ = true;
@@ -184,7 +177,10 @@ public:
 
     /**
      * Edge operations by out-edge array index (idx = firstout(v)+k). These need no
-     * game and are used in the solver hot loops.
+     * game and are used in the solver hot loops. The edge-indexed multi-strategy
+     * is meaningless without the game that defines the edge layout; the game-aware
+     * reads are the free functions strategy_targets()/first_strategy_edge()/
+     * has_strategy_edge_to() below (also reachable via Oink).
      */
     void add_edge_index(std::size_t idx) { edges_.set(idx); }
     void remove_edge_index(std::size_t idx) { edges_.reset(idx); }
@@ -194,24 +190,6 @@ public:
         for (std::size_t i = 0; i < count; i++) edges_.reset(start + i);
     }
 
-    /**
-     * Game-aware multi-strategy queries (need the game's edge layout).
-     */
-
-    /** First recorded strategy target of <v>, or -1 if none. */
-    [[nodiscard]] int first_strategy_edge(int v) const;
-
-    /** Whether the edge <v> -> <to> is a recorded strategy edge. */
-    [[nodiscard]] bool has_strategy_edge_to(int v, int to) const;
-
-    /**
-     * Append the winning strategy moves of <v> to <out>: the single strategy if
-     * one is set, otherwise (a vertex won by its owner with the -1 sentinel) the
-     * recorded multi-strategy edges. A losing or unsolved vertex contributes
-     * nothing. This is the uniform way to read a strategy, single or multi.
-     */
-    void strategy_targets(int v, std::vector<int>& out) const;
-
 private:
     bitset solved_;             // set if vertex is solved
     bitset winner_;             // for solved vertices, 1 if won by Odd, else 0
@@ -219,8 +197,29 @@ private:
 
     bitset edges_;              // multi-strategy: set of strategy edges (empty unless has_multi_)
     bool has_multi_ = false;    // whether a multi-strategy is recorded
-    const Game* game_ = nullptr; // for interpreting edges_ (the game must outlive this)
 };
+
+/* --- game-aware reads of a solution's strategy ---
+ *
+ * The multi-strategy is indexed by the game's outgoing edge array, so reading it
+ * needs the game. These are free functions (over a game and a solution) rather
+ * than members, so Solution stays a plain value type; they are also reachable
+ * via Oink (oink.strategyTargets(v)) for callers that hold the solver.
+ */
+
+/**
+ * Append the winning strategy moves of <v> to <out>: the single strategy if one
+ * is set, otherwise (a vertex won by its owner with the -1 sentinel) the recorded
+ * multi-strategy edges. A losing or unsolved vertex contributes nothing. The
+ * uniform way to read a strategy, single or multi.
+ */
+void strategy_targets(const Game& game, const Solution& solution, int v, std::vector<int>& out);
+
+/** First recorded strategy target of <v>, or -1 if none. */
+[[nodiscard]] int first_strategy_edge(const Game& game, const Solution& solution, int v);
+
+/** Whether the edge <v> -> <to> is a recorded strategy edge of <solution>. */
+[[nodiscard]] bool has_strategy_edge_to(const Game& game, const Solution& solution, int v, int to);
 
 /**
  * Permute a game and its solution together, consistently (the safe way to

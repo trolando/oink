@@ -51,7 +51,6 @@ main(int argc, const char **argv)
         std::cout << "game loaded." << std::endl;
 
         Solution sol(pg.nodecount());
-        sol.set_game(&pg);
         std::ifstream inpsol(argv[2]);
         parse_solution(pg, sol, inpsol);
         inpsol.close();

@@ -120,6 +120,19 @@ public:
     [[nodiscard]] Solution& solution() noexcept { return solution_; }
     [[nodiscard]] const Solution& solution() const noexcept { return solution_; }
 
+    /**
+     * Read the winning strategy moves of vertex <v> (single move, the multi-
+     * strategy set, or nothing). Convenience over the free function
+     * strategy_targets(game, solution, v, out) for callers holding the solver.
+     */
+    void strategyTargets(int v, std::vector<int>& out) const { strategy_targets(*game, solution_, v, out); }
+    [[nodiscard]] std::vector<int> strategyTargets(int v) const
+    {
+        std::vector<int> r;
+        strategy_targets(*game, solution_, v, r);
+        return r;
+    }
+
 protected:
     /**
      * Solve winner-controlled winning cycles.

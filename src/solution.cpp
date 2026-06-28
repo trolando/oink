@@ -20,25 +20,38 @@
 namespace pg {
 
 int
-Solution::first_strategy_edge(int v) const
+first_strategy_edge(const Game& game, const Solution& solution, int v)
 {
-    if (!has_multi_) return -1;
-    const int f = game_->firstout(v);
-    const int c = game_->outcount(v);
-    const int* o = game_->outedges();
-    for (int k=0; k<c; k++) if (edges_.test((std::size_t)f + k)) return o[f + k];
+    if (!solution.has_multi()) return -1;
+    const int f = game.firstout(v);
+    const int c = game.outcount(v);
+    const int* o = game.outedges();
+    for (int k=0; k<c; k++) if (solution.has_edge_index((std::size_t)f + k)) return o[f + k];
     return -1;
 }
 
 bool
-Solution::has_strategy_edge_to(int v, int to) const
+has_strategy_edge_to(const Game& game, const Solution& solution, int v, int to)
 {
-    if (!has_multi_) return false;
-    const int f = game_->firstout(v);
-    const int c = game_->outcount(v);
-    const int* o = game_->outedges();
-    for (int k=0; k<c; k++) if (o[f + k] == to and edges_.test((std::size_t)f + k)) return true;
+    if (!solution.has_multi()) return false;
+    const int f = game.firstout(v);
+    const int c = game.outcount(v);
+    const int* o = game.outedges();
+    for (int k=0; k<c; k++) if (o[f + k] == to and solution.has_edge_index((std::size_t)f + k)) return true;
     return false;
+}
+
+void
+strategy_targets(const Game& game, const Solution& solution, int v, std::vector<int>& out)
+{
+    const int s = solution.strategy(v);
+    if (s != -1) { out.push_back(s); return; }
+    if (solution.has_multi() and solution.is_solved(v) and solution.winner(v) == game.owner(v)) {
+        const int f = game.firstout(v);
+        const int c = game.outcount(v);
+        const int* o = game.outedges();
+        for (int k=0; k<c; k++) if (solution.has_edge_index((std::size_t)f + k)) out.push_back(o[f + k]);
+    }
 }
 
 void
@@ -46,19 +59,6 @@ permute(Game& game, Solution& solution, int* mapping)
 {
     solution.permute(mapping); // non-destructive; must run before game.permute
     game.permute(mapping);     // destroys mapping in place
-}
-
-void
-Solution::strategy_targets(int v, std::vector<int>& out) const
-{
-    const int s = strategy_[v];
-    if (s != -1) { out.push_back(s); return; }
-    if (has_multi_ and is_solved(v) and winner(v) == game_->owner(v)) {
-        const int f = game_->firstout(v);
-        const int c = game_->outcount(v);
-        const int* o = game_->outedges();
-        for (int k=0; k<c; k++) if (edges_.test((std::size_t)f + k)) out.push_back(o[f + k]);
-    }
 }
 
 }
