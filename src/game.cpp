@@ -145,6 +145,7 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
     is_ordered = other.is_ordered;
 
     solution_ = other.solution_;
+    solution_.set_game(this); // the multi-strategy references its own game
 
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
@@ -411,7 +412,13 @@ Game::write_sol(std::ostream &out)
     for (int i=0; i<n_vertices; i++) {
         if (solution_.is_solved(i)) {
             out << i << " " << (solution_.winner(i) ? "1" : "0");
-            if (solution_.winner(i) == _owner[i] and solution_.strategy(i) != -1) out << " " << solution_.strategy(i);
+            if (solution_.winner(i) == _owner[i]) {
+                // pgsolver allows one successor: the single strategy, or (for a
+                // multi-strategy, where it is the -1 sentinel) a representative move
+                int str = solution_.strategy(i);
+                if (str == -1 and solution_.has_multi()) str = solution_.first_strategy_edge(i);
+                if (str != -1) out << " " << str;
+            }
             out << ";" << std::endl;
         }
     }
@@ -724,6 +731,9 @@ Game::swap(Game &other)
     std::swap(_firstins, other._firstins);
     std::swap(_incount, other._incount);
     solution_.swap(other.solution_);
+    // the multi-strategy references its own game, so re-point after the swap
+    solution_.set_game(this);
+    other.solution_.set_game(&other);
     std::swap(is_ordered, other.is_ordered);
     std::swap(v_allocated, other.v_allocated);
     std::swap(e_allocated, other.e_allocated);
@@ -740,9 +750,10 @@ void
 Game::copy_solution(Game &other)
 {
     solution_ = other.solution_;
+    solution_.set_game(this); // the multi-strategy references its own game
 }
 
-void 
+void
 Game::e_sizeup(void)
 {
     e_allocated += e_allocated/2 + 1; // +1 so it always grows (e.g. from size 1)
@@ -824,6 +835,40 @@ Game::build_in_array(bool rebuild)
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
             int to = *curedge;
             _inedges[--_firstins[to]] = v;
+        }
+    }
+}
+
+void
+Game::build_in_to_out()
+{
+    // Build the in-edge array and a parallel map to out-edge indices in one pass,
+    // so the two arrays are guaranteed to be aligned slot-for-slot.
+    _inedges.assign(e_size, 0);
+    _in_to_out.assign(e_size, -1);
+    _firstins.assign(n_vertices, 0);
+    _incount.assign(n_vertices, 0);
+
+    for (int v=0; v<n_vertices; v++) {
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            _incount[*curedge]++;
+        }
+    }
+
+    unsigned long pos = 0;
+    for (int v=0; v<n_vertices; v++) {
+        _firstins[v] = pos + _incount[v]; // start at end!!
+        _inedges[_firstins[v]] = -1;
+        pos += (_incount[v] + 1);
+    }
+
+    const int* base = _outedges.data();
+    for (int v=0; v<n_vertices; v++) {
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            int to = *curedge;
+            const int slot = --_firstins[to];
+            _inedges[slot] = v;
+            _in_to_out[slot] = (int)(curedge - base);
         }
     }
 }

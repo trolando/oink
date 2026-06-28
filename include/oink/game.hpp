@@ -452,6 +452,69 @@ public:
     }
 
     /**
+     * Multi-strategy support.
+     *
+     * The Solution natively carries both single and multi strategies (see
+     * Solution); the methods below are thin forwarders so callers that hold a
+     * Game can reach the multi-strategy. The multi-strategy is populated by the
+     * multi-strategy solvers (fpim, fpjm), read via strategyTargets(), and
+     * validated by the Verifier; it stays empty (no overhead) for every other
+     * solver. Edges are indexed by out-edge array position (firstout(v)+k).
+     */
+
+    /** Whether the solution carries a multi-strategy. */
+    [[nodiscard]] bool hasMultiStrategy() const { return solution_.has_multi(); }
+
+    /** Allocate (sized to the edge array) and clear the multi-strategy. */
+    void initMultiStrategy() { solution_.init_multi(this, e_size); }
+
+    /** Record out-edge <k> of vertex <v> as a winning strategy move. */
+    void addStrategyEdge(int v, int k) { solution_.add_edge_index((size_t)_firstouts[v] + k); }
+
+    /** Clear all recorded strategy edges of vertex <v> (its whole edge block). */
+    void clearStrategyEdges(int v) { solution_.clear_edge_range(_firstouts[v], _outcount[v]); }
+
+    /** Whether the edge at array index <idx> (= firstout(v)+k) is a strategy edge. */
+    [[nodiscard]] bool isStrategyEdgeIndex(int idx) const { return solution_.has_edge_index(idx); }
+
+    /** Remove the strategy edge at out-edge array index <idx> (used by fpjm). */
+    void removeStrategyEdgeIndex(int idx) { solution_.remove_edge_index(idx); }
+
+    /** First recorded strategy target of <v>, or -1 (used to pick a representative). */
+    [[nodiscard]] int firstStrategyEdge(int v) const { return solution_.first_strategy_edge(v); }
+
+    /** Whether the edge <v> -> <to> is a recorded strategy edge. */
+    [[nodiscard]] bool hasStrategyEdgeTo(int v, int to) const { return solution_.has_strategy_edge_to(v, to); }
+
+    /**
+     * Append the winning strategy moves of vertex <v> to <out> (single move, or
+     * the multi-strategy set, or nothing). The uniform way for a consumer to read
+     * the strategy, regardless of which solver produced the solution.
+     */
+    void strategyTargets(int v, std::vector<int>& out) const { solution_.strategy_targets(v, out); }
+
+    [[nodiscard]] std::vector<int> strategyTargets(int v) const
+    {
+        std::vector<int> r;
+        solution_.strategy_targets(v, r);
+        return r;
+    }
+
+    /**
+     * Build the incoming-edge array together with a parallel "in -> out" map:
+     * inToOut()[s] is the out-edge array index of the edge whose incoming-edge
+     * slot is <s> (i.e. inedges()[s] == source, and the edge is source -> w).
+     * This lets a solver that walks ins(w) prune the corresponding strategy edge
+     * in O(1) instead of scanning the source's outgoing edges. Used by fpjm.
+     */
+    void build_in_to_out();
+
+    /**
+     * The in->out edge index map (see build_in_to_out). Indexed like inedges().
+     */
+    [[nodiscard]] const int* inToOut() const { return _in_to_out.data(); }
+
+    /**
      * Helper class for streaming to io streams (logging, etc.)
      */
     class _label_vertex
@@ -503,6 +566,7 @@ private:
     std::vector<int> _inedges;    // incoming edges as array (empty until build_in_array)
     std::vector<int> _firstins;   // first incoming edge of each vertex
     std::vector<int> _incount;    // incoming edge count of each vertex
+    std::vector<int> _in_to_out;  // scratch: in-edge slot -> out-edge index (built on demand)
 
     std::vector<std::vector<int>> _outvec; // outgoing edges as vector (for construction)
 
@@ -511,7 +575,7 @@ private:
     size_t e_allocated;    // number of edges allocated as virtual memory
     size_t e_size;         // number of entries used in edge array
 
-    Solution solution_;    // mutable solver output (solved/winner/strategy)
+    Solution solution_;    // mutable solver output (solved/winner/single+multi strategy)
 
     void unsafe_permute(int *mapping); // apply a reordering
     

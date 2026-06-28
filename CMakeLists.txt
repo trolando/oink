@@ -180,6 +180,7 @@ target_sources(oink
   PRIVATE
     # Core files
     src/game.cpp
+    src/solution.cpp
     src/game_builder.cpp
     src/io.cpp
     src/pgparser.cpp
@@ -199,7 +200,9 @@ target_sources(oink
     src/solvers/rrdp.cpp
     src/solvers/ppq.cpp
     src/solvers/fpi.cpp
+    src/solvers/fpim.cpp
     src/solvers/fpj.cpp
+    src/solvers/fpjm.cpp
     src/solvers/psi.cpp
     src/solvers/ssi.cpp
     src/solvers/spm.cpp
@@ -308,6 +311,9 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
         add_executable(tc+ src/tools/tc+.cpp)
         set_target_props(tc+)
+
+        add_executable(multistrat src/tools/multistrat.cpp)
+        set_target_props(multistrat)
     endif()
 
     if(OINK_BUILD_TESTS)
@@ -338,11 +344,19 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         set_target_props(test_game)
         add_test(NAME TestGame COMMAND test_game)
 
+        # Verifier unit tests (must reject bad strategies)
+        add_executable(test_verifier)
+        target_sources(test_verifier PRIVATE test/test_verifier.cpp)
+        set_target_props(test_verifier)
+        add_test(NAME TestVerifier COMMAND test_verifier)
+
         # test fixpoint algorithms
         add_test(NAME TestSolverFPIpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w 0)
         add_test(NAME TestSolverFPIseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi -w -1)
+        add_test(NAME TestSolverFPIM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpim)
         add_test(NAME TestSolverFPJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpj)
         add_test(NAME TestSolverFPJG COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjg)
+        add_test(NAME TestSolverFPJM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjm)
         # test strategy iteration
         add_test(NAME TestSolverPSIs COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w -1)
         add_test(NAME TestSolverPSIp COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w 0)
