@@ -263,16 +263,19 @@ int main(int argc, char **argv)
      * Parse the (partial) solution.
      */
 
-    try {
-        if (options.count("sol")) {
+    // A partial solution (--sol) uses the vertex numbers of the input, so parse it
+    // now, before the game is sorted (STEP 4), and renumber it with the game.
+    pg::Solution presolution;
+    if (options.count("sol")) {
+        try {
+            presolution.resize(pg.nodecount());
             std::ifstream file(options["sol"].as<std::string>());
-            pg.parse_solution(file);
-            file.close();
+            parse_solution(pg, presolution, file);
             out << "solution parsed." << std::endl;
+        } catch (std::runtime_error &err) {
+            out << "parsing error: " << err.what() << std::endl;
+            return -1;
         }
-    } catch (std::runtime_error &err) {
-        out << "parsing error: " << err.what() << std::endl;
-        return -1;
     }
 
     /**
@@ -296,6 +299,13 @@ int main(int argc, char **argv)
     int *mapping = new int[pg.nodecount()];
     pg.sort(mapping);
     out << "parity game reindexed" << std::endl;
+
+    if (options.count("sol")) {
+        // <mapping> maps new to old vertex numbers; the solution moves from old to new
+        std::vector<int> inverse(pg.nodecount());
+        for (int i=0; i<pg.nodecount(); i++) inverse[mapping[i]] = i;
+        presolution.permute(inverse.data());
+    }
 
     /**
      * STEP 5
@@ -332,6 +342,14 @@ int main(int argc, char **argv)
         en.setSolverOptions(options["configure"].as<std::string>());
     }
 
+    // The partial solution (--sol, renumbered with the game) goes into Oink's
+    // solution; Oink picks up pre-solved vertices when run() is called.
+    if (options.count("sol")) {
+        for (int v=0; v<pg.nodecount(); v++) {
+            if (presolution.is_solved(v)) en.solution().solve(v, presolution.winner(v), presolution.strategy(v));
+        }
+    }
+
     /**
      * STEP 6
      * Run the solver and report the time.
@@ -358,7 +376,7 @@ int main(int argc, char **argv)
         try {
             out << "verifying solution..." << std::endl;
             pg.ensure_sorted(); // Verifier requires a game sorted by priority
-            Verifier v(pg, out);
+            Verifier v(pg, en.solution(), out);
             double vbegin = wctime();
             v.verify(true, true, true);
             double vend = wctime();
@@ -378,13 +396,18 @@ int main(int argc, char **argv)
      * Revert reindex if we need to output.
      */
 
-    if (options.count("output") or options.count("p")) pg.permute(mapping);
+    // Take a copy of the (Oink-owned) solution; revert the reindex on both the
+    // game and the solution together so output is in the input numbering.
+    pg::Solution sol = en.solution();
+    if (options.count("output") or options.count("p")) {
+        pg::permute(pg, sol, mapping); // permutes solution then game, in the safe order
+    }
 
     if (options.count("output")) {
         // write solution to file
         if (options.count("output")) {
             std::ofstream file(options["output"].as<std::string>());
-            pg.write_sol(file);
+            write_solution(pg, sol, file);
         }
     }
 
@@ -392,7 +415,7 @@ int main(int argc, char **argv)
         // print winning nodes
         bool banner = false;
         for (int i=0; i<pg.nodecount(); i++) {
-            if (pg.isSolved(i) and pg.getWinner(i) == 0) {
+            if (sol.is_solved(i) and sol.winner(i) == 0) {
                 if (!banner) out << "won by even:";
                 banner = true;
                 // out << " " << i; // << "(" << pg.priority(i) << ")";
@@ -402,7 +425,7 @@ int main(int argc, char **argv)
         if (banner) out << std::endl;
         banner = false;
         for (int i=0; i<pg.nodecount(); i++) {
-            if (pg.isSolved(i) and pg.getWinner(i) == 1) {
+            if (sol.is_solved(i) and sol.winner(i) == 1) {
                 if (!banner) out << "won by odd:";
                 banner = true;
                 out << " " << pg.label_vertex(i);

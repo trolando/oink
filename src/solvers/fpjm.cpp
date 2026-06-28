@@ -43,7 +43,7 @@ FPJMSolver::runSeq()
 
     // allocate the multi-strategy (set of all winning moves), unless a previous
     // call (e.g. on a different subgame) already did so
-    if (!game.hasMultiStrategy()) game.initMultiStrategy();
+    if (!hasMultiStrategy()) initMultiStrategy();
 
     // build the in-edge array plus the in->out edge map, so that pruning the
     // strategy edge from->v while walking ins(v) is O(1) (no scan of from's edges)
@@ -95,8 +95,8 @@ FPJMSolver::runSeq()
                         } else {
                             // prune the strategy edge from->v in O(1) via the in->out map
                             const int oidx = in_to_out[curedge - in_base];
-                            if (game.isStrategyEdgeIndex(oidx)) {
-                                game.removeStrategyEdgeIndex(oidx);
+                            if (isStrategyEdgeIndex(oidx)) {
+                                removeStrategyEdgeIndex(oidx);
                                 if (--nstrat[from] == 0) reset = true; // last move pruned
                             }
                             // otherwise from->v was not a winning move: still justified
@@ -146,7 +146,7 @@ FPJMSolver::runSeq()
         // compute one step winner of <i> and update the strategy. Unlike FPJ, we
         // do not stop at the first winning move: we record *every* outgoing edge
         // to a co-winning vertex (the maximal set of moves valid at this point).
-        game.clearStrategyEdges(i); // drop any edges recorded on a previous pass
+        clearStrategyEdges(i); // drop any edges recorded on a previous pass
         const int o = owner(i);
         int onestep_winner = 1 - o; // default: owner cannot reach a vertex good for itself
         int cnt = 0;
@@ -157,7 +157,7 @@ FPJMSolver::runSeq()
             const int winner_to = parity[to] ^ distraction[to];
             if (winner_to == o) {
                 onestep_winner = o;
-                game.addStrategyEdge(i, k);
+                addStrategyEdge(i, k);
                 cnt++;
             }
         }

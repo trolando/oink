@@ -28,7 +28,7 @@ using namespace std;
 
 namespace pg {
 
-Game::Game() : _owner(0), solution_(0)
+Game::Game() : _owner(0)
 {
     n_vertices = 0;
     n_edges = 0;
@@ -83,7 +83,7 @@ Game::~Game()
     // all storage is RAII-managed (std::vector / bitset / Solution)
 }
 
-Game::Game(int vcount, int ecount) : _owner(vcount), solution_(vcount)
+Game::Game(int vcount, int ecount) : _owner(vcount)
 {
     assert(vcount > 0);
     if (ecount == -1) ecount = size_t(4) * vcount; // reasonable default outdegree
@@ -143,9 +143,6 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
     }
 
     is_ordered = other.is_ordered;
-
-    solution_ = other.solution_;
-    solution_.set_game(this); // the multi-strategy references its own game
 
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
@@ -219,7 +216,6 @@ Game::init_vertex(int v, int priority, int owner, std::string label)
     set_priority(v, priority);
     set_owner(v, owner);
     set_label(v, label);
-    solution_.set_strategy(v, -1); // initialize strategy
 }
 
 void
@@ -327,45 +323,6 @@ Game::find_edge(int from, int to) const
 }
 
 void
-Game::parse_solution(std::istream &in)
-{
-    string line;
-    while (getline(in, line)) {
-        stringstream ss(line);
-        string token;
-
-        // ignore empty line
-        if (!(ss >> token)) continue;
-
-        // ignore line with "paritysol"
-        if (token == "paritysol") continue;
-
-        // get node
-        int ident = stoi(token);
-        if (ident < 0 || ident >= n_vertices) {
-            throw std::runtime_error("node index out of bounds");
-        }
-
-        if (solution_.is_solved(ident)) throw std::runtime_error("node already solved");
-
-        // parse winner
-        int w;
-        if (!(ss >> w)) throw std::runtime_error("missing winner");
-        if (w!= 0 && w!= 1) throw std::runtime_error("invalid winner");
-
-        // parse strategy
-        int str = -1;
-        if (w == _owner[ident]) {
-            if (!(ss >> str)) throw std::runtime_error("missing strategy for winning node");
-            // if (!has_edge(ident, str)) throw std::runtime_error("strategy not successor of node");
-            // actually this is already checked by the verifier
-        }
-
-        solution_.solve(ident, w, str);
-    }
-}
-
-void
 Game::write_pgsolver(std::ostream &os)
 {
     // print banner
@@ -397,31 +354,6 @@ Game::write_dot(std::ostream &out)
         }
     }
     out << "}" << std::endl;
-}
-
-/**
- * Write a (partial) solution to the stream <out>.
- */
-void
-Game::write_sol(std::ostream &out)
-{
-    // print banner
-    out << "paritysol " << solution_.solved().count() << ";" << std::endl;
-
-    // print solution
-    for (int i=0; i<n_vertices; i++) {
-        if (solution_.is_solved(i)) {
-            out << i << " " << (solution_.winner(i) ? "1" : "0");
-            if (solution_.winner(i) == _owner[i]) {
-                // pgsolver allows one successor: the single strategy, or (for a
-                // multi-strategy, where it is the -1 sentinel) a representative move
-                int str = solution_.strategy(i);
-                if (str == -1 and solution_.has_multi()) str = solution_.first_strategy_edge(i);
-                if (str != -1) out << " " << str;
-            }
-            out << ";" << std::endl;
-        }
-    }
 }
 
 /**
@@ -486,11 +418,8 @@ Game::permute(int *mapping)
 void
 Game::unsafe_permute(int *mapping)
 {
-    // first update vectors and arrays and the strategies
-    int* strat = solution_.strategy_data();
-    for (int i=0; i<n_vertices; i++) {
-        if (strat[i] != -1) strat[i] = mapping[strat[i]];
-    }
+    // first update the edge arrays (the solution, if any, is held separately by
+    // Oink and is only built after the game is sorted, so it needs no remapping)
     unsigned long len = n_vertices + n_edges;
     for (unsigned long i=0; i<len; i++) {
         if (_outedges[i] != -1) _outedges[i] = mapping[_outedges[i]];
@@ -519,8 +448,6 @@ Game::unsafe_permute(int *mapping)
                 std::swap(_firstins[i], _firstins[k]);
                 std::swap(_incount[i], _incount[k]);
             }
-            // swap solution
-            solution_.swap_vertices(i, k);
         }
     }
 }
@@ -730,27 +657,10 @@ Game::swap(Game &other)
     std::swap(_inedges, other._inedges);
     std::swap(_firstins, other._firstins);
     std::swap(_incount, other._incount);
-    solution_.swap(other.solution_);
-    // the multi-strategy references its own game, so re-point after the swap
-    solution_.set_game(this);
-    other.solution_.set_game(&other);
     std::swap(is_ordered, other.is_ordered);
     std::swap(v_allocated, other.v_allocated);
     std::swap(e_allocated, other.e_allocated);
     std::swap(e_size, other.e_size);
-}
-
-void
-Game::reset_solution()
-{
-    solution_.reset();
-}
-
-void
-Game::copy_solution(Game &other)
-{
-    solution_ = other.solution_;
-    solution_.set_game(this); // the multi-strategy references its own game
 }
 
 void
@@ -771,7 +681,6 @@ Game::v_sizeup(void)
     _outcount.resize(v_allocated);
     _label.resize(v_allocated);
     _owner.resize(v_allocated);
-    solution_.resize(v_allocated);
 }
 
 void
@@ -780,7 +689,6 @@ Game::v_resize(size_t newsize)
     while (newsize > v_allocated) v_sizeup();
     n_vertices = newsize;
     _owner.resize(n_vertices);
-    solution_.resize(n_vertices);
 }
 
 void

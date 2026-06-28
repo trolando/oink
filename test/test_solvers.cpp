@@ -177,10 +177,10 @@ public:
         // Run the external program (no timeout), logging its output
         run_command_logged(cmd, logger);
 
-        // Read solution from temporary file
-        std::ifstream solution(path2);
-        game.parse_solution(solution);
-        solution.close();
+        // Read solution from temporary file into the (Oink-owned) solution
+        std::ifstream sol(path2);
+        parse_solution(game, solution(), sol);
+        sol.close();
 
         // Delete temporary files
         fs::remove(path1);
@@ -203,7 +203,6 @@ private:
 int
 test_solver(Game &game, const std::string& solverid, double &time, std::ostream &log)
 {
-    game.reset_solution();
     game.ensure_sorted();
 
     // solve a copy
@@ -230,11 +229,9 @@ test_solver(Game &game, const std::string& solverid, double &time, std::ostream 
     }
     time = wctime() - begin;
 
-    game.copy_solution(copy);
-
     try {
-        game.ensure_sorted(); // Verifier requires a game sorted by priority
-        Verifier v(game, log);
+        // <copy> was sorted by Oink; verify its (Oink-owned) solution
+        Verifier v(copy, solver.solution(), log);
         v.verify(true, true, true);
     } catch (std::runtime_error &err) {
         log << "verification error: " << err.what() << std::endl;

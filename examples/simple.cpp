@@ -61,14 +61,15 @@ main(int argc, char** argv)
     oink.setSolver(solver);
     oink.run();
 
-    // 3. Read the result. After solving, every vertex is won by player 0 (Even)
-    //    or player 1 (Odd). getStrategy(v) gives the move to play when the owner
-    //    of v is the winner, or -1 otherwise.
+    // 3. Read the result. Oink owns the solution; after solving, every vertex is
+    //    won by player 0 (Even) or player 1 (Odd). strategy(v) gives the move to
+    //    play when the owner of v is the winner, or -1 otherwise.
+    const pg::Solution& sol = oink.solution();
     long won0 = 0, won1 = 0;
     for (int v = 0; v < game.vertexcount(); v++) {
-        const int winner = game.getWinner(v);
-        if (winner == 0) won0++;
-        else if (winner == 1) won1++;
+        if (!sol.is_solved(v)) continue;
+        if (sol.winner(v) == 0) won0++;
+        else won1++;
     }
 
     std::cout << "oink " << pg::version() << ": solved " << game.vertexcount()
@@ -79,11 +80,12 @@ main(int argc, char** argv)
     // For small games, show the per-vertex outcome and winning strategy.
     if (game.vertexcount() <= 20) {
         for (int v = 0; v < game.vertexcount(); v++) {
-            const int strategy = game.getStrategy(v);
+            if (!sol.is_solved(v)) continue;
+            const int strategy = sol.strategy(v);
             std::cout << "  vertex " << v
                       << " (owner " << game.owner(v)
                       << ", priority " << game.priority(v) << ")"
-                      << " won by player " << game.getWinner(v);
+                      << " won by player " << sol.winner(v);
             if (strategy != -1) std::cout << ", strategy -> " << strategy;
             std::cout << std::endl;
         }

@@ -264,7 +264,7 @@ MSPMSolver::solve(int node, int str)
                 for (auto curedge = outs(from); *curedge != -1; curedge++) {
                     int to = *curedge;
                     if (cover[to] == -2) continue;                              // disabled: not in subgame
-                    if (cover[to] == -1 and game.getWinner(to) == pl) continue; // solved, stays in pl's region
+                    if (cover[to] == -1 and getWinner(to) == pl) continue; // solved, stays in pl's region
                     // a successor solved for the opponent, covered, or unsolved is an escape
                     // (covered can happen when alternating)
                     escapes = true;
@@ -441,8 +441,8 @@ MSPMSolver::run()
                 for (auto curedge = outs(n); *curedge != -1; curedge++) {
                     int to = *curedge;
                     if (cover[to] == -2) continue;
-                    if (game.isSolved(to)) {
-                        if (game.getWinner(to) == pl) {
+                    if (isSolved(to)) {
+                        if (getWinner(to) == pl) {
                             Solver::solve(n, pl, to);
                             cover[n] = -1;
                             pms[k*n+pl] = -1;
@@ -475,8 +475,8 @@ MSPMSolver::run()
             while (!q.empty()) {
                 int n = q.front();
                 q.pop();
-                if (!game.isSolved(n)) LOGIC_ERROR;
-                const bool pl = game.getWinner(n);
+                if (!isSolved(n)) LOGIC_ERROR;
+                const bool pl = getWinner(n);
                 for (auto curedge = ins(n); *curedge != -1; curedge++) {
                     int from = *curedge;
                     if (cover[from]) continue;
@@ -486,7 +486,7 @@ MSPMSolver::run()
                             int to = *curedge;
                             if (cover[to] == -2) continue;              // disabled: not in subgame
                             if (cover[to] == -1) {                      // solved
-                                if (game.getWinner(to) == pl) continue; // stays in pl's region
+                                if (getWinner(to) == pl) continue; // stays in pl's region
                                 escapes = true;                         // won by opponent: escape
                                 break;
                             }
