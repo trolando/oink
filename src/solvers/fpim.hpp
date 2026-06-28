@@ -43,7 +43,6 @@ public:
 private:
     unsigned long long iterations = 0;
     int *frozen;
-    int *strategy;  // representative single strategy (first winning move)
     bitset parity;
     bitset distraction;
 };

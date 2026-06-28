@@ -50,20 +50,17 @@ FPIMSolver::updateBlock(int i, int n)
         // update whether current vertex <i> is a distraction by computing the one step winner
         const int o = owner(i);
         int onestep_winner = 1 - o; // default: owner cannot reach a vertex good for itself
-        int str = -1;
         int k = 0;
         for (auto curedge = outs(i); *curedge != -1; curedge++, k++) {
             const int to = *curedge;
             if (disabled[to]) continue;
             const int winner_to = parity[to] ^ distraction[to];
             if (winner_to == o) {
-                // good for the owner: record this move (and the first as representative)
+                // good for the owner: record every such move in the multi-strategy
                 onestep_winner = o;
-                if (str == -1) str = to;
                 game.addStrategyEdge(i, k);
             }
         }
-        strategy[i] = str;
 
         if (parity[i] != onestep_winner) {
             distraction[i] = true;
@@ -126,7 +123,6 @@ FPIMSolver::runSeq()
      * Allocate and initialize data structures
      */
     distraction.resize(nodecount());
-    strategy = new int[nodecount()]; // representative strategy for winning the game
     frozen = new int[nodecount()]; // records for every vertex at which level it is frozen (or 0 if not frozen)
     memset(frozen, 0, sizeof(int[nodecount()])); // initially no vertex is frozen (we don't freeze at level 0)
 
@@ -181,18 +177,18 @@ FPIMSolver::runSeq()
     }
 
     /**
-     * Done, now tell Oink the solution
+     * Done, now tell Oink the solution. Won vertices report the -1 sentinel: the
+     * winning moves live in the multi-strategy (see strategyTargets/the verifier).
      */
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        Solver::solve(v, winner, winner == owner(v) ? strategy[v] : -1);
+        Solver::solve(v, winner, -1);
     }
 
     /**
      * Free allocated data structures
      */
-    delete[] strategy;
     delete[] frozen;
     delete[] p_start;
     delete[] p_len;
