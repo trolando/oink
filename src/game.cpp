@@ -145,6 +145,8 @@ Game::Game(const Game& other) : Game(other.n_vertices, other.e_size)
     is_ordered = other.is_ordered;
 
     solution_ = other.solution_;
+    multi_strategy_ = other.multi_strategy_;
+    has_multi_strategy_ = other.has_multi_strategy_;
 
     set_random_seed(static_cast<unsigned int>(std::time(0)));
 }
@@ -724,6 +726,8 @@ Game::swap(Game &other)
     std::swap(_firstins, other._firstins);
     std::swap(_incount, other._incount);
     solution_.swap(other.solution_);
+    multi_strategy_.bits().swap(other.multi_strategy_.bits());
+    std::swap(has_multi_strategy_, other.has_multi_strategy_);
     std::swap(is_ordered, other.is_ordered);
     std::swap(v_allocated, other.v_allocated);
     std::swap(e_allocated, other.e_allocated);
@@ -734,12 +738,41 @@ void
 Game::reset_solution()
 {
     solution_.reset();
+    multi_strategy_ = MultiStrategy();
+    has_multi_strategy_ = false;
 }
 
 void
 Game::copy_solution(Game &other)
 {
     solution_ = other.solution_;
+    multi_strategy_ = other.multi_strategy_;
+    has_multi_strategy_ = other.has_multi_strategy_;
+}
+
+void
+Game::initMultiStrategy()
+{
+    multi_strategy_.resize(e_size);
+    multi_strategy_.reset();
+    has_multi_strategy_ = true;
+}
+
+void
+Game::buildMultiStrategyFromSolution()
+{
+    initMultiStrategy();
+    for (int v=0; v<n_vertices; v++) {
+        if (!solution_.is_solved(v)) continue;
+        if (solution_.winner(v) != _owner[v]) continue;
+        const int str = solution_.strategy(v);
+        if (str == -1) continue;
+        const int f = _firstouts[v];
+        const int c = _outcount[v];
+        for (int k=0; k<c; k++) {
+            if (_outedges[f + k] == str) { multi_strategy_.add((size_t)f + k); break; }
+        }
+    }
 }
 
 void 
