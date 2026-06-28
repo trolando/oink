@@ -177,11 +177,12 @@ FPJMSolver::runSeq()
         i++;
     }
 
-    // done: report the winner and a representative single strategy (first move)
+    // done: report the winner. Won vertices use the -1 sentinel; their winning
+    // moves live in the multi-strategy (see strategyTargets/the verifier).
     for (int v=0; v<nodecount(); v++) {
         if (disabled[v]) continue;
         const int winner = parity[v] ^ distraction[v];
-        Solver::solve(v, winner, winner == owner(v) ? game.firstStrategyEdge(v) : -1);
+        Solver::solve(v, winner, -1);
     }
 
     // free allocated data structures
