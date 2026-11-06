@@ -84,7 +84,7 @@ bool opt_wcwc = false;
 bool opt_sort = false;
 bool opt_progress = false;
 bool opt_show_log = false;
-int opt_workers = 0;
+int opt_workers = -1; // sequential unless -w is given (matches the --help default)
 int opt_trace = -1;
 std::optional<std::string> opt_solver_opts = {};
 
@@ -384,7 +384,13 @@ main(int argc, char **argv)
         return opt_show_log ? *tee_out : static_cast<std::ostream&>(log);
     };
 
-    if (opt_workers >= 0) lace_start(opt_workers, 10000000UL, 0);
+    if (opt_workers >= 0) {
+        lace_start(opt_workers, 10000000UL, 0);
+        std::cout << "Workers: " << lace_worker_count() << " (Lace"
+                  << (opt_workers == 0 ? ", autodetected" : "") << ")" << std::endl;
+    } else {
+        std::cout << "Workers: sequential" << std::endl;
+    }
 
     int final_res = 0;
     double time;
