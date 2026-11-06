@@ -7,6 +7,14 @@ project(oink
     LANGUAGES C CXX
 )
 
+# Default to an optimized build when no build type is given. Only for
+# single-config generators, and only when Oink is the top-level project, so a
+# parent project's choice is never overridden.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR AND NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    message(STATUS "No build type given, defaulting to Release")
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+endif()
+
 # Build Oink (and the bundled lace) tuned to the build machine's CPU. Off by
 # default so packaged binaries stay portable; enable for local benchmarking.
 option(OINK_BUILD_NATIVE "Optimize for the build CPU (-march=native; not portable)" OFF)

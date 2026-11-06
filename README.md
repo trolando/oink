@@ -229,7 +229,7 @@ Oink does **not** require Boost.
 
 ### Building
 
-Oink uses an out-of-tree CMake build. By default it builds the library `liboink`, the main tool `oink`, the test runner `test_solvers` and the example program (use `ccmake` or `-D` options such as `OINK_BUILD_EXTRA_TOOLS=ON` to change this).
+Oink uses an out-of-tree CMake build. By default it builds the library `liboink`, the main tool `oink`, the test runner `test_solvers` and the example program (use `ccmake` or `-D` options such as `OINK_BUILD_EXTRA_TOOLS=ON` to change this). Without `-DCMAKE_BUILD_TYPE=...` the build type defaults to `Release`; pass `-DCMAKE_BUILD_TYPE=Debug` for a debug build.
 
 ```
 cmake -S . -B build
