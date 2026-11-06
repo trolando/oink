@@ -16,8 +16,7 @@
 
 #include <cassert>
 #include <cstring>
-#include <queue>
-#include <stack>
+#include <vector>
 
 #include "fpj.hpp"
 
@@ -32,318 +31,222 @@ FPJSolver::~FPJSolver()
 }
 
 /**
+ * Fixpoint iteration with justifications.
+ *
+ * Vertices are processed in blocks of consecutive (enabled) vertices with the same parity.
+ * A vertex is justified when its current evaluation (winner and strategy) is known to be
+ * consistent; justified vertices are skipped. When a block contains new distractions, all
+ * justified vertices that depend on them are reset, and solving continues at the lowest
+ * reset vertex.
+ *
+ * - greedy: every evaluated vertex is justified immediately (variation 1);
+ * - otherwise: only new distractions are justified immediately, and the other evaluated
+ *   vertices of a block are justified when the block ends without new distractions.
+ */
+void
+FPJSolver::solveSeq(bool greedy)
+{
+    const int n = nodecount();
+
+    /**
+     * Allocate and initialize data structures
+     */
+
+    std::vector<int> strategy(n, -1); // the current strategy
+    bitset justified(n);   // whether a vertex is justified
+    bitset distraction(n); // whether a vertex is won by the opponent
+    bitset parity(n);      // the parity of every vertex's priority
+    for (int v=0; v<n; v++) parity[v] = priority(v)&1;
+    const bitset enabled = ~disabled;
+
+    // won[pl][v]: v is enabled and currently won by pl (one bit test per edge)
+    bitset won[2];
+    won[1] = parity;
+    won[1] -= disabled;
+    won[0] = ~parity;
+    won[0] -= disabled;
+
+    auto makeDistraction = [&](int v) {
+        const int par = parity.test(v);
+        distraction.set(v);
+        won[par].reset(v);
+        won[1-par].set(v);
+    };
+    auto clearDistraction = [&](int v) {
+        const int par = parity.test(v);
+        distraction.reset(v);
+        won[1-par].reset(v);
+        won[par].set(v);
+    };
+
+    // blockend[v]: for an enabled vertex v, the first enabled vertex after v with the other
+    // parity (or n); disabled vertices do not end a block
+    std::vector<int> blockend(n, n);
+    for (int v=n-1, next=n; v>=0; v--) {
+        if (disabled[v]) continue;
+        if (next == n) blockend[v] = n;
+        else if (parity[next] != parity[v]) blockend[v] = next;
+        else blockend[v] = blockend[next];
+        next = v;
+    }
+
+    uintqueue Q(n);
+
+    const uint64_t *J = justified.data();
+    const uint64_t *EN = enabled.data();
+
+    // find the first enabled vertex
+    int i = 0;
+    while (i < n and disabled[i]) i++;
+
+    bool blockchanged = false; // did the current block change (new distractions)
+    int blockstart = i;        // first vertex of the current block
+    int cur_parity = i < n ? parity.test(i) : 0;
+
+    while (i < n) {
+        const int end = blockend[i];
+
+        /**
+         * Evaluate the unjustified vertices in [i, end), in order, 64 at a time
+         */
+        const int last_word = (end - 1) >> 6;
+        for (int w = i >> 6; w <= last_word; w++) {
+            uint64_t bits = EN[w] & ~J[w];
+            if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
+            if (w == last_word and (end & 63) != 0) bits &= (uint64_t(1) << (end & 63)) - 1;
+
+            while (bits) {
+                const int v = (w << 6) + intrinsics::countr_zero64(bits);
+                bits &= bits - 1;
+
+                if (greedy) justified.set(v);
+
+                // compute one step winner of <v> and update the strategy
+                const int pl = owner(v);
+                const uint64_t *good = won[pl].data();
+                int onestep_winner = 1 - pl, str = -1;
+                for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                    const int to = *curedge;
+                    if ((good[to >> 6] >> (to & 63)) & 1) {
+                        onestep_winner = pl;
+                        str = to;
+                        break;
+                    }
+                }
+                strategy[v] = str;
+
+                if (cur_parity != onestep_winner) {
+                    Q.push(v); // add to the Queue, because all justified predecessors are now invalid
+                    makeDistraction(v);
+                    if (!greedy) justified.set(v);
+                    blockchanged = true;
+#ifndef NDEBUG
+                    if (trace >= 2) {
+                        logger << "\033[38;5;165;1mjustified*\033[m " << label_vertex(v);
+                        if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
+                        logger << std::endl;
+                    }
+#endif
+                }
+#ifndef NDEBUG
+                else if (greedy and trace >= 2) {
+                    logger << "\033[38;5;165;1mjustified\033[m " << label_vertex(v);
+                    if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
+                    logger << std::endl;
+                }
+#endif
+            }
+        }
+
+        /**
+         * The block ended
+         */
+        i = end;
+
+        if (blockchanged) {
+            /**
+             * We have to reset all justified vertices that are now no longer justified...
+             */
+            while (!Q.empty()) {
+                const int v = Q.pop();
+                for (auto curedge = ins(v); *curedge != -1; curedge++) {
+                    const int from = *curedge;
+                    if (disabled[from]) continue;
+                    if (justified[from]) {
+                        if (strategy[from] == -1 or strategy[from] == v) {
+#ifndef NDEBUG
+                            if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(from) << std::endl;
+#endif
+                            justified.reset(from);
+                            clearDistraction(from);
+                            Q.push(from);
+                            if (from < i) i = from; // afterwards, continue at lowest unjustified vertex
+                        }
+                    }
+                }
+            }
+#ifndef NDEBUG
+            if (trace) logger << "restarting after finding distractions of prio " << priority(end-1) << std::endl;
+#endif
+            iterations++;
+            blockchanged = false;
+            // non-greedy: the unjustified vertices of the block must be evaluated again
+            if (!greedy and i > blockstart) i = blockstart;
+        } else if (!greedy) {
+            /**
+             * We now know that the current strategy of all unjustified vertices of the block is
+             * justified: justified |= enabled on [blockstart, end)
+             */
+            uint64_t *JW = justified.data();
+            const int last = (end - 1) >> 6;
+            for (int w = blockstart >> 6; w <= last; w++) {
+                uint64_t mask = EN[w];
+                if (w == (blockstart >> 6)) mask &= ~uint64_t(0) << (blockstart & 63);
+                if (w == last and (end & 63) != 0) mask &= (uint64_t(1) << (end & 63)) - 1;
+#ifndef NDEBUG
+                if (trace >= 2) {
+                    for (uint64_t m = mask & ~JW[w]; m; m &= m - 1) {
+                        const int v = (w << 6) + intrinsics::countr_zero64(m);
+                        logger << "\033[38;5;165;1mjustified\033[m " << label_vertex(v);
+                        if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
+                        logger << std::endl;
+                    }
+                }
+#endif
+                JW[w] |= mask;
+            }
+        }
+
+        if (i == n) break;
+
+        // continue with the block of vertex i
+        cur_parity = parity.test(i);
+        blockstart = i;
+    }
+
+    // done
+    for (int v=0; v<n; v++) {
+        if (disabled[v]) continue;
+        const int winner = parity[v] ^ distraction[v];
+        Solver::solve(v, winner, winner == owner(v) ? strategy[v] : -1);
+    }
+
+    logger << "solved with " << iterations << " iterations." << std::endl;
+}
+
+/**
  * Variation 1: greedy justification
  */
 void
 FPJSolver::runSeqGreedy()
 {
-    /**
-     * Allocate and initialize data structures
-     */
-
-    int *strategy = new int[nodecount()]; // the current strategy
-    bitset justified(nodecount()); // whether a vertex is justified
-    bitset distraction(nodecount()); // whether a vertex is won by the opponent
-
-    bitset parity(nodecount()); // optimization: precompute the parity of every vertex's priority
-    for (int v=0; v<nodecount(); v++) parity[v] = priority(v)&1;
-
-    uintqueue Q(nodecount());
-
-    /**
-     * Initialize loop
-     */
-
-    bool blockchanged = false; // did the current block change (new distractions)
-    int cur_parity = parity[0]; // parity of current block
-    int i = 0; // the current vertex
-
-    for (;;) {
-        /**
-         * First detect if we are at the end of a block (vertices of same parity)
-         */
-        bool blockended = false;
-        if (i == nodecount()) {
-            blockended = true;
-        } else {
-            if (disabled[i]) { i++; continue; }
-            if (parity[i] != cur_parity) blockended = true;
-        }
-
-        if (blockended) {
-            if (blockchanged) {
-                /**
-                 * We have to reset all justified vertices that are now no longer justified...
-                 */
-                while (!Q.empty()) {
-                    const int v = Q.pop();
-                    for (auto curedge = ins(v); *curedge != -1; curedge++) {
-                        const int from = *curedge;
-                        if (justified[from]) {
-                            if (strategy[from] == -1 or strategy[from] == v) {
-#ifndef NDEBUG
-                                if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(from) << std::endl;
-#endif
-                                justified[from] = false;
-                                distraction[from] = false; // reset it
-                                Q.push(from);
-                                if (from < i) i = from; // afterwards, continue at lowest unjustified vertex
-                            }
-                        }
-                    }
-                }
-#ifndef NDEBUG
-                if (trace) logger << "restarting after finding distractions of prio " << priority(i-1) << std::endl;
-#endif
-                iterations++;
-                blockchanged = false;
-            }
-
-            if (i == nodecount()) break; // in case the last block didn't result in unjustifications
-
-            // continue with the new block, update the current parity
-            cur_parity = parity[i];
-        }
-
-        // if the current vertex is justified, we don't need to check it
-        if (justified[i]) { i++; continue; }
-        justified[i] = true;
-
-        // compute one step winner of <i> and update the strategy
-        int onestep_winner, str = -1;
-        if (owner(i) == 0) {
-            // see if player Even can go to a vertex currently good for Even
-            onestep_winner = 1;
-            for (auto curedge = outs(i); *curedge != -1; curedge++) {
-                int to = *curedge;
-                if (disabled[to]) continue;
-                const int winner_to = parity[to] ^ distraction[to];
-                if (winner_to == 0) {
-                    // good for player Even
-                    onestep_winner = 0;
-                    // and set the strategy
-                    str = to;
-                    break;
-                }
-            }
-        } else {
-            // see if player Odd can go to a vertex currently good for Odd
-            onestep_winner = 0;
-            for (auto curedge = outs(i); *curedge != -1; curedge++) {
-                int to = *curedge;
-                if (disabled[to]) continue;
-                const int winner_to = parity[to] ^ distraction[to];
-                if (winner_to == 1) {
-                    // good for player Odd
-                    onestep_winner = 1;
-                    // and set the strategy
-                    str = to;
-                    break;
-                }
-            }
-        }
-
-        strategy[i] = str;
-
-        // evaluation stays the same
-        if (cur_parity != onestep_winner) {
-            Q.push(i); // add to the Queue, because all justified predecessors are now invalid
-            distraction[i] = true;
-            blockchanged = true;
-#ifndef NDEBUG
-            if (trace >= 2) {
-                logger << "\033[38;5;165;1mjustified*\033[m " << label_vertex(i);
-                if (strategy[i] != -1) logger << " => " << label_vertex(strategy[i]);
-                logger << std::endl;
-            }
-#endif
-        } else {
-#ifndef NDEBUG
-            if (trace >= 2) {
-                logger << "\033[38;5;165;1mjustified\033[m " << label_vertex(i);
-                if (strategy[i] != -1) logger << " => " << label_vertex(strategy[i]);
-                logger << std::endl;
-            }
-#endif
-        }
-
-        i++;
-    }
-
-    // done
-    for (int v=0; v<nodecount(); v++) {
-        if (disabled[v]) continue;
-        const int winner = parity[v] ^ distraction[v];
-        Solver::solve(v, winner, winner == owner(v) ? strategy[v] : -1);
-    }
-
-    // free allocated data structures
-    delete[] strategy;
-
-    logger << "solved with " << iterations << " iterations." << std::endl;
+    solveSeq(true);
 }
-
 
 void
 FPJSolver::runSeq()
 {
-    /**
-     * Allocate and initialize data structures
-     */
-
-    int *strategy = new int[nodecount()]; // the current strategy
-    bitset justified(nodecount()); // whether a vertex is justified
-    bitset distraction(nodecount()); // whether a vertex is won by the opponent
-
-    bitset parity(nodecount()); // optimization: precompute the parity of every vertex's priority
-    for (int v=0; v<nodecount(); v++) parity[v] = priority(v)&1;
-
-    uintqueue Q(nodecount());
-
-    /**
-     * Initialize loop
-     */
-
-    bool blockchanged = false; // did the current block change (new distractions)
-    int cur_parity = parity[0]; // parity of current block
-    int i = 0; // the current vertex
-    int blockstart = 0; // first vertex of the current block
-
-    for (;;) {
-        /**
-         * First detect if we are at the end of a block (vertices of same parity)
-         */
-        bool blockended = false;
-        if (i == nodecount()) {
-            blockended = true;
-        } else {
-            if (disabled[i]) { i++; continue; }
-            if (parity[i] != cur_parity) blockended = true;
-        }
-
-        if (blockended) {
-            if (blockchanged) {
-                /**
-                 * We have to reset all justified vertices that are now no longer justified...
-                 */
-                while (!Q.empty()) {
-                    const int v = Q.pop();
-                    for (auto curedge = ins(v); *curedge != -1; curedge++) {
-                        const int from = *curedge;
-                        if (disabled[from]) continue;
-                        if (justified[from]) {
-                            if (strategy[from] == -1 or strategy[from] == v) {
-#ifndef NDEBUG
-                                if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(from) << std::endl;
-#endif
-                                justified[from] = false;
-                                distraction[from] = false; // reset it
-                                Q.push(from);
-                                if (from < i) i = from; // afterwards, continue at lowest unjustified vertex
-                            }
-                        }
-                    }
-                }
-#ifndef NDEBUG
-                if (trace) logger << "restarting after finding distractions of prio " << priority(i-1) << std::endl;
-#endif
-                iterations++;
-                blockchanged = false;
-                if (i > blockstart) i = blockstart;
-            } else {
-                // We now know that the current strategy of all unjustified vertices of the block is justified
-                for (int v=blockstart; v<i; v++) {
-                    if (!disabled[v] and !justified[v]) {
-                        justified[v] = true;
-#ifndef NDEBUG
-                        if (trace >= 2) {
-                            logger << "\033[38;5;165;1mjustified\033[m " << label_vertex(v);
-                            if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
-                            logger << std::endl;
-                        }
-#endif
-                    }
-                }
-            }
-
-            if (i == nodecount()) break; // in case the last block didn't result in unjustifications
-
-            // continue with the new block, update the current parity
-            cur_parity = parity[i];
-            blockstart = i;
-        }
-
-        // if the current vertex is justified, we don't need to check it
-        if (justified[i]) {
-            i++;
-            continue;
-        }
-
-        // compute one step winner of <i> and update the strategy
-        int onestep_winner, str = -1;
-        if (owner(i) == 0) {
-            // see if player Even can go to a vertex currently good for Even
-            onestep_winner = 1;
-            for (auto curedge = outs(i); *curedge != -1; curedge++) {
-                int to = *curedge;
-                if (disabled[to]) continue;
-                const int winner_to = parity[to] ^ distraction[to];
-                if (winner_to == 0) {
-                    // good for player Even
-                    onestep_winner = 0;
-                    // and set the strategy
-                    str = to;
-                    break;
-                }
-            }
-        } else {
-            // see if player Odd can go to a vertex currently good for Odd
-            onestep_winner = 0;
-            for (auto curedge = outs(i); *curedge != -1; curedge++) {
-                int to = *curedge;
-                if (disabled[to]) continue;
-                const int winner_to = parity[to] ^ distraction[to];
-                if (winner_to == 1) {
-                    // good for player Odd
-                    onestep_winner = 1;
-                    // and set the strategy
-                    str = to;
-                    break;
-                }
-            }
-        }
-
-        strategy[i] = str;
-
-        // evaluation stays the same
-        if (cur_parity != onestep_winner) {
-            Q.push(i); // add to the Queue, because all justified predecessors are now invalid
-            distraction[i] = true;
-            justified[i] = true;
-            blockchanged = true;
-#ifndef NDEBUG
-            if (trace >= 2) {
-                logger << "\033[38;5;165;1mjustified*\033[m " << label_vertex(i);
-                if (strategy[i] != -1) logger << " => " << label_vertex(strategy[i]);
-                logger << std::endl;
-            }
-#endif
-        }
-
-        i++;
-    }
-
-    // done
-    for (int v=0; v<nodecount(); v++) {
-        if (disabled[v]) continue;
-        const int winner = parity[v] ^ distraction[v];
-        Solver::solve(v, winner, winner == owner(v) ? strategy[v] : -1);
-    }
-
-    // free allocated data structures
-    delete[] strategy;
-
-    logger << "solved with " << iterations << " iterations." << std::endl;
+    solveSeq(false);
 }
 
 void

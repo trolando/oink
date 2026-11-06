@@ -41,10 +41,34 @@ public:
     void runSeq(void);
 
 private:
+    void initState(void);
+
+    // v becomes a distraction: it is now won by the opponent of its parity
+    inline void makeDistraction(int v)
+    {
+        const int par = parity[v];
+        distraction.set(v);
+        candidate.reset(v);
+        won[par].reset(v);
+        won[1-par].set(v);
+    }
+
+    // v is no longer a distraction: it is won by its parity again
+    inline void clearDistraction(int v)
+    {
+        const int par = parity[v];
+        distraction.reset(v);
+        won[1-par].reset(v);
+        won[par].set(v);
+    }
+
     unsigned long long iterations = 0;
     int *frozen;
     bitset parity;
     bitset distraction;
+    // derived state, kept consistent with parity/distraction/frozen/disabled:
+    bitset won[2];    // won[pl][v]: v is enabled and currently won by player pl
+    bitset candidate; // v is enabled, not frozen and not a distraction
 };
 
 }

@@ -35,6 +35,9 @@ public:
     void runSeq(void);
 
     virtual void run();
+
+private:
+    void solveSeq(bool greedy);
 };
 
 class FPJGSolver : public FPJSolver

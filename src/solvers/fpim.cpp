@@ -38,36 +38,48 @@ FPIMSolver::~FPIMSolver()
 int
 FPIMSolver::updateBlock(int i, int n)
 {
+    if (n <= 0) return 0;
+
     int res = 0;
-    for (; n != 0; i++, n--) {
-        if (disabled[i]) continue;
-        if (frozen[i]) continue;
-        if (distraction[i]) continue;
+    const int end = i + n;
+    const int last_word = (end - 1) >> 6;
+    const uint64_t *cand = candidate.data();
 
-        // recomputing <i>: drop any strategy edges recorded on a previous pass
-        clearStrategyEdges(i);
+    // visit only the candidates (enabled, not frozen, not a distraction) in [i, end),
+    // 64 vertices at a time
+    for (int w = i >> 6; w <= last_word; w++) {
+        uint64_t bits = cand[w];
+        if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
+        if (w == last_word and (end & 63) != 0) bits &= (uint64_t(1) << (end & 63)) - 1;
 
-        // update whether current vertex <i> is a distraction by computing the one step winner
-        const int o = owner(i);
-        int onestep_winner = 1 - o; // default: owner cannot reach a vertex good for itself
-        int k = 0;
-        for (auto curedge = outs(i); *curedge != -1; curedge++, k++) {
-            const int to = *curedge;
-            if (disabled[to]) continue;
-            const int winner_to = parity[to] ^ distraction[to];
-            if (winner_to == o) {
-                // good for the owner: record every such move in the multi-strategy
-                onestep_winner = o;
-                addStrategyEdge(i, k);
+        while (bits) {
+            const int v = (w << 6) + intrinsics::countr_zero64(bits);
+            bits &= bits - 1;
+
+            // recomputing <v>: drop any strategy edges recorded on a previous pass
+            clearStrategyEdges(v);
+
+            // update whether vertex <v> is a distraction by computing the one step winner
+            const int o = owner(v);
+            const uint64_t *good = won[o].data();
+            int onestep_winner = 1 - o; // default: owner cannot reach a vertex good for itself
+            int k = 0;
+            for (auto curedge = outs(v); *curedge != -1; curedge++, k++) {
+                const int to = *curedge;
+                if ((good[to >> 6] >> (to & 63)) & 1) {
+                    // good for the owner: record every such move in the multi-strategy
+                    onestep_winner = o;
+                    addStrategyEdge(v, k);
+                }
             }
-        }
 
-        if (parity[i] != onestep_winner) {
-            distraction[i] = true;
-            res++;
+            if (parity[v] != onestep_winner) {
+                makeDistraction(v);
+                res++;
 #ifndef NDEBUG
-            if (trace >= 2) logger << "vertex " << label_vertex(i) << " is now a distraction (won by " << onestep_winner << ")" << std::endl;
+                if (trace >= 2) logger << "vertex " << label_vertex(v) << " is now a distraction (won by " << onestep_winner << ")" << std::endl;
 #endif
+            }
         }
     }
     return res;
@@ -80,40 +92,92 @@ FPIMSolver::updateBlock(int i, int n)
 void
 FPIMSolver::freezeThawReset(int i, int n, int p)
 {
-    const int pl = p&1;
-    for (; n != 0; i++, n--) {
-        if (disabled[i]) continue; // not in the subgame
-        if (frozen[i] >= p) continue; // already frozen
+    if (n <= 0) return;
 
-        if (frozen[i]) {
-            if ((frozen[i]&1) == pl) {
-                frozen[i] = p;
-            } else {
-                frozen[i] = 0;
-                distraction[i] = 0;
-#ifndef NDEBUG
-                if (trace >= 2) logger << "\033[38;5;202;1mthaw\033[m " << label_vertex(i) << std::endl;
-#endif
-            }
-        } else if (distraction[i]) {
-            if (parity[i] == pl) {
-                frozen[i] = p;
-#ifndef NDEBUG
-                if (trace >= 2) logger << "\033[38;5;51;1mfreeze\033[m " << label_vertex(i) << " at priority " << p << std::endl;
-#endif
-            } else {
-                distraction[i] = 0;
-#ifndef NDEBUG
-                if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(i) << std::endl;
-#endif
-            }
-        } else if (parity[i] != pl) {
-            frozen[i] = p;
-#ifndef NDEBUG
-            if (trace >= 2) logger << "\033[38;5;51;1mfreeze\033[m " << label_vertex(i) << " at priority " << p << std::endl;
-#endif
+    // Process 64 vertices (one bitset word) at a time. For every enabled vertex v in
+    // [i, i+n) with frozen[v] < p, with pl = p&1:
+    //  - frozen at a level of parity pl:       freeze at p
+    //  - frozen at a level of the other parity: thaw (unfreeze, reset distraction)
+    //  - not frozen, distraction, parity pl:    freeze at p
+    //  - not frozen, distraction, other parity: reset distraction
+    //  - not frozen, no distraction, other parity: freeze at p
+    // The lane predicates on frozen[] are simple loops the compiler can vectorize; the
+    // case analysis is done with 64-bit masks. frozen[] is padded to a multiple of 64.
+    const uint64_t PL = (p & 1) ? ~uint64_t(0) : 0;
+    const uint64_t *DIS = disabled.data();
+    uint64_t *DIST = distraction.data();
+    uint64_t *CAND = candidate.data();
+    uint64_t *WON0 = won[0].data();
+    uint64_t *WON1 = won[1].data();
+    const uint64_t *PAR = parity.data();
+
+    const int end = i + n;
+    const int last_word = (end - 1) >> 6;
+    for (int w = i >> 6; w <= last_word; w++) {
+        uint64_t en = ~DIS[w];
+        if (w == (i >> 6)) en &= ~uint64_t(0) << (i & 63);
+        if (w == last_word and (end & 63) != 0) en &= (uint64_t(1) << (end & 63)) - 1;
+        if (en == 0) continue;
+
+        int *f = frozen + (w << 6);
+        uint64_t below = 0, nz = 0, odd = 0;
+        for (int j = 0; j < 64; j++) {
+            const int fj = f[j];
+            below |= uint64_t(fj < p) << j;
+            nz |= uint64_t(fj != 0) << j;
+            odd |= uint64_t(fj & 1) << j;
         }
+        const uint64_t act = en & below;
+        if (act == 0) continue;
+
+        const uint64_t D = DIST[w];
+        const uint64_t P = PAR[w];
+        const uint64_t frozen_same = ~(odd ^ PL); // frozen at a level of parity pl
+        const uint64_t par_same = ~(P ^ PL);      // vertex parity is pl
+
+        const uint64_t refreeze = act & nz & frozen_same;
+        const uint64_t thaw = act & nz & ~frozen_same;
+        const uint64_t freeze_d = act & ~nz & D & par_same;
+        const uint64_t reset_d = act & ~nz & D & ~par_same;
+        const uint64_t freeze_c = act & ~nz & ~D & ~par_same;
+
+        const uint64_t setp = refreeze | freeze_d | freeze_c; // frozen = p
+        const uint64_t clear = thaw | reset_d;                // no longer a distraction, candidate again
+
+        DIST[w] = D & ~clear;
+        WON1[w] = (WON1[w] & ~clear) | (clear & P);
+        WON0[w] = (WON0[w] & ~clear) | (clear & ~P);
+        CAND[w] = (CAND[w] | clear) & ~freeze_c;
+
+        if (setp | thaw) {
+            for (int j = 0; j < 64; j++) {
+                const int fj = f[j];
+                f[j] = ((setp >> j) & 1) ? p : (((thaw >> j) & 1) ? 0 : fj);
+            }
+        }
+
+#ifndef NDEBUG
+        if (trace >= 2) {
+            for (uint64_t m = thaw; m; m &= m - 1) logger << "\033[38;5;202;1mthaw\033[m " << label_vertex((w << 6) + intrinsics::countr_zero64(m)) << std::endl;
+            for (uint64_t m = freeze_d | freeze_c; m; m &= m - 1) logger << "\033[38;5;51;1mfreeze\033[m " << label_vertex((w << 6) + intrinsics::countr_zero64(m)) << " at priority " << p << std::endl;
+            for (uint64_t m = reset_d; m; m &= m - 1) logger << "\033[31;1mresetting\033[m " << label_vertex((w << 6) + intrinsics::countr_zero64(m)) << std::endl;
+        }
+#endif
     }
+}
+
+/**
+ * Initialize the derived state from <parity> and <disabled>, with nothing frozen
+ * and no distractions: every enabled vertex is a candidate, won by its parity.
+ */
+void
+FPIMSolver::initState()
+{
+    won[1] = parity;
+    won[1] -= disabled;
+    won[0] = ~parity;
+    won[0] -= disabled;
+    candidate = ~disabled;
 }
 
 void
@@ -123,8 +187,10 @@ FPIMSolver::runSeq()
      * Allocate and initialize data structures
      */
     distraction.resize(nodecount());
-    frozen = new int[nodecount()]; // records for every vertex at which level it is frozen (or 0 if not frozen)
-    memset(frozen, 0, sizeof(int[nodecount()])); // initially no vertex is frozen (we don't freeze at level 0)
+    // records for every vertex at which level it is frozen (or 0 if not frozen), padded to a
+    // multiple of 64 for freezeThawReset; initially no vertex is frozen (we don't freeze at level 0)
+    const size_t frozen_size = (size_t(nodecount()) + 63) & ~size_t(63);
+    frozen = new int[frozen_size]();
 
     // allocate the multi-strategy (set of all winning moves), unless a previous
     // call (e.g. on a different subgame) already did so
@@ -152,6 +218,7 @@ FPIMSolver::runSeq()
             p_len[p] = 0;
         }
     }
+    initState();
 
     /**
      * The main loop
