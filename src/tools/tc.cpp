@@ -36,6 +36,7 @@ std::string string_format(const std::string& format, Args ... args)
 static int *in0, *in1; // indices of each bit's input/distraction
 static int *hi0, *hi1; // indices of each bit's high vertex
 static int n, m;
+static bool tangle_loop = false; // --tangle-loop: connect each <high> back to its own tangle
 
 /**
  * Make bit <i> at base index <c> with given input/high priorities
@@ -95,14 +96,19 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
     }
 
     /**
-     * Connect from <high> either to the next <input>
+     * Connect from <high> either to the next <input>,
+     * or (with --tangle-loop) back to its own tangle
      */
 
+    if (tangle_loop) {
+        game.vec_add_edge(c, c+1);
+    } else {
 #if 0
-    game.vec_add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]-1);
+        game.vec_add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]-1);
 #else
-    game.vec_add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]);
+        game.vec_add_edge(c, (pl == 0 ? in0 : in1)[(i+n-1)%n]);
 #endif
+    }
 
     // even (lower or same bit)
     // odd (only to lower bits)
@@ -115,8 +121,14 @@ makeBit(Game &game, const int c, int hipr, int inpr, int lopr, int i)
 int
 main(int argc, char** argv)
 {
-    if (argc < 2) {
-        std::cout << "Syntax: " << argv[0] << " N" << std::endl;
+    int argi = 1;
+    if (argi < argc and std::string(argv[argi]) == "--tangle-loop") {
+        tangle_loop = true;
+        argi++;
+    }
+
+    if (argi >= argc) {
+        std::cout << "Syntax: " << argv[0] << " [--tangle-loop] N" << std::endl;
         return -1;
     }
 
@@ -124,7 +136,7 @@ main(int argc, char** argv)
      * Get n and allocate data structures
      */
 
-    n = std::stoi(argv[1]);
+    n = std::stoi(argv[argi]);
     m = 3*n; // deceleration lane length
     in0 = new int[n];
     in1 = new int[n];
