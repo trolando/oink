@@ -67,7 +67,7 @@ Solvers::Solvers()
     _add("fpim", "fixpoint iteration (multi-strategy)", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPIMSolver>(oink, game); });
     _add("fpj", "fixpoint iteration with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPJSolver>(oink, game); });
     _add("fpjm", "fixpoint iteration with justifications (multi-strategy)", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPJMSolver>(oink, game); });
-    _add("fpjg", "greedy fixpoint iteration with justifications", 1, [] (Oink& oink, Game& game) { return std::make_unique<FPJGSolver>(oink, game); });
+    _add("fpjg", "greedy fixpoint iteration with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPJGSolver>(oink, game); });
     _add("psi", "parallel strategy improvement", 1, [] (Oink& oink, Game& game) { return std::make_unique<PSISolver>(oink, game); });
     _add("ssi", "symmetric strategy improvement", 0, [] (Oink& oink, Game& game) { return std::make_unique<SSISolver>(oink, game); });
     _add("spm", "accelerated small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<SPMSolver>(oink, game); });
@@ -99,6 +99,14 @@ Solvers::Solvers()
 
     // solvers that never use the in-edges, so Oink need not build them
     for (const char* id : {"fpi", "fpim", "psi"}) solvers[id].needsInEdges = false;
+
+    // parallel solvers: below these sizes (measured with 8 workers, against Lace's start and
+    // stop of up to a few ms) the game is solved sequentially, by the fallback if any
+    solvers["fpi"].parallelMinVertices = 100000;   // 2x at 92k vertices, little gain below
+    solvers["zlk"].parallelMinVertices = 500000;   // slower at 177k vertices, 2x at 650k
+    solvers["psi"].parallelMinVertices = 1000000;  // slower on every game measured
+    solvers["tlpar"].parallelMinVertices = 250000; // no gain below
+    solvers["tlpar"].sequentialFallback = "tl";
 }
 
 void

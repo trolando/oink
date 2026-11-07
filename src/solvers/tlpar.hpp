@@ -39,8 +39,9 @@ namespace pg {
  * of attraction (and so on scheduling), so the tangles learned can differ. Leak checks and
  * extracting tangles are sequential.
  *
- * Parallel rounds only pay off on large games: games with fewer than <par_game> vertices,
- * or runs with fewer than 2 Lace workers, are solved exactly as by TL.
+ * Parallel rounds only pay off on large games: Oink solves games below the threshold of
+ * tlpar (Solvers::parallelMinVertices) with TL instead, and runs with fewer than 2 Lace
+ * workers are solved exactly as by TL.
  */
 
 class TLParSolver : public Solver
@@ -54,7 +55,6 @@ public:
 
     int par_min = 2048; // smallest queue that is processed in parallel ("parmin=N")
     int par_chunk = 256; // vertices per task in a parallel round ("chunk=N")
-    int par_game = 250000; // smaller games are solved sequentially, as TL ("pargame=N")
 
     // the Lace task bodies
     void runPar(lace_worker* lw);

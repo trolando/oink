@@ -1265,8 +1265,7 @@ TLParSolver::tl(void)
 
 /**
  * Options (comma separated): parmin=N (smallest queue processed in parallel),
- * chunk=N (vertices per task in a parallel round), pargame=N (smaller games are solved
- * sequentially, since the parallel rounds cost more than they gain on them).
+ * chunk=N (vertices per task in a parallel round).
  */
 bool
 TLParSolver::parseOptions(std::string& opts)
@@ -1288,10 +1287,8 @@ TLParSolver::parseOptions(std::string& opts)
             par_min = value;
         } else if (key == "chunk" and value >= 1) {
             par_chunk = value;
-        } else if (key == "pargame" and value >= 0) {
-            par_game = value;
         } else {
-            logger << "unrecognised option for tlpar: " << opt << " (options: parmin=N, chunk=N, pargame=N)" << std::endl;
+            logger << "unrecognised option for tlpar: " << opt << " (options: parmin=N, chunk=N)" << std::endl;
             return false;
         }
     }
@@ -1307,8 +1304,8 @@ void tlpar_run_CALL(lace_worker* lw, TLParSolver* s)
 void
 TLParSolver::run()
 {
-    // parallel attraction pays off only on large games; small ones are solved as by TL
-    if (lace_worker_count() > 1 and nodecount() >= par_game) {
+    // (Oink decides whether to run in parallel; with one worker, this is TL)
+    if (parallel() and lace_worker_count() > 1) {
         pbuf.resize(lace_worker_count());
         tlpar_run(this); // runs runPar on a Lace worker
     } else {

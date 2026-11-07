@@ -532,7 +532,7 @@ PSISolver::run()
         }
     }
 
-    if (lace_worker_count() == 0) {
+    if (!parallel()) {
         for (;;) {
             ++major;
             if (trace) fmt::printf(logger, "\033[1;38;5;208mMajor iteration %d\033[m\n", major);

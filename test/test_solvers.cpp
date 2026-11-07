@@ -21,6 +21,7 @@
 #include <random>
 #include <sstream>
 #include <sys/time.h>
+#include <cctype>
 #include <optional>
 
 #include <cstdio>
@@ -86,8 +87,17 @@ bool opt_sort = false;
 bool opt_progress = false;
 bool opt_show_log = false;
 int opt_workers = -1; // sequential unless -w is given (matches the --help default)
+bool opt_force_parallel = false; // parallel also on games below the solver's threshold
 int opt_trace = -1;
-std::optional<std::string> opt_solver_opts = {};
+/**
+ * A solver to test: its id, its configuration (see Solver::parseOptions; empty for the
+ * defaults), and the name it is reported under.
+ */
+struct SolverRun {
+    std::string id;
+    std::string config;
+    std::string name;
+};
 
 static double
 wctime()
@@ -202,8 +212,9 @@ private:
 
 
 int
-test_solver(Game &game, const std::string& solverid, double &time, std::ostream &log)
+test_solver(Game &game, const SolverRun& run, double &time, std::ostream &log)
 {
+    const std::string& solverid = run.id;
     game.ensure_sorted();
 
     // solve a copy
@@ -217,10 +228,11 @@ test_solver(Game &game, const std::string& solverid, double &time, std::ostream 
     solver.setRemoveWCWC(opt_wcwc);
     solver.setBottomSCC(opt_scc);
     solver.setWorkers(opt_workers);
+    solver.setForceParallel(opt_force_parallel);
     solver.setSolver(solverid);
     if (opt_trace >= 0) solver.setTrace(opt_trace);
     else solver.setTrace(0);
-    if (opt_solver_opts.has_value()) solver.setSolverOptions(*opt_solver_opts);
+    if (!run.config.empty()) solver.setSolverOptions(run.config);
 
     double begin = wctime();
     try {
@@ -277,14 +289,16 @@ main(int argc, char **argv)
     opts.add_options("Solvers")
         ("all", "Run all solvers")
         ;
+    // every solver option takes an optional configuration: --tlpar=parmin=1,chunk=4
     for (const auto& id : Solvers::getSolverIDs()) {
-        opts.add_options("Solvers")(id, Solvers::desc(id));
+        opts.add_options("Solvers")(id, Solvers::desc(id), cxxopts::value<std::string>()->implicit_value(""));
     }
     opts.add_options("Solvers")("e,external", "External solver as name:command, e.g., 'mysolv:python solver.py %I %O'", cxxopts::value<std::vector<std::string>>());
     opts.add_options("Solving")
         ("t,trace", "Set trace level (0-3) for solver logging (saved to .pg.log on failure; see --show-log)", cxxopts::value<int>())
-        ("c,configure", "Additional configuration options for the solver", cxxopts::value<std::string>())
+        ("c,configure", "Configuration options for the solver (with one solver; otherwise use --<solver>=<options>, which may also be given several times with different options)", cxxopts::value<std::string>())
         ("w,workers", "Number of workers for parallel algorithms, or -1 for sequential, 0 for autodetect", cxxopts::value<int>()->default_value("-1"))
+        ("force-parallel", "Run parallel solvers in parallel also on games below their size threshold (to test the parallel code)")
         ("show-log", "Also write solver log output to stdout (use with -t to see trace live)")
         ("progress", "Compact progress output for random games: overwrite each game line, only keep failures")
         ;
@@ -325,19 +339,28 @@ main(int argc, char **argv)
     opt_scc = options.count("scc") != 0;
     opt_sort = options.count("sort") != 0;
     if (options.count("workers")) opt_workers = options["workers"].as<int>();
+    opt_force_parallel = options.count("force-parallel") != 0;
     if (options.count("trace")) opt_trace = options["trace"].as<int>();
     opt_show_log = options.count("show-log") != 0;
     opt_progress = options.count("progress") != 0;
 
     std::cout << "Selected solvers:";
 
-    std::vector<std::string> solvers;
+    std::vector<SolverRun> solvers;
+    auto add_run = [&](const std::string& id, const std::string& config) {
+        const std::string name = config.empty() ? id : id + "[" + config + "]";
+        for (const auto& r : solvers) if (r.name == name) return; // given twice
+        solvers.push_back({id, config, name});
+        std::cout << " " << name;
+    };
 
-    for (const auto& id : Solvers::getSolverIDs()) {
-        if (options.count("all") or options.count(id)) {
-            solvers.push_back(id);
-            std::cout << " " << id;
-        }
+    // the solvers in the order given (with --all, all solvers first)
+    const auto solver_ids = Solvers::getSolverIDs();
+    if (options.count("all")) {
+        for (const auto& id : solver_ids) add_run(id, "");
+    }
+    for (const auto& arg : options.arguments()) {
+        if (solver_ids.count(arg.key())) add_run(arg.key(), arg.value());
     }
     if (options.count("external")) {
         for (auto& e : options["external"].as<std::vector<std::string>>()) {
@@ -348,8 +371,7 @@ main(int argc, char **argv)
             Solvers::add(name, "external tool", 0, [cmd](Oink& oink, Game& game) {
                 return std::make_unique<ExternalSolver>(oink, game, cmd);
             });
-            solvers.push_back(name);
-            std::cout << " " << name;
+            add_run(name, "");
         }
     }
     if (solvers.size() == 0) {
@@ -366,10 +388,14 @@ main(int argc, char **argv)
 
     if (options.count("configure")) {
         if (solvers.size() > 1) {
-            std::cout << std::endl << "Solver configuration options (--configure, -c) cannot be used with multiple solvers at the same time" << std::endl;
+            std::cout << std::endl << "Solver configuration options (--configure, -c) cannot be used with multiple solvers at the same time; use --<solver>=<options>" << std::endl;
             return 0;
         }
-        opt_solver_opts = { options["configure"].as<std::string>() };
+        if (!solvers[0].config.empty()) {
+            std::cout << std::endl << "Solver configuration given both with --" << solvers[0].id << "= and with --configure" << std::endl;
+            return 0;
+        }
+        solvers[0].config = options["configure"].as<std::string>();
     }
 
     setsighandlers();
@@ -404,9 +430,9 @@ main(int argc, char **argv)
 
     std::map<std::string, double> times;
     std::map<std::string, int> sgood;
-    for (auto& id : solvers) {
-        times[id] = 0.0;
-        sgood[id] = 0;
+    for (auto& run : solvers) {
+        times[run.name] = 0.0;
+        sgood[run.name] = 0;
     }
 
     if (unmatched.size() > 0) {
@@ -444,10 +470,11 @@ main(int argc, char **argv)
                 total++;
                 std::cout << "\033[38;5;8m[load " << std::fixed << std::setprecision(3)
                           << (t_loaded - t_open) << "s parse " << (t_parsed - t_loaded) << "s]\033[m ";
-                for (const auto& id : solvers) {
+                for (const auto& run : solvers) {
+                    const std::string& id = run.name;
                     std::cout << std::flush;
                     log.str("");
-                    int res = test_solver(game, id, time, solver_log_stream());
+                    int res = test_solver(game, run, time, solver_log_stream());
                     if (res == 0) {
                         sgood[id]++;
                         std::cout << "\033[38;5;82m" << id << "\033[m";
@@ -509,9 +536,10 @@ main(int argc, char **argv)
             std::ostringstream progress_line;
             bool any_fail = false;
 
-            for (const auto& id : solvers) {
+            for (const auto& run : solvers) {
+                const std::string& id = run.name;
                 log.str("");
-                int res = test_solver(g, id, time, solver_log_stream());
+                int res = test_solver(g, run, time, solver_log_stream());
 
                 // Helper: format one solver result into the given stream
                 auto emit = [&](std::ostream& out) {
@@ -529,14 +557,16 @@ main(int argc, char **argv)
                     any_fail = true;
                     final_res = res;
 
+                    std::string fid = id; // the name, without characters that are awkward in file names
+                    for (auto& c : fid) if (!std::isalnum((unsigned char)c) and c != '-' and c != '_') c = '_';
                     std::ostringstream fn;
-                    fn << "bad_" << id << "_" << i << ".pg";
+                    fn << "bad_" << fid << "_" << i << ".pg";
                     std::ofstream fout(fn.str());
                     g.write_pgsolver(fout);
                     fout.close();
 
                     fn.str("");
-                    fn << "bad_" << id << "_" << i << ".pg.log";
+                    fn << "bad_" << fid << "_" << i << ".pg.log";
                     std::ofstream flog(fn.str());
                     flog << log.str();
                     flog.close();
@@ -574,7 +604,8 @@ main(int argc, char **argv)
     std::cout << "\033[38;5;226mloading\033[m: " << std::fixed << std::setprecision(3)
               << total_load_time << "s reading, " << total_parse_time << "s parsing" << std::endl;
     std::cout << "\033[38;5;226msolvers\033[m:";
-    for (const auto& id : solvers) {
+    for (const auto& run : solvers) {
+        const std::string& id = run.name;
         if (sgood[id] == total) std::cout << " \033[38;5;82m";
         else std::cout << " \033[38;5;196m";
         std::cout << id << "\033[m";
@@ -582,7 +613,8 @@ main(int argc, char **argv)
     }
     std::cout << std::endl;
     std::cout << "\033[38;5;226mtimes\033[m:  ";
-    for (const auto& id : solvers) {
+    for (const auto& run : solvers) {
+        const std::string& id = run.name;
         std::cout << " \033[38;5;226m" << id << "\033[m";
         std::cout << " (" << std::fixed << std::setprecision(0) << (1000.0*times[id]) << " ms)\033[m";
     }

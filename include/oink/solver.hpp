@@ -80,6 +80,9 @@ protected:
     void solve(int node, int winner, int strategy) { oink.solve(node, winner, strategy); }
     void flush() { oink.flush(); }
 
+    /** Whether to run in parallel (with Lace), as decided by Oink, see Oink::parallel(). */
+    [[nodiscard]] bool parallel() const { return oink.parallel(); }
+
     /** The solution being built (owned by Oink). */
     [[nodiscard]] Solution& solution() { return oink.solution(); }
     [[nodiscard]] const Solution& solution() const { return oink.solution(); }

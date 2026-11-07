@@ -407,7 +407,7 @@ FPISolver::runSeq()
 void
 FPISolver::run()
 {
-    if (lace_worker_count() != 0) {
+    if (parallel()) {
         runPar();
     } else {
         runSeq();

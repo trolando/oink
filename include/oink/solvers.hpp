@@ -66,6 +66,27 @@ public:
     }
 
     /**
+     * Get the number of (unsolved) vertices from which parallel solver <id> runs in parallel;
+     * on smaller games starting Lace costs more than it saves, so they are solved sequentially
+     * (see Oink::setForceParallel)
+     */
+    static long parallelMinVertices(const std::string& id)
+    {
+        auto it = instance().solvers.find(id);
+        return it == instance().solvers.end() ? 0 : it->second.parallelMinVertices;
+    }
+
+    /**
+     * Get the solver that solves a game instead of parallel solver <id> when it runs
+     * sequentially, or "" if <id> itself does (it then runs its sequential code)
+     */
+    static std::string sequentialFallback(const std::string& id)
+    {
+        auto it = instance().solvers.find(id);
+        return it == instance().solvers.end() ? std::string() : it->second.sequentialFallback;
+    }
+
+    /**
      * Get whether solver <id> uses the game's in-edges (Game::ins()); true if unknown
      */
     static bool needsInEdges(const std::string& id)
@@ -104,6 +125,8 @@ private:
         bool isParallel;
         SolverConstructor constructor;
         bool needsInEdges = true;
+        long parallelMinVertices = 100000; // (only for parallel solvers)
+        std::string sequentialFallback = "";
     };
 
     std::map<std::string, SolverInfo> solvers;

@@ -95,6 +95,19 @@ public:
     void setWorkers(int count) { workers = count; }
 
     /**
+     * Run a parallel solver in parallel even on a game smaller than its threshold
+     * (Solvers::parallelMinVertices), for example to test its parallel code. (Default false)
+     */
+    void setForceParallel(bool val) { forceParallel = val; }
+
+    /**
+     * Whether the solver runs in parallel, as decided by run(): a parallel solver, workers
+     * >= 0, and a game of at least Solvers::parallelMinVertices unsolved vertices (or
+     * setForceParallel). Parallel solvers check this, not whether Lace is running.
+     */
+    bool parallel() const { return parallel_; }
+
+    /**
      * Set verbosity level (0 = normal, 1 = trace, 2 = debug)
      */
     void setTrace(int level) { trace = level; }
@@ -185,6 +198,8 @@ protected:
     std::ostream &logger;    // logger for trace/debug messages
     std::optional<std::string> solver; // which solver to use
     int workers = -1;        // number of workers, 0 = autodetect, -1 = use non parallel
+    bool forceParallel = false; // run parallel solvers in parallel also on small games
+    bool parallel_ = false;  // whether the solver runs in parallel (decided by run())
     int trace = 0;           // verbosity (0 for normal, 1 for trace, 2 for debug)
     bool inflate = false;    // inflate the game before solving
     bool compress = false;   // compress the game before solving

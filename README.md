@@ -267,7 +267,7 @@ To verify some solution:                | `oink -v game.pg.gz --sol game.sol`
 A typical call to Oink is: `oink [options] [solver] <filename> [solutionfile]`. This reads a parity game from `filename`, solves it with the chosen solver (default: `--tl`), then writes the solution to `<solutionfile>` (default: don't write).
 Typical options are:
 - `-v` verifies the solution after solving the game.
-- `-w <workers>` sets the number of worker threads for parallel solvers. By default, these solvers run their sequential version. Use `-w 0` to automatically determine the maximum number of worker threads.
+- `-w <workers>` sets the number of worker threads for parallel solvers. By default, these solvers run their sequential version. Use `-w 0` to automatically determine the maximum number of worker threads. On small games, where starting the workers costs more than they save, a parallel solver still runs sequentially (or tlpar runs tl); `--force-parallel` runs it in parallel anyway.
 - `--inflate` and `--compress` inflate/compress the game before solving it.
 - `--scc` repeatedly solves a bottom SCC of the parity game.
 - `--no-wcwc`, `--no-loops` and `--no-single` disable preprocessors that eliminate winner-controlled winning cycles, self-loops and single-parity games. Use `--no` to disable all preprocessors.

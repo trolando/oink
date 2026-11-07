@@ -462,7 +462,7 @@ ZLKSolver::run()
     int i = inverse[max_prio];
     int next_r = 0;
 
-    bool usePar = lace_worker_count() != 0;
+    bool usePar = parallel();
 
     if (usePar) {
         // allocate a scratch buffer per Lace worker, each reserved to nodecount()

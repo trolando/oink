@@ -504,35 +504,49 @@ Oink::run()
         return;
     }
 
+    /**
+     * A parallel solver runs in parallel only with workers (-w [0..N]) and on a game of at
+     * least its threshold of unsolved vertices, as on smaller games starting Lace costs more
+     * than it saves (unless forced). Otherwise its sequential fallback solves the game, if it
+     * has one, or it runs its own sequential code.
+     */
+    parallel_ = false;
+    if (Solvers::isParallel(*solver)) {
+        const long unsolved = game->nodecount() - (long)solution_.solved().count();
+        const long threshold = Solvers::parallelMinVertices(*solver);
+        if (workers >= 0 and (forceParallel or unsolved >= threshold)) {
+            parallel_ = true;
+        } else {
+            if (workers >= 0) logger << "running sequentially: " << unsolved << " vertices, parallel from " << threshold << std::endl;
+            const std::string fallback = Solvers::sequentialFallback(*solver);
+            if (!fallback.empty()) {
+                logger << "solving with " << fallback << " instead of " << *solver << std::endl;
+                if (!options.empty()) logger << "(not using the options of " << *solver << ": " << options << ")" << std::endl;
+                solver = fallback;
+                options = "";
+            }
+        }
+    }
+
     // building these arrays is not really a preprocessing step in my opinion
     if (Solvers::needsInEdges(*solver)) game->build_in_array(false); // no-op if already built
     time_mid = high_resolution_clock::now();
 
-    /**
-     * Start Lace if we are parallel
-     * - if parallel solver, -w [0..N] and Lace is not running, start Lace
-     * - if parallel solver, -w -1, run sequential anyway
-     * - if sequential solver, run sequantial
-     */
-
     logger << "solving using " << Solvers::desc(*solver) << std::endl;
 
-    if (Solvers::isParallel(*solver)) {
-        if (workers >= 0) {
-            if (lace_worker_count() == 0) { // FIXME we should use lace_is_running or something like that, but it doesn't exist yet
-                lace_start(workers, 0, 0);
-                logger << "initialized Lace with " << lace_worker_count() << " workers" << std::endl;
-                solve_loop(this);
-                lace_stop();
-            } else {
-                logger << "running parallel (Lace already initialized)" << std::endl;
-                solveLoop();
-            }
+    if (parallel_) {
+        // start Lace, unless it is already running
+        if (lace_worker_count() == 0) { // FIXME we should use lace_is_running or something like that, but it doesn't exist yet
+            lace_start(workers, 0, 0);
+            logger << "initialized Lace with " << lace_worker_count() << " workers" << std::endl;
+            solve_loop(this);
+            lace_stop();
         } else {
-            logger << "running sequentially" << std::endl;
+            logger << "running parallel (Lace already initialized)" << std::endl;
             solveLoop();
         }
     } else {
+        if (Solvers::isParallel(*solver) and workers < 0) logger << "running sequentially" << std::endl;
         solveLoop();
     }
 

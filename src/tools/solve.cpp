@@ -196,6 +196,7 @@ int main(int argc, char **argv)
         ("solvers", "List available solvers")
         ("c,configure", "Additional configuration options for the solver", cxxopts::value<std::string>())
         ("w,workers", "Number of workers for parallel code", cxxopts::value<int>())
+        ("force-parallel", "Run a parallel solver in parallel also on a game below its size threshold")
         ("z,timeout", "Number of seconds for timeout", cxxopts::value<int>())
         ;
 
@@ -339,6 +340,7 @@ int main(int argc, char **argv)
     // solving options
     if (options.count("scc")) en.setBottomSCC(true);
     if (options.count("workers")) en.setWorkers(options["workers"].as<int>());
+    if (options.count("force-parallel")) en.setForceParallel(true);
 
     if (options.count("configure")) {
         en.setSolverOptions(options["configure"].as<std::string>());
