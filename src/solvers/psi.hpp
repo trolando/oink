@@ -18,6 +18,7 @@
 #define PSI_HPP
 
 #include <queue>
+#include <vector>
 
 #include "oink/solver.hpp"
 #include "lace.h"
@@ -31,6 +32,7 @@ public:
     virtual ~PSISolver();
 
     virtual void run();
+    virtual bool parseOptions(std::string& opts);
     void setWorkers(int count) { workers = count; }
 
     int minor = 0, major = 0;
@@ -46,7 +48,7 @@ public:
     int mark_solved_seq(void);
     int switch_strategy_seq(int pl);
 
-    void compute_val(lace_worker*, int v);
+    void compute_val(int v, std::vector<int>& next);
     void compute_all_val(lace_worker*);
     int switch_strategy(lace_worker*, int pl, int begin, int count);
     void run_par(lace_worker*);

@@ -378,7 +378,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverFPJM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjm)
         # test strategy iteration
         add_test(NAME TestSolverPSIs COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w -1)
-        add_test(NAME TestSolverPSIp COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w 0 --force-parallel)
+        add_test(NAME TestSolverPSIp COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w 0 --force-parallel -c parmin=1,chunk=4)
         add_test(NAME TestSolverSSI COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ssi)
         # test progress measures and variations
         add_test(NAME TestSolverSPM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --spm)

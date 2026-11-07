@@ -16,6 +16,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <string>
 
 #include "psi.hpp"
 #include "lace.h"
@@ -83,17 +84,26 @@ PSISolver::si_top_val(int a)
 }
 
 /**
- * Recursively update the value of <v> and its ancestors according to the
- * currently chosen strategy
+ * The parallel valuation (compute_all_val) goes down the strategy tree in rounds: the
+ * vertices of the frontier get their values (from their strategy successor, done in an
+ * earlier round) and their strategy predecessors form the next frontier. There is no
+ * recursion, as strategy chains can be millions of vertices long. Small frontiers are
+ * done sequentially, large ones by Lace workers in chunks.
  */
-VOID_TASK_2(compute_val, int, v, PSISolver *, s)
-void compute_val_CALL(lace_worker* lace, int v, PSISolver* s)
-{
-    s->compute_val(lace, v);
-}
+static std::vector<int> frontier; // the vertices whose values are computed in this round
+struct alignas(64) next_buffer {   // (per Lace worker, so pushes do not share cache lines)
+    std::vector<int> items;
+};
+static std::vector<next_buffer> next_front; // per Lace worker: the next frontier
+static int par_min = 2048; // smaller frontiers are done sequentially ("parmin=N")
+static int par_chunk = 256; // vertices per task in a parallel round ("chunk=N")
 
+/**
+ * Compute the value of <v> from its strategy successor, and add the vertices that play to
+ * <v> to <next>
+ */
 void
-PSISolver::compute_val(lace_worker* lace, int v)
+PSISolver::compute_val(int v, std::vector<int>& next)
 {
     // mark node as visited
     done[v] = 1;
@@ -105,25 +115,22 @@ PSISolver::compute_val(lace_worker* lace, int v)
     else memcpy(dst, val + k*st, sizeof(int[k])); // copy from successor
     dst[priority(v)]++;
 
-    // recursively update predecessor positions
-    int count = 0;
-    int from = first_in[v];
-    while (from != -1) {
-        int next = next_in[from];
-        if (next != -1) {
-            compute_val_SPAWN(lace, from, this);
-            count++;
-        } else {
-            compute_val_CALL(lace, from, this);
-            break;
-        }
-        from = next;
-    }
+    // its predecessors in the strategy are next
+    for (int from = first_in[v]; from != -1; from = next_in[from]) next.push_back(from);
+}
 
-    while (count--) {
-        compute_val_SYNC(lace);
+VOID_TASK_3(compute_round, int, begin, int, count, PSISolver*, s)
+void compute_round_CALL(lace_worker* lace, int begin, int count, PSISolver* s)
+{
+    if (count <= par_chunk) {
+        auto& next = next_front[lace_worker_id()].items;
+        for (int j = begin; j < begin+count; j++) s->compute_val(frontier[j], next);
+    } else {
+        compute_round_SPAWN(lace, begin+count/2, count-count/2, s);
+        compute_round_CALL(lace, begin, count/2, s);
+        compute_round_SYNC(lace);
     }
-} 
+}
 
 /**
  * Fill first_in and next_in based on strategies
@@ -189,17 +196,25 @@ PSISolver::compute_all_val(lace_worker* lace)
     // reset "done" (for nodes that are not disabled or won)
     reset_done_CALL(lace, 0, nodecount());
     set_in_CALL(lace, 0, nodecount());
-    // for all unsolved enabled nodes that go to sink, run compute val
-    int count = 0;
+    // the first frontier: all unsolved enabled nodes that go to sink
+    frontier.clear();
     for (int i=0; i<nodecount(); i++) {
         if (done[i] == 3) continue;
-        if (str[i] == -1 or halt[str[i]]) { // str[i] is -2 for disabled and not -1 for won
-            compute_val_SPAWN(lace, i, this);
-            count++;
-        }
+        if (str[i] == -1 or halt[str[i]]) frontier.push_back(i); // str[i] is -2 for disabled and not -1 for won
     }
-    while (count--) {
-        compute_val_SYNC(lace);
+    // then their predecessors in the strategy, round by round
+    std::vector<int> next;
+    while (!frontier.empty()) {
+        if ((int)frontier.size() < par_min or next_front.size() < 2) {
+            next.clear();
+            for (int v : frontier) compute_val(v, next);
+            frontier.swap(next);
+        } else {
+            for (auto& b : next_front) b.items.clear();
+            compute_round_CALL(lace, 0, (int)frontier.size(), this);
+            frontier.clear();
+            for (auto& b : next_front) frontier.insert(frontier.end(), b.items.begin(), b.items.end());
+        }
     }
 }
 
@@ -489,6 +504,40 @@ PSISolver::run_par(lace_worker* lace)
 
 
 /**
+ * Options (comma separated): parmin=N (smallest frontier valued in parallel), chunk=N
+ * (vertices per task in a parallel round).
+ */
+bool
+PSISolver::parseOptions(std::string& opts)
+{
+    par_min = 2048;
+    par_chunk = 256;
+    std::string remaining = opts;
+    while (!remaining.empty()) {
+        const size_t comma = remaining.find(',');
+        const std::string opt = remaining.substr(0, comma);
+        remaining = comma == std::string::npos ? "" : remaining.substr(comma+1);
+        const size_t eq = opt.find('=');
+        const std::string key = opt.substr(0, eq);
+        int value = 0;
+        try {
+            value = eq == std::string::npos ? 0 : std::stoi(opt.substr(eq+1));
+        } catch (...) {
+            value = 0;
+        }
+        if (key == "parmin" and value >= 1) {
+            par_min = value;
+        } else if (key == "chunk" and value >= 1) {
+            par_chunk = value;
+        } else {
+            logger << "unrecognised option for psi: " << opt << " (options: parmin=N, chunk=N)" << std::endl;
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
  * Run the parallel strategy improvement solver
  */
 void
@@ -564,7 +613,10 @@ PSISolver::run()
             if (count == 0) break;                                      // if nothing left, done
         }
     } else {
+        next_front.resize(lace_worker_count());
         psi_run_par(this);
+        std::vector<next_buffer>().swap(next_front);
+        std::vector<int>().swap(frontier);
     }
 
     // Now set dominions and derive strategy for odd.
