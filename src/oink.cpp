@@ -396,7 +396,15 @@ Oink::solveLoop()
             }
             s->run();
 
-            // flush the todo buffer
+            // Attract to the vertices solved in this round over the whole unsolved game. Any
+            // attraction so far (flush() by the solver itself) only saw the SCC. Otherwise a vertex
+            // outside the SCC can be left with only edges into solved vertices, which the next
+            // subgame does not see. The SCC is now solved, so its own vertices are not updated.
+            todo.clear();
+            for (int v : sel) {
+                if (solution_.is_solved(v)) todo.push(v);
+            }
+            disabled = solution_.solved();
             flush();
         } while (!((unsigned long)game->nodecount() == solution_.solved().count()));
     } else {

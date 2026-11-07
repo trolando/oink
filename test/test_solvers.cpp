@@ -81,6 +81,7 @@ bool opt_compress = false;
 bool opt_single = false;
 bool opt_loops = false;
 bool opt_wcwc = false;
+bool opt_scc = false;
 bool opt_sort = false;
 bool opt_progress = false;
 bool opt_show_log = false;
@@ -214,6 +215,7 @@ test_solver(Game &game, const std::string& solverid, double &time, std::ostream 
     solver.setSolveSingle(opt_single);
     solver.setRemoveLoops(opt_loops);
     solver.setRemoveWCWC(opt_wcwc);
+    solver.setBottomSCC(opt_scc);
     solver.setWorkers(opt_workers);
     solver.setSolver(solverid);
     if (opt_trace >= 0) solver.setTrace(opt_trace);
@@ -262,6 +264,7 @@ main(int argc, char **argv)
         ("loops", "Enable preprocessor \"loops\" (remove/solve self-loops)")
         ("wcwc", "Enable preprocessor \"wcwc\" (solve winner-controlled winning cycles)")
         ("sort", "Sort the list of files for solving (if given a list of files)")
+        ("scc", "Solve one bottom SCC at a time")
         ;
     opts.add_options("Random games")
         ("count", "Number of random games", cxxopts::value<int>()->default_value("100"))
@@ -319,6 +322,7 @@ main(int argc, char **argv)
     opt_single = options.count("single") != 0;
     opt_loops = options.count("loops") != 0;
     opt_wcwc = options.count("wcwc") != 0;
+    opt_scc = options.count("scc") != 0;
     opt_sort = options.count("sort") != 0;
     if (options.count("workers")) opt_workers = options["workers"].as<int>();
     if (options.count("trace")) opt_trace = options["trace"].as<int>();

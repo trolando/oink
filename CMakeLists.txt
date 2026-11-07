@@ -404,6 +404,11 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverZLKPP1 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkpp-std)
         add_test(NAME TestSolverZLKPP2 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkpp-waw)
         add_test(NAME TestSolverZLKPP3 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkpp-liv)
+        # test solving one bottom SCC at a time
+        add_test(NAME TestSolverFPIscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi --scc)
+        add_test(NAME TestSolverTLscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tl --scc)
+        add_test(NAME TestSolverZLKscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk --scc)
+        add_test(NAME TestSolverPPscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp --scc)
         # Template for adding a new solver test (replace -- with the solver flag):
         # add_test(NAME TestSolver COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --)
     endif()
