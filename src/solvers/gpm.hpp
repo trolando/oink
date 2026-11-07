@@ -64,7 +64,7 @@ enum class MeasureKind {
 };
 
 
-class Small : public Measures
+class Small final : public Measures
 {
 public:
     Small(const Game &game, const int player);
@@ -99,7 +99,7 @@ private:
 };
 
 
-class Ordered : public Measures
+class Ordered final : public Measures
 {
 public:
     Ordered(const Game &game, const int player);
@@ -140,12 +140,12 @@ private:
 };
 
 
-class Succinct : public Measures
+class Succinct final : public Measures
 {
 public:
     Succinct(const Game &game, const int player);
-    Succinct(const Succinct &other);
-    virtual ~Succinct();
+    Succinct(const Succinct &other) = default;
+    virtual ~Succinct() = default;
 
     void copy(int from, int to) override; // copy <from> to <to>
     void copy_bot(int to) override; // load bottom in <to>
@@ -168,8 +168,11 @@ private:
     int h; // depth of the ordered tree: roughly max_prio/2
            // the even tree (max_prio/2)+1: 1=>1, 2=>2, 3=>2, 4=>3, etc
            // the odd tree (max_prio+1)/2 : 1=>1, 2=>1, 3=>2, 4=>2, etc
-    bitset bits; // the bits (l bits per entry)
-    int *depth; // depth per bit (assuming it fits in a 32 bit integer)
+    // per slot <l> codes: the depth of each bit shifted left by one, plus the bit; a slot is
+    // Top if its first code is TOP (so copy is a memcpy, and compare finds the first different
+    // code and then only looks at that position)
+    std::vector<uint32_t> code;
+    static constexpr uint32_t TOP = 0xFFFFFFFFu;
     long N; // nodecount
 
     void trunc(int target, int pindex);

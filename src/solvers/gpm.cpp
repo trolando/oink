@@ -18,6 +18,7 @@
  */
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 
 #include "gpm.hpp"
@@ -457,16 +458,21 @@ int Ordered::val(int tgt) const
 void Ordered::see(int tgt, int priority)
 {
     if (top[tgt+4]) return; // nothing to do
-    copy(tgt, -2);
-    copy(tgt, -3);
-    up(-2, priority);
-    if (bump(-3)) {
-        up(-3, priority);
-        if (compare(-3, -2) < 0) {
-            copy(-3, -2);
+    assert(tgt != -3); // (scratch slot; the solvers use -1)
+    // the result is the smaller of <tgt> raised by <priority> (computed in place) and of
+    // <tgt> first bumped and then raised (computed in -3; bump fails if the lowest value is _)
+    if (data[(tgt+4)*l] == -1) {
+        up(tgt, priority);
+    } else {
+        copy(tgt, -3);
+        up(tgt, priority);
+        if (bump(-3)) {
+            up(-3, priority);
+            if (compare(-3, tgt) < 0) {
+                copy(-3, tgt);
+            }
         }
     }
-    copy(-2, tgt);
     int last = *(data + (tgt+4)*l + l - 1);
     if (last != -1 && (last & 1) == player) {
         top[tgt+4] = true;
@@ -690,88 +696,58 @@ Succinct::Succinct(const Game &game, const int player)
     while ((1L<<(this->l)) <= N) this->l++;
     int max_pr = game.priority(game.nodecount()-1);
     this->h = player == 0 ? (max_pr/2)+1 : (max_pr+1)/2;
-    bits.resize(l*(4+N));
-    depth = new int[l*(4+N)];
-    std::fill(depth, depth + (l*(4+N)), '\0');
-}
-
-Succinct::Succinct(const Succinct &src)
-{
-    this->player = src.player;
-    this->N = src.N;
-    this->l = src.l;
-    this->h = src.h;
-    this->bits = src.bits;
-    this->depth = new int[l*(4+N)];
-    std::copy(src.depth, src.depth+(l*(4+N)), this->depth);
-}
-
-Succinct::~Succinct()
-{
-    delete[] depth;
+    code.assign((size_t)l*(4+N), 0); // all bits 0 at depth 0
 }
 
 void
 Succinct::set(const Measures &other)
 {
+    // (not via operator=: Measures::operator= calls set)
     auto src = dynamic_cast<const Succinct*>(&other);
-
-    delete[] depth;
-
     this->player = src->player;
     this->N = src->N;
     this->l = src->l;
     this->h = src->h;
-    this->bits = src->bits;
-    this->depth = new int[l*(4+N)];
-    std::copy(src->depth, src->depth+(l*(4+N)), this->depth);
+    this->code = src->code;
 }
 
 void Succinct::copy(int from, int to)
 {
-    int fi = l*(4+from);
-    int ti = l*(4+to);
-    for (int i=0; i<l; i++) bits[ti+i] = bits[fi+i];
-    std::copy(depth+fi, depth+fi+l, depth+ti);
+    std::memcpy(&code[(size_t)l*(4+to)], &code[(size_t)l*(4+from)], sizeof(uint32_t)*l);
 }
 
 void Succinct::copy_from(const Measures& mother, int from, int to)
 {
     const Succinct *other = dynamic_cast<const Succinct*>(&mother);
     // assuming that the two Measures have the same value for l...
-    int fi = l*(4+from);
-    int ti = l*(4+to);
-    for (int i=0; i<l; i++) bits[ti+i] = other->bits[fi+i];
-    std::copy(other->depth+fi, other->depth+fi+l, depth+ti);
+    std::memcpy(&code[(size_t)l*(4+to)], &other->code[(size_t)l*(4+from)], sizeof(uint32_t)*l);
 }
 
 void Succinct::copy_bot(int to)
 {
-    int ti = l*(4+to);
-    for (int i=0; i<l; i++) bits[ti+i] = 0;
-    std::fill(depth+ti, depth+ti+l, '\0');
+    std::fill_n(&code[(size_t)l*(4+to)], l, 0u);
 }
 
 void Succinct::copy_top(int to)
 {
-    depth[l*(4+to)] = -1;
+    code[(size_t)l*(4+to)] = TOP;
 }
 
 bool Succinct::is_top(int target) const
 {
-    return depth[l*(4+target)] == -1;
+    return code[(size_t)l*(4+target)] == TOP;
 }
+
+// the code for bit <b> at depth <d>
+static inline uint32_t succ_code(int d, uint32_t b) { return ((uint32_t)d << 1) | b; }
 
 void Succinct::trunc(int target, int pindex)
 {
-    int ti = l*(4+target);
+    uint32_t *c = &code[(size_t)l*(4+target)];
     // check if Top
-    if (depth[ti] != -1) {
+    if (c[0] != TOP) {
         // [pindex],....,....,.... => [pindex],0*
-        for (int i=l-1; i>=0 and depth[ti+i] > pindex; i--) {
-            bits[ti+i] = 0;
-            depth[ti+i] = pindex+1;
-        }
+        for (int i=l-1; i>=0 and (int)(c[i]>>1) > pindex; i--) c[i] = succ_code(pindex+1, 0);
     }
 }
 
@@ -784,23 +760,20 @@ void Succinct::see(int target, int priority)
         return;
     }
 
-    int ti = l*(4+target);
-
-    // std::cout << "l=" << l << " h=" << h << " pindex=" << pindex << std::endl;
+    uint32_t *c = &code[(size_t)l*(4+target)];
+    auto depth = [&](int i) { return (int)(c[i] >> 1); };
+    auto bit = [&](int i) { return c[i] & 1u; };
 
     // Case 1: Top -> Top
-    if (depth[ti] == -1) return; // nothing to do, it's top!
-    
+    if (c[0] == TOP) return; // nothing to do, it's top!
+
     // Case 2: Some bits below [pindex], so we can let [pindex] go from ..e to ..10*
-    if (depth[ti+l-1] > pindex) {
+    if (depth(l-1) > pindex) {
         // we know the last one is below pindex. So pindex ends with epsilon currently.
         // i.e., xxxe,...,... => xxx10*
         int i;
-        for (i=l-1; i>=0 and depth[ti+i] > pindex; i--) {
-            bits[ti+i] = 0;
-            depth[ti+i] = pindex;
-        }
-        bits[ti+i+1] = 1;        
+        for (i=l-1; i>=0 and depth(i) > pindex; i--) c[i] = succ_code(pindex, 0);
+        c[i+1] |= 1u;
         return;
     }
 
@@ -826,23 +799,19 @@ void Succinct::see(int target, int priority)
 
     // first zero: ,00000
 
-    int deepest = depth[ti+l-1];
+    int deepest = depth(l-1);
     for (int i=l-1; i>=0; i--) {
-        if (depth[ti+i] == deepest) {
-            if (bits[ti+i] == 0) {
-                for (int j=i; j<l; j++) {
-                    depth[ti+j] = deepest+1;
-                }
+        if (depth(i) == deepest) {
+            if (bit(i) == 0) {
+                for (int j=i; j<l; j++) c[j] = succ_code(deepest+1, bit(j));
                 return;
             } else {
                 // set every later bit to 0
-                bits[ti+i] = 0;
+                c[i] &= ~1u;
             }
         } else {
-            bits[ti+i+1] = 1;
-            for (int j=i+1; j<l; j++) {
-                depth[ti+j] = deepest-1;
-            }
+            c[i+1] |= 1u;
+            for (int j=i+1; j<l; j++) c[j] = succ_code(deepest-1, bit(j));
             return;
         }
     }
@@ -851,12 +820,11 @@ void Succinct::see(int target, int priority)
     // ,1111 => 1000,
     // 1111 => T
     if (deepest == 0) {
-        depth[ti] = -1; // to Top!
+        c[0] = TOP; // to Top!
     } else {
-        bits[ti] = 1; // everything else is set to 0 already
-        for (int i=0; i<l; i++) {
-            depth[ti+i] = deepest-1;
-        }
+        // everything else is set to 0 already
+        c[0] = succ_code(deepest-1, 1);
+        for (int i=1; i<l; i++) c[i] = succ_code(deepest-1, bit(i));
     }
 }
 
@@ -872,107 +840,85 @@ void Succinct::inc(int target)
  */
 int Succinct::compare(int u, int v) const
 {
-    int ti = l*(4+u);
-    int tj = l*(4+v);
-    
-    // Handle \Top cases
-    if (depth[ti] == -1) {
-        if (depth[tj] == -1) return 0;
-        else return 1;
-    } else if (depth[tj] == -1) {
-        return -1;
-    }
+    const uint32_t *cu = &code[(size_t)l*(4+u)];
+    const uint32_t *cv = &code[(size_t)l*(4+v)];
 
-    // Non-\Top case
-    for (int i=0; i<l; i++) {
-        if (depth[ti+i] < depth[tj+i]) {
-            // j has epsilon, so if i has 0, -1
-            if (bits[ti+i] == 0) return -1;
-            else return 1;
-        } else if (depth[ti+i] > depth[tj+i]) {
-            // mirror case
-            // i has epsilon, so if j has 0, 1
-            if (bits[tj+i] == 0) return 1;
-            else return -1;
-        } else if (bits[ti+i] < bits[tj+i]) {
-            // 0 < 1
-            return -1;
-        } else if (bits[ti+i] > bits[tj+i]) {
-            // 1 > 0
-            return 1;
-        }
-    }
-    return 0;
+    // Handle \Top cases
+    if (cu[0] == TOP) return cv[0] == TOP ? 0 : 1;
+    if (cv[0] == TOP) return -1;
+
+    // Non-\Top case: only the first position where the codes differ matters
+    int i = 0;
+    while (i < l and cu[i] == cv[i]) i++;
+    if (i == l) return 0;
+    const int du = (int)(cu[i] >> 1), dv = (int)(cv[i] >> 1);
+    const uint32_t bu = cu[i] & 1u, bv = cv[i] & 1u;
+    if (du < dv) return bu == 0 ? -1 : 1; // v has epsilon, so if u has 0, -1
+    if (du > dv) return bv == 0 ? 1 : -1; // mirror case: u has epsilon, so if v has 0, 1
+    return bu < bv ? -1 : 1; // same depth, different bit
 }
 
 bool Succinct::eq(int u, int v) const
 {
-    int ti = l*(4+u);
-    int tj = l*(4+v);
-    
-    // Handle \Top cases
-    if (depth[ti] == -1) {
-        if (depth[tj] == -1) return true;
-        else return false;
-    } else if (depth[tj] == -1) {
-        return false;
-    }
-
-    // Non-\Top case
-    for (int i=0; i<l; i++) {
-        if (depth[ti+i] != depth[tj+i]) return false;
-        if (bits[ti+i] != bits[tj+i]) return false;
-    }
-
-    return true;
+    const uint32_t *cu = &code[(size_t)l*(4+u)];
+    const uint32_t *cv = &code[(size_t)l*(4+v)];
+    if (cu[0] == TOP or cv[0] == TOP) return cu[0] == cv[0];
+    return std::memcmp(cu, cv, sizeof(uint32_t)*l) == 0;
 }
 
 void Succinct::stream(std::ostream &out, int target) const
 {
-    int ti = l*(4+target);
-    if (depth[ti] == -1) {
+    const uint32_t *c = &code[(size_t)l*(4+target)];
+    if (c[0] == TOP) {
         out << "\033[1;33mTop\033[m";
     } else {
         out << "[ ";
         int j=0;
         for (int i=0; i<h; i++) {
             if (i>0) out << ",";
-            int c=0;
-            while (j<l and depth[ti+j]==i) {
-                c++;
-                out << bits[ti+j];
+            int n=0;
+            while (j<l and (int)(c[j]>>1)==i) {
+                n++;
+                out << (c[j] & 1u);
                 j++;
             }
-            if (c == 0) out << "ε";
+            if (n == 0) out << "ε";
         }
         out << " ]";
     }
 }
 
 std::vector<std::byte> Succinct::store(int tgt) const
-{   
+{
+    // per bit: the bit (uint8) and its depth (int); depth -1 at the first bit means Top
     std::vector<std::byte> blob;
     blob.reserve(static_cast<size_t>(l) * (sizeof(uint8_t) + sizeof(int))); // perf: avoid reallocs
 
-    int ti = l*(4+tgt);
+    const uint32_t *c = &code[(size_t)l*(4+tgt)];
     for (int i=0; i<l; i++) {
-        push_le<uint8_t>(blob, bits[ti+i]);
-        push_le<int>(blob, depth[ti+i]);
+        if (i == 0 and c[0] == TOP) {
+            push_le<uint8_t>(blob, 0);
+            push_le<int>(blob, -1);
+        } else {
+            push_le<uint8_t>(blob, (uint8_t)(c[i] & 1u));
+            push_le<int>(blob, (int)(c[i] >> 1));
+        }
     }
-    
+
     return blob;
-}           
-     
+}
+
 void Succinct::load(int tgt, const std::vector<std::byte>& blob)
-{       
+{
     size_t cur = 0;
-    
-    int ti = l*(4+tgt);
+
+    uint32_t *c = &code[(size_t)l*(4+tgt)];
     for (int i = 0; i < l; ++i) {
-        bits[ti+i] = read_le_advance<uint8_t>(blob, cur) != 0 ? 1 : 0;
-        depth[ti+i] = read_le_advance<int>(blob, cur);
+        const uint32_t b = read_le_advance<uint8_t>(blob, cur) != 0 ? 1u : 0u;
+        const int d = read_le_advance<int>(blob, cur);
+        c[i] = (i == 0 and d == -1) ? TOP : succ_code(d, b);
     }
-}       
+}
 
 
 /**
