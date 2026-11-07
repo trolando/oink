@@ -207,7 +207,7 @@ test_solver(Game &game, const std::string& solverid, double &time, std::ostream 
 
     // solve a copy
     Game copy(game);
-    Oink solver(copy, log);
+    Oink solver(copy, log, Solvers::needsInEdges(solverid)); // in-edges are built here, outside the timing
     solver.setRenumber(); // default
     if (opt_inflate) solver.setInflate();
     if (opt_compress) solver.setCompress();

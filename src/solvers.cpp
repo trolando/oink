@@ -86,6 +86,9 @@ Solvers::Solvers()
     _add("tlq", "qpt recursive with tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLQSolver>(oink, game); });
     _add("pmtl", "progress measures and tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game); });
     _add("gpm", "generic progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game); });
+
+    // solvers that never use the in-edges, so Oink need not build them
+    for (const char* id : {"fpi", "fpim", "psi"}) solvers[id].needsInEdges = false;
 }
 
 void

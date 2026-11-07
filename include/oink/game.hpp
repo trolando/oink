@@ -324,6 +324,7 @@ public:
 
     inline int firstin(const int vertex) const
     {
+        assert(!_firstins.empty()); // in-edges not built, see build_in_array
         return _firstins[vertex];
     }
 

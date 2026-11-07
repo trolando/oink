@@ -312,7 +312,17 @@ int main(int argc, char **argv)
      * Configure the solver.
      */
 
-    Oink en(pg, out);
+    // pick the solver first: Oink builds the in-edges now, unless the solver never uses them
+    std::string solverid = "tl"; // default solver
+    if (options.count("solver")) {
+        solverid = options["solver"].as<std::string>();
+    } else {
+        for (const auto& id : Solvers::getSolverIDs()) {
+            if (options.count(id)) solverid = id;
+        }
+    }
+
+    Oink en(pg, out, Solvers::needsInEdges(solverid));
     en.setTrace(options.count("t"));
 
     // preprocessing options
@@ -324,15 +334,7 @@ int main(int argc, char **argv)
     if (no or options.count("no-loops")) en.setRemoveLoops(false);
     if (no or options.count("no-wcwc")) en.setRemoveWCWC(false);
 
-    // solver
-    if (options.count("solver")) {
-        en.setSolver(options["solver"].as<std::string>());
-    } else {
-        en.setSolver("tl"); // default solver
-        for (const auto& id : Solvers::getSolverIDs()) {
-            if (options.count(id)) en.setSolver(id);
-        }
-    }
+    en.setSolver(solverid);
 
     // solving options
     if (options.count("scc")) en.setBottomSCC(true);

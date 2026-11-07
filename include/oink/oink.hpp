@@ -35,8 +35,11 @@ class Oink
 public:
     /**
      * Construct a solver for the given game, sending log output to <out>.
+     * The game's in-edge array is built here, unless <build_in_edges> is false: then it is
+     * built only when needed. Pass false if the solver never uses in-edges, see
+     * Solvers::needsInEdges.
      */
-    Oink(Game &game, std::ostream &out=std::cout);
+    Oink(Game &game, std::ostream &out=std::cout, bool build_in_edges=true);
 
     virtual ~Oink();
 

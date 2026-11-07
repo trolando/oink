@@ -66,6 +66,15 @@ public:
     }
 
     /**
+     * Get whether solver <id> uses the game's in-edges (Game::ins()); true if unknown
+     */
+    static bool needsInEdges(const std::string& id)
+    {
+        auto it = instance().solvers.find(id);
+        return it == instance().solvers.end() or it->second.needsInEdges;
+    }
+
+    /**
      * Construct solver with the given parameters
      */
     static std::unique_ptr<Solver> construct(const std::string& id, Oink& oink, Game& game);
@@ -94,6 +103,7 @@ private:
         std::string description;
         bool isParallel;
         SolverConstructor constructor;
+        bool needsInEdges = true;
     };
 
     std::map<std::string, SolverInfo> solvers;

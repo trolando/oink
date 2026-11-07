@@ -29,22 +29,19 @@
 
 namespace pg {
 
-Oink::Oink(Game &game, std::ostream &out) : game(&game), solution_(game.vertexcount()), logger(out), todo(game.vertexcount()), disabled(solution_.solved())
+Oink::Oink(Game &game, std::ostream &out, bool build_in_edges) : game(&game), solution_(game.vertexcount()), logger(out), todo(game.vertexcount()), disabled(solution_.solved())
 {
     // ensure the vertices are ordered properly
     game.ensure_sorted();
-    // ensure arrays are built, but don't rebuild
-    game.build_in_array(false);
+    // build the in-edge array now, unless asked to defer it; then it is built on first use:
+    // by flush() and solveTrivialCycles(), and by run() if the solver needs it
+    if (build_in_edges) game.build_in_array(false); // no-op if already built
 
-    // initialize outcount (for flush)
+    // initialize outcount (for flush): the number of non-disabled successors. Nothing is
+    // solved or disabled yet, so this is the out-degree of every vertex.
+    assert(disabled.none());
     outcount = new int[game.vertexcount()];
-    for (int i=0; i<game.vertexcount(); i++) {
-        outcount[i] = 0;
-        const int *ptr = game.outedges() + game.firstout(i);
-        for (int to = *ptr; to != -1; to = *++ptr) {
-            if (!disabled[to]) outcount[i]++; // only count the non-disabled subgame
-        }
-    }
+    for (int i=0; i<game.vertexcount(); i++) outcount[i] = game.outcount(i);
 }
 
 Oink::~Oink()
@@ -210,6 +207,7 @@ Oink::solveTrivialCycles()
             }
 
             // Set strategies for all nodes in the SCC via backward search
+            game->build_in_array(false); // no-op if already built
             q.push(max_pr_n);
             while (!q.empty()) {
                 int cur = q.front();
@@ -331,6 +329,7 @@ Oink::flush()
 {
     // the <todo> queue contains vertex that are marked as solved
 
+    if (todo.nonempty()) game->build_in_array(false); // no-op if already built
     while (todo.nonempty()) {
         int v = todo.pop();
         bool winner = solution_.winner(v);
@@ -498,6 +497,7 @@ Oink::run()
     }
 
     // building these arrays is not really a preprocessing step in my opinion
+    if (Solvers::needsInEdges(*solver)) game->build_in_array(false); // no-op if already built
     time_mid = high_resolution_clock::now();
 
     /**
