@@ -412,6 +412,8 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverPMTLsmall COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-small)
         add_test(NAME TestSolverPMTLsuccinct COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-succinct)
         add_test(NAME TestSolverPMTLordered COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-ordered)
+        add_test(NAME TestSolverGPMstrahler COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --gpm-strahler)
+        add_test(NAME TestSolverPMTLstrahler COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-strahler)
         # test ZLK variations
         add_test(NAME TestSolverZLKseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w -1)
         add_test(NAME TestSolverZLKpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w 0)

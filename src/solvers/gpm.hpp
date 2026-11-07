@@ -1,3 +1,22 @@
+/*
+ * Copyright 2022-2026 Tom van Dijk
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * The Strahler measures are adapted from the STRPM solver by Vanessa Flügel and
+ * Guillermo A. Pérez (https://github.com/vfluegel/oink).
+ */
+
 #ifndef GPM_HPP
 #define GPM_HPP
 
@@ -40,7 +59,8 @@ public:
 enum class MeasureKind {
     Small,
     Ordered,
-    Succinct
+    Succinct,
+    Strahler
 };
 
 
@@ -176,6 +196,71 @@ private:
 
 
 
+
+
+/**
+ * Measures that are the leaves of a (k,t)-Strahler-universal tree of height h, from
+ * L. Daviaud, M. Jurdzinski, K. S. Thejaswini, "The Strahler Number of a Parity Game",
+ * ICALP 2020. The representation (a bitstring with a level per bit, non-decreasing), the
+ * successor (prog) and the comparison are from the STRPM solver by Vanessa Flügel with
+ * Guillermo A. Pérez (https://github.com/vfluegel/oink), adapted to this interface.
+ *
+ * A label is a sequence of strings, one per level 0..h-2 (level 0 for the highest
+ * priorities); a string is empty (epsilon) or a leading bit followed by non-leading bits,
+ * and 0x < epsilon < 1x. A label has exactly k-1 non-empty strings and at most t
+ * non-leading bits in total (Definition 21 of the paper). Here t = floor(log2 n) and
+ * k = min(t+1, h), so that the tree is (n,h)-universal (Remark 19 of the paper) and
+ * the whole game can be solved with it. (STRPM tries pairs up to k = min(t+2, max(h0,h1)),
+ * which can be one too small for that, but it solves the game in parts.)
+ */
+class Strahler final : public Measures
+{
+public:
+    Strahler(const Game &game, const int player);
+    Strahler(const Strahler &other) = default;
+    virtual ~Strahler() = default;
+
+    void copy(int from, int to) override; // copy <from> to <to>
+    void copy_bot(int to) override; // load bottom in <to>
+    void copy_top(int to) override; // load top in <to>
+    void copy_from(const Measures& other, int from, int to) override;
+    void see(int tgt, int priority) override; // let <tgt> see a priority
+    int compare(int i, int j) const override; // compare <i> and <j>
+    bool eq(int i, int j) const override;
+    void stream(std::ostream &out, int i) const override;
+    bool is_top(int tgt) const override;
+    Measures* clone() const override { return new Strahler(*this); }
+    void set(const Measures& other) override;
+    void inc(int i) override; // smallest increment to <tgt>
+    std::vector<std::byte> store(int tgt) const override;
+    void load(int tgt, const std::vector<std::byte>& blob) override;
+
+    int get_k() const { return k; }
+    int get_t() const { return t; }
+    int get_h() const { return h; }
+
+private:
+    int player; // are we doing even or odd?
+    int k, t, h; // Strahler number, number of (non-leading) bits, height (levels 0..h-2)
+    int cap; // the longest label: k-1 leading bits and t non-leading bits
+    int stride; // codes per slot: <cap>, then always END
+    long N; // nodecount
+    // per slot (slots -4..-1 and the vertices) <stride> codes, one per position: bit 0 at
+    // level d is d, bit 1 at level d is 2*END-d, and the positions after the label are END;
+    // Top is TOP and then END. Then comparing labels is comparing codes lexicographically
+    uint32_t END, TOP;
+    std::vector<uint32_t> code;
+
+    // work space for prog and trunc
+    std::vector<uint8_t> tb;
+    std::vector<int> td;
+
+    void load_tmp(int slot);
+    void store_tmp(int slot);
+    void prog_tmp(int pindex); // tmp := min { m | m >_p tmp }
+    void trunc_tmp(int pindex); // tmp := min { m | m =_p tmp }
+    int skip_until_next_level(int i);
+};
 
 
 class GPMSolver : public Solver

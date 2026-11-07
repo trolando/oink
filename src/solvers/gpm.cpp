@@ -1,3 +1,22 @@
+/*
+ * Copyright 2022-2026 Tom van Dijk
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * The Strahler measures are adapted from the STRPM solver by Vanessa Flügel and
+ * Guillermo A. Pérez (https://github.com/vfluegel/oink), see gpm.hpp.
+ */
+
 #include <algorithm>
 #include <cstring>
 
@@ -956,6 +975,402 @@ void Succinct::load(int tgt, const std::vector<std::byte>& blob)
 }       
 
 
+/**
+ * Strahler measures: see gpm.hpp. The successor (prog_tmp) and the comparison follow the
+ * STRPM solver by Vanessa Flügel and Guillermo A. Pérez; the truncation (trunc_tmp) is new.
+ * A label is stored as one code per position (see gpm.hpp), so that copy and compare are
+ * plain loops over integers.
+ */
+
+static int
+strahler_floor_log2(unsigned long long x)
+{
+    int y = 0;
+    while (x > 1) { x >>= 1; y++; }
+    return y;
+}
+
+// number of distinct values in the non-decreasing range [first, last)
+static inline int
+count_distinct_nondecreasing(std::vector<int>::const_iterator first, std::vector<int>::const_iterator last)
+{
+    if (first == last) return 0;
+    int distinct = 1;
+    for (auto it = first + 1; it != last; ++it) if (*it != *(it - 1)) ++distinct;
+    return distinct;
+}
+
+Strahler::Strahler(const Game &game, const int player)
+{
+    this->player = player;
+    this->N = game.nodecount();
+    const int max_pr = game.priority(game.nodecount()-1);
+    const int h0 = (max_pr/2)+1;
+    const int h1 = (max_pr+1)/2;
+    const int depth = player == 0 ? h0 : h1;
+    this->h = depth + 1; // levels 0..h-2 (as in STRPM)
+    this->t = strahler_floor_log2(N);
+    this->k = std::min(t + 1, h); // (n,h)-universal (see gpm.hpp); k-1 non-empty strings
+                                   // fit in the h-1 levels
+    if (depth == 0) { k = 1; t = 0; } // no levels: only the empty label
+    this->cap = std::max(0, k - 1 + t);
+    this->stride = cap + 1;
+    this->END = (uint32_t)h + 1; // above every level (0..h-2)
+    this->TOP = 2*END + 1; // above every code of a label
+    code.assign((size_t)stride*(N+4), END);
+    tb.reserve(cap + 1);
+    td.reserve(cap + 1);
+    for (int i=-4; i<N; i++) copy_bot(i);
+}
+
+void
+Strahler::set(const Measures &other)
+{
+    // (not via operator=: Measures::operator= calls set)
+    const Strahler *src = dynamic_cast<const Strahler*>(&other);
+    player = src->player;
+    k = src->k;
+    t = src->t;
+    h = src->h;
+    cap = src->cap;
+    stride = src->stride;
+    N = src->N;
+    END = src->END;
+    TOP = src->TOP;
+    code = src->code;
+}
+
+void Strahler::copy(int from, int to)
+{
+    std::memcpy(&code[(size_t)stride*(to+4)], &code[(size_t)stride*(from+4)], sizeof(uint32_t)*stride);
+}
+
+void Strahler::copy_from(const Measures& mother, int from, int to)
+{
+    const Strahler *other = dynamic_cast<const Strahler*>(&mother);
+    std::memcpy(&code[(size_t)stride*(to+4)], &other->code[(size_t)stride*(from+4)], sizeof(uint32_t)*stride);
+}
+
+void Strahler::copy_bot(int to)
+{
+    // the leftmost leaf: t+1 zeros at level 0, then a single zero at levels 1..k-2
+    uint32_t *c = &code[(size_t)stride*(to+4)];
+    for (int i=0; i<cap; i++) c[i] = i <= t ? 0 : (uint32_t)(i - t);
+    c[cap] = END;
+}
+
+void Strahler::copy_top(int to)
+{
+    uint32_t *c = &code[(size_t)stride*(to+4)];
+    std::fill_n(c, stride, END);
+    c[0] = TOP;
+}
+
+bool Strahler::is_top(int tgt) const
+{
+    return code[(size_t)stride*(tgt+4)] == TOP;
+}
+
+void Strahler::load_tmp(int slot)
+{
+    const uint32_t *c = &code[(size_t)stride*(slot+4)];
+    tb.resize(cap);
+    td.resize(cap);
+    int n = 0;
+    for (; c[n] != END; n++) { // (the last code of a slot is END)
+        const bool one = c[n] > END;
+        tb[n] = one ? 1 : 0;
+        td[n] = (int)(one ? 2*END - c[n] : c[n]);
+    }
+    tb.resize(n);
+    td.resize(n);
+}
+
+void Strahler::store_tmp(int slot)
+{
+    if (!td.empty() and td[0] == -1) {
+        copy_top(slot);
+        return;
+    }
+    uint32_t *c = &code[(size_t)stride*(slot+4)];
+    const int n = (int)td.size();
+    for (int i=0; i<n; i++) {
+        assert(td[i] >= 0 and (uint32_t)td[i] < END);
+        c[i] = tb[i] ? 2*END - (uint32_t)td[i] : (uint32_t)td[i];
+    }
+    std::fill(c + n, c + stride, END);
+}
+
+int Strahler::skip_until_next_level(int i)
+{
+    while (((long)i == (long)td.size() - 1) || (i >= 0 && td[i] == td[i+1])) {
+        tb[i] = 0;
+        i--;
+    }
+    return i;
+}
+
+void Strahler::prog_tmp(int pindex)
+{
+    if (td.empty()) { // the only label (no levels)
+        tb.assign(1, 0);
+        td.assign(1, -1);
+        return;
+    }
+    if (td[0] == -1) return; // already Top
+
+    bool skipLevel = false;
+    int i = (int)td.size() - 1;
+    // skip bits "below p"
+    while (i >= 0 && td[i] > pindex) {
+        tb[i] = 0;
+        i--;
+    }
+    // number of non-empty strings (NES) up to here
+    int nes = count_distinct_nondecreasing(td.begin(), td.begin() + i + 1);
+    if (nes - 1 == k - 1) {
+        // no next sibling on this layer
+        i = skip_until_next_level(i);
+    }
+
+    while (i >= 0) {
+        // check if there was a level change
+        if ((size_t)i == td.size()-1 || td[i] != td[i+1]) {
+            // non-leading bits (NLB): the length minus one leading bit per non-empty string
+            int nlb = (i + 1) - nes;
+            nes--;
+            if (nlb < t) {
+                int new_index = std::min(((size_t)(i+1) == td.size()) ? td[i] : td[i+1] - 1, pindex);
+                i++;
+                // either add one at the end of the existing string (one more NLB), or a new string
+                if (i != 0 && ((size_t)i == td.size() || td[i-1] == new_index)) nlb++;
+                else nes++;
+
+                int total_nes = std::min((nes + h - 1 - new_index), k - 1);
+                if ((long)(total_nes + t) > (long)tb.size()) {
+                    size_t newBits = total_nes + t - td.size();
+                    tb.insert(tb.end(), newBits, 0);
+                    tb[i] = 1;
+                    for (size_t j = i; j < td.size(); j++) td[j] = new_index;
+                    td.insert(td.end(), newBits, new_index);
+                    i += t - nlb + 1;
+                } else {
+                    tb[i] = 1;
+                    td[i] = new_index;
+                    int j = 1;
+                    while (nlb + j <= t) {
+                        tb[i + j] = 0;
+                        td[i + j] = new_index;
+                        j++;
+                    }
+                    i += j; // the last changed position
+                }
+                break;
+            }
+            // the current string is only a leading bit (all NLB are in the strings before it)
+            else if (i == 0 || td[i-1] != td[i]) {
+                tb[i] = 0;
+                i--;
+                continue;
+            }
+        }
+        // here NLB == t
+        if (tb[i] == 0) {
+            if (i == 0 || td[i - 1] != td[i]) {
+                // the 0 is the first bit, or the first bit of its level
+                int strings_after_current = count_distinct_nondecreasing(td.begin() + i, td.end());
+                if (strings_after_current == (h-1) - td[i]) {
+                    // all strings after the current level are non-empty: no sibling on this layer
+                    i--;
+                    continue;
+                } else {
+                    // the string is 01^j, so the new string would be empty: one NES less
+                    nes--;
+                    skipLevel = true;
+                }
+                break;
+            } else {
+                break;
+            }
+        } else {
+            tb[i] = 0;
+            i--;
+        }
+    }
+
+    // reached the root: Top
+    if (i == -1) {
+        if (td[0] == 0) {
+            td[0] = -1;
+            return;
+        } else {
+            // there are still empty strings "left" that can be filled instead
+            i = 0;
+            tb[i] = 1;
+            td[i] = std::min(td[i], pindex+1) - 2;
+            if ((long)(t + k - 1) > (long)tb.size()) {
+                size_t newBits = t + k - 1 - td.size();
+                tb.insert(tb.end(), newBits, 0);
+                for (size_t j = i; j < td.size(); j++) td[j] = td[i];
+                td.insert(td.end(), newBits, td[i]);
+            }
+            skipLevel = true;
+            nes--;
+        }
+    }
+
+    // we can only fill as many NES as we have height
+    int available_nes = h - 1 - (td[(skipLevel ? i : i-1)] + 1);
+    int no_of_needed_nes = std::min((k-1) - (nes+1), available_nes);
+
+    if (no_of_needed_nes == 0) {
+        // remove everything after the current position
+        td.resize(i);
+        tb.resize(i);
+    } else {
+        int set_index = td[(skipLevel ? i : i-1)] + 1;
+        // fill up with the next level as long as we still have bits
+        while ((long)tb.size() >= (long)(i + no_of_needed_nes)) {
+            td[i] = set_index;
+            i++;
+        }
+        // then the rest of the bits one level each
+        while ((long)i < (long)tb.size()) {
+            set_index++;
+            td[i] = set_index;
+            i++;
+        }
+    }
+}
+
+void Strahler::trunc_tmp(int pindex)
+{
+    if (!td.empty() and td[0] == -1) return; // Top
+    if (k == 1) {
+        // a tree with k = 1 has a single leaf, the bottom label (t zeros at level 0)
+        tb.assign(cap, 0);
+        td.assign(cap, 0);
+        return;
+    }
+    // keep the strings at levels <= pindex
+    int i = (int)td.size() - 1;
+    while (i >= 0 && td[i] > pindex) i--;
+    tb.resize(i+1);
+    td.resize(i+1);
+    // then the smallest continuation (0x < epsilon): all remaining non-leading bits as zeros
+    // in one string at level pindex+1, then a single zero at each next level, as long as
+    // there are non-empty strings and levels left
+    const int nes = count_distinct_nondecreasing(td.begin(), td.end());
+    const int nlb = (int)td.size() - nes;
+    const int more = std::min((k-1) - nes, (h-2) - pindex);
+    for (int j = 0; j < more; j++) {
+        const int n = j == 0 ? 1 + t - nlb : 1;
+        for (int x = 0; x < n; x++) {
+            tb.push_back(0);
+            td.push_back(pindex + 1 + j);
+        }
+    }
+}
+
+void Strahler::see(int tgt, int priority)
+{
+    if (is_top(tgt)) return;
+    const int pindex = player == 0 ? (h-1)-(priority+1)/2-1 : (h-1)-priority/2-1;
+    load_tmp(tgt);
+    if ((priority&1) == player) prog_tmp(pindex);
+    else trunc_tmp(pindex);
+    store_tmp(tgt);
+}
+
+void Strahler::inc(int tgt)
+{
+    see(tgt, player);
+}
+
+/**
+ * Return -1 if value[u] < value[v], 0 if equal, 1 if value[u] > value[v]
+ */
+/**
+ * At the first position where two labels differ: if one has bit 0 at level d and the other
+ * ended its string at level d (so it has a higher level, or nothing, at that position), then
+ * the first is smaller (0x < epsilon), and with bit 1 it is larger (epsilon < 1x); with the
+ * same level the bits decide. The codes d < (higher levels and END) < 2*END-d give exactly
+ * this, so the labels compare as their codes do.
+ */
+int Strahler::compare(int u, int v) const
+{
+    const uint32_t *cu = &code[(size_t)stride*(u+4)], *cv = &code[(size_t)stride*(v+4)];
+    for (int i=0; i<stride; i++) {
+        if (cu[i] != cv[i]) return cu[i] < cv[i] ? -1 : 1;
+    }
+    return 0;
+}
+
+bool Strahler::eq(int u, int v) const
+{
+    return std::memcmp(&code[(size_t)stride*(u+4)], &code[(size_t)stride*(v+4)], sizeof(uint32_t)*stride) == 0;
+}
+
+void Strahler::stream(std::ostream &out, int tgt) const
+{
+    if (is_top(tgt)) {
+        out << "\033[1;33mTop\033[m";
+        return;
+    }
+    const uint32_t *c = &code[(size_t)stride*(tgt+4)];
+    out << "[ ";
+    int j = 0;
+    for (int level=0; level<h-1; level++) {
+        if (level > 0) out << ",";
+        int n = 0;
+        for (; c[j] != END; j++, n++) {
+            const bool one = c[j] > END;
+            if ((int)(one ? 2*END - c[j] : c[j]) != level) break;
+            out << (one ? 1 : 0);
+        }
+        if (n == 0) out << "ε";
+    }
+    out << " ]";
+}
+
+std::vector<std::byte> Strahler::store(int tgt) const
+{
+    // the label length (-1 for Top), then per position its bit and level
+    std::vector<std::byte> blob;
+    const uint32_t *c = &code[(size_t)stride*(tgt+4)];
+    if (c[0] == TOP) {
+        push_le<int>(blob, -1);
+        return blob;
+    }
+    int n = 0;
+    while (c[n] != END) n++;
+    push_le<int>(blob, n);
+    for (int i=0; i<n; i++) {
+        const bool one = c[i] > END;
+        push_le<uint8_t>(blob, one ? 1 : 0);
+        push_le<int>(blob, (int)(one ? 2*END - c[i] : c[i]));
+    }
+    return blob;
+}
+
+void Strahler::load(int tgt, const std::vector<std::byte>& blob)
+{
+    size_t cur = 0;
+    const int n = read_le_advance<int>(blob, cur);
+    if (n == -1) {
+        copy_top(tgt);
+        return;
+    }
+    uint32_t *c = &code[(size_t)stride*(tgt+4)];
+    for (int i=0; i<n; i++) {
+        const uint8_t b = read_le_advance<uint8_t>(blob, cur);
+        const int d = read_le_advance<int>(blob, cur);
+        c[i] = b ? 2*END - (uint32_t)d : (uint32_t)d;
+    }
+    std::fill(c + n, c + stride, END);
+}
+
+
 GPMSolver::GPMSolver(Oink& oink, Game& game, MeasureKind kind) : Solver(oink, game), measure_kind(kind)
 {
 }
@@ -1358,6 +1773,8 @@ std::optional<MeasureKind> parse_measure_kind(std::string& opts) {
         return { MeasureKind::Small };
     } else if (opts == "sspm"  || opts == "succinct" || opts == "SSPM" || opts == "SUCCINCT") {
         return { MeasureKind::Succinct };
+    } else if (opts == "strpm" || opts == "strahler" || opts == "STRPM" || opts == "STRAHLER") {
+        return { MeasureKind::Strahler };
     }
 
     return std::nullopt;
@@ -1371,6 +1788,8 @@ Measures *new_measure(const MeasureKind kind, const Game &game, const int player
             return new Ordered(game, player);
         case MeasureKind::Succinct:
             return new Succinct(game, player);
+        case MeasureKind::Strahler:
+            return new Strahler(game, player);
         default:
             THROW_ERROR("Measure kind exists but is not implemented");
     }
@@ -1387,6 +1806,9 @@ void stream_measure_kind(std::ostream& logger, MeasureKind kind) {
         case MeasureKind::Succinct:
             logger << "Succinct Progress Measures (SSPM)";
             break;
+        case MeasureKind::Strahler:
+            logger << "Strahler Progress Measures (STRPM)";
+            break;
         default:
             THROW_ERROR("Measure kind exists but is not implemented");
             break;
@@ -1394,7 +1816,7 @@ void stream_measure_kind(std::ostream& logger, MeasureKind kind) {
 }
 
 void stream_measure_kinds(std::ostream& logger) {
-    logger << "small, ordered, succinct";
+    logger << "small, ordered, succinct, strahler";
 }
 
 }

@@ -197,13 +197,15 @@ int main(int, char**)
     MeasureKind kinds[] = {
         MeasureKind::Small,
         MeasureKind::Ordered,
-        MeasureKind::Succinct
+        MeasureKind::Succinct,
+        MeasureKind::Strahler
     };
 
     for (auto kind : kinds) {
         const char* kindName = (kind == MeasureKind::Small)    ? "Small" :
                                (kind == MeasureKind::Ordered)  ? "Ordered" :
-                               (kind == MeasureKind::Succinct) ? "Succinct" : "?";
+                               (kind == MeasureKind::Succinct) ? "Succinct" :
+                               (kind == MeasureKind::Strahler) ? "Strahler" : "?";
 
         std::cout << "\n=== MeasureKind: " << kindName << " ===\n";
 

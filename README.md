@@ -140,11 +140,17 @@ The QPT ordered progress measures algorithm was published by Fearnley et al in S
 
 The bounded variants `BSSPM` and `BQPT` are an idea by Tom van Dijk and Marcin Jurdzinski.
 
+The generic progress measures solver `GPM` runs one algorithm with different kinds of measures: small, ordered, succinct and Strahler measures.
+`PMTL` combines progress measures with tangle learning, also with any of these kinds of measures.
+The kind is chosen with `-c small`, `-c ordered`, `-c succinct` or `-c strahler`, or with the shorthands `--gpm-small` etc. and `--pmtl-small` etc.
+The Strahler measures are the leaves of the Strahler-universal trees of Daviaud, Jurdziński and Thejaswini; the implementation is adapted from the STRPM solver by Vanessa Flügel and Guillermo A. Pérez (https://github.com/vfluegel/oink).
+
 See also:
 * Marcin Jurdzinski (2000) [Small Progress Measures for Solving Parity Games](https://doi.org/10.1007/3-540-46541-3_24). In: STACS 2000.
 * Maciej Gazda, Tim Willemse (2015) [Improvement in Small Progress Measures](https://doi.org/10.4204/EPTCS.193.12). In: GandALF 2015.
 * John Fearnley, Sanjay Jain, Sven Schewe, Frank Stephan, Dominik Wojtczak (2017) [An ordered approach to solving parity games in quasi polynomial time and quasi linear space](https://doi.org/10.1145/3092282.3092286). In: SPIN 2017.
 * Marcin Jurdzinski, Ranko Lazic (2017) [Succinct progress measures for solving parity games](https://doi.org/10.1109/LICS.2017.8005092). In: LICS 2017.
+* Laure Daviaud, Marcin Jurdziński, K. S. Thejaswini (2020) [The Strahler Number of a Parity Game](https://doi.org/10.4230/LIPIcs.ICALP.2020.123). In: ICALP 2020.
 
 Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
@@ -155,6 +161,8 @@ SSPM            | Quasi-polynomial time succinct progress measures
 BSSPM           | Quasi-polynomial time succinct progress measures (bounding variant by TvD and MJ, often faster)
 QPT             | Quasi-polynomial time ordered progress measures
 BQPT            | Quasi-polynomial time ordered progress measures (bounding variant by TvD and MJ, often faster)
+GPM             | Generic progress measures (small, ordered, succinct or Strahler measures)
+PMTL            | Progress measures with tangle learning (small, ordered, succinct or Strahler measures)
 
 ### Preprocessing
 
