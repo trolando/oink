@@ -85,7 +85,13 @@ Solvers::Solvers()
     _add("tl", "tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLSolver>(oink, game); });
     _add("tlq", "qpt recursive with tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLQSolver>(oink, game); });
     _add("pmtl", "progress measures and tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game); });
+    _add("pmtl-small", "progress measures and tangle learning, small measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Small); });
+    _add("pmtl-succinct", "progress measures and tangle learning, succinct measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Succinct); });
+    _add("pmtl-ordered", "progress measures and tangle learning, ordered measures (as pmtl)", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Ordered); });
     _add("gpm", "generic progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game); });
+    _add("gpm-small", "generic progress measures, small measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Small); });
+    _add("gpm-succinct", "generic progress measures, succinct measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Succinct); });
+    _add("gpm-ordered", "generic progress measures, ordered measures (as gpm)", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Ordered); });
 
     // solvers that never use the in-edges, so Oink need not build them
     for (const char* id : {"fpi", "fpim", "psi"}) solvers[id].needsInEdges = false;

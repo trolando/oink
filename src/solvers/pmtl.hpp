@@ -27,7 +27,7 @@ namespace pg {
 class PMTLSolver : public Solver
 {
 public:
-    PMTLSolver(Oink& oink, Game& game);
+    PMTLSolver(Oink& oink, Game& game, MeasureKind kind = MeasureKind::Ordered);
     virtual ~PMTLSolver();
 
     virtual void run();

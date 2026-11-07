@@ -26,7 +26,7 @@
 namespace pg {
 
 
-PMTLSolver::PMTLSolver(Oink& oink, Game& game) : Solver(oink, game)
+PMTLSolver::PMTLSolver(Oink& oink, Game& game, MeasureKind kind) : Solver(oink, game), measure_kind(kind)
 {
 }
 
@@ -890,6 +890,7 @@ PMTLSolver::solve(Measures &pm, const int player)
 
 bool
 PMTLSolver::parseOptions(std::string& opts) {
+    if (opts.empty()) return true; // keep the defaults (or the measure kind of pmtl-small etc.)
     std::string remaining = opts;
 
     //go_up = false;

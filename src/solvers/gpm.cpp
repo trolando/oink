@@ -956,7 +956,7 @@ void Succinct::load(int tgt, const std::vector<std::byte>& blob)
 }       
 
 
-GPMSolver::GPMSolver(Oink& oink, Game& game) : Solver(oink, game)
+GPMSolver::GPMSolver(Oink& oink, Game& game, MeasureKind kind) : Solver(oink, game), measure_kind(kind)
 {
 }
 
@@ -1255,6 +1255,7 @@ GPMSolver::solve(Measures &pm, const int player)
 bool
 GPMSolver::parseOptions(std::string& opts)
 {
+    if (opts.empty()) return true; // keep the defaults (or the measure kind of gpm-small etc.)
     std::string remaining = opts;
 
     do {

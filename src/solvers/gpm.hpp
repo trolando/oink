@@ -181,7 +181,7 @@ private:
 class GPMSolver : public Solver
 {
 public:
-    GPMSolver(Oink& oink, Game& game);
+    GPMSolver(Oink& oink, Game& game, MeasureKind kind = MeasureKind::Ordered);
     virtual ~GPMSolver();
 
     virtual void run();
