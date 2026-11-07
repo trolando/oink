@@ -190,6 +190,7 @@ target_sources(oink
     src/game.cpp
     src/solution.cpp
     src/game_builder.cpp
+    src/bzip2_parallel.cpp
     src/io.cpp
     src/pgparser.cpp
     src/oink.cpp
@@ -333,6 +334,15 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         target_sources(test_parser PRIVATE test/test_parser.cpp)
         set_target_props(test_parser)
         add_test(NAME TestParser COMMAND test_parser)
+
+        add_executable(test_io)
+        target_sources(test_io PRIVATE test/test_io.cpp)
+        set_target_props(test_io)
+        if(BZIP2_FOUND)
+            target_link_libraries(test_io BZip2::BZip2)
+            target_compile_definitions(test_io PRIVATE OINK_HAVE_BZIP2=1)
+        endif()
+        add_test(NAME TestIO COMMAND test_io)
 
         # Solution class unit tests
         add_executable(test_solution)

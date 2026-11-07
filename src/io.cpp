@@ -18,7 +18,9 @@
 #include "oink/game.hpp"
 #include "oink/solution.hpp"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -31,6 +33,8 @@
 #endif
 #ifdef OINK_HAVE_BZIP2
 #include <bzlib.h>
+#include <thread>
+#include "bzip2_parallel.hpp"
 #endif
 #ifdef OINK_HAVE_LZMA
 #include <cstdint>
@@ -50,26 +54,54 @@ bool has_suffix(const std::string& s, const char* suffix)
            s.compare(s.size() - suf.size(), suf.size(), suf) == 0;
 }
 
-// An input stream that owns the (decompressed) buffer it reads from.
+// An input stream that owns the (decompressed) data it reads from, as a sequence of
+// chunks. A chunk is released once it has been read.
 class buffer_istream : public std::istream {
 public:
-    explicit buffer_istream(std::string data)
-        : std::istream(nullptr), data_(std::move(data)), buf_(data_)
+    explicit buffer_istream(std::vector<std::string> chunks)
+        : std::istream(nullptr), buf_(std::move(chunks))
     {
         rdbuf(&buf_);
     }
 
+    explicit buffer_istream(std::string data)
+        : buffer_istream(std::vector<std::string>(1, std::move(data)))
+    {
+    }
+
 private:
-    struct membuf : std::streambuf {
-        explicit membuf(std::string& s)
+    struct chunkbuf : std::streambuf {
+        explicit chunkbuf(std::vector<std::string> c) : chunks(std::move(c)) { }
+
+        int_type underflow() override
         {
-            char* base = s.empty() ? nullptr : &s[0];
-            setg(base, base, base + s.size());
+            if (next > 0) std::string().swap(chunks[next-1]); // done with the previous chunk
+            while (next < chunks.size()) {
+                std::string& s = chunks[next++];
+                if (s.empty()) continue;
+                setg(&s[0], &s[0], &s[0] + s.size());
+                return traits_type::to_int_type(s[0]);
+            }
+            setg(nullptr, nullptr, nullptr);
+            return traits_type::eof();
         }
+
+        std::vector<std::string> chunks;
+        size_t next = 0; // the chunk after the current one
     };
-    std::string data_;
-    membuf buf_;
+    chunkbuf buf_;
 };
+
+[[maybe_unused]] std::vector<unsigned char> read_file_bytes(const std::string& filename)
+{
+    std::ifstream f(filename, std::ios::binary | std::ios::ate);
+    if (!f) throw std::runtime_error("cannot open " + filename);
+    const std::streamoff size = f.tellg();
+    std::vector<unsigned char> data(size > 0 ? (size_t)size : 0);
+    f.seekg(0);
+    if (!data.empty() and !f.read(reinterpret_cast<char*>(data.data()), size)) throw std::runtime_error("cannot read " + filename);
+    return data;
+}
 
 [[noreturn]] [[maybe_unused]] void unsupported(const char* fmt, const char* lib)
 {
@@ -99,29 +131,57 @@ std::string inflate_gzip(const std::string& filename)
 #endif
 
 #ifdef OINK_HAVE_BZIP2
-std::string inflate_bzip2(const std::string& filename)
+// Decompress all (concatenated) bzip2 streams in <data>; data after the last stream that
+// does not start another stream is ignored, as bzip2 does.
+std::string inflate_bzip2_sequential(const std::vector<unsigned char>& data, const std::string& filename)
 {
-    FILE* fp = std::fopen(filename.c_str(), "rb");
-    if (fp == nullptr) throw std::runtime_error("cannot open " + filename);
-    int bzerr = BZ_OK;
-    BZFILE* bz = BZ2_bzReadOpen(&bzerr, fp, 0, 0, nullptr, 0);
-    if (bzerr != BZ_OK) {
-        BZ2_bzReadClose(&bzerr, bz);
-        std::fclose(fp);
-        throw std::runtime_error("cannot read bzip2 stream in " + filename);
-    }
     std::string out;
     std::vector<char> buf(CHUNK);
-    do {
-        const int n = BZ2_bzRead(&bzerr, bz, buf.data(),
-                                 static_cast<int>(buf.size()));
-        if (n > 0) out.append(buf.data(), n);
-    } while (bzerr == BZ_OK);
-    const bool ok = (bzerr == BZ_STREAM_END);
-    BZ2_bzReadClose(&bzerr, bz);
-    std::fclose(fp);
-    if (!ok) throw std::runtime_error("bzip2 error in " + filename);
+    size_t pos = 0;
+    bool any = false;
+    while (pos < data.size()) {
+        if (any and (data.size() - pos < 3 or data[pos] != 'B' or data[pos+1] != 'Z' or data[pos+2] != 'h')) break;
+        bz_stream strm;
+        std::memset(&strm, 0, sizeof(strm));
+        if (BZ2_bzDecompressInit(&strm, 0, 0) != BZ_OK) throw std::runtime_error("cannot initialize bzip2 decoder");
+        size_t fed = pos; // feed the input in pieces (avail_in is 32 bits)
+        auto refill = [&]() {
+            const size_t n = std::min<size_t>(data.size() - fed, size_t(1) << 30);
+            strm.next_in = const_cast<char*>(reinterpret_cast<const char*>(data.data() + fed));
+            strm.avail_in = static_cast<unsigned>(n);
+            fed += n;
+        };
+        refill();
+        int ret;
+        for (;;) {
+            strm.next_out = buf.data();
+            strm.avail_out = static_cast<unsigned>(buf.size());
+            ret = BZ2_bzDecompress(&strm);
+            out.append(buf.data(), buf.size() - strm.avail_out);
+            if (ret != BZ_OK) break;
+            if (strm.avail_in == 0) {
+                if (fed < data.size()) refill();
+                else if (strm.avail_out != 0) break; // the input ended inside the stream
+            }
+        }
+        pos = fed - strm.avail_in;
+        BZ2_bzDecompressEnd(&strm);
+        if (ret != BZ_STREAM_END) throw std::runtime_error("bzip2 error in " + filename);
+        any = true;
+    }
+    if (!any) throw std::runtime_error("bzip2 error in " + filename);
     return out;
+}
+
+// Decompress a .bz2 file, in parallel (block by block) if it is large enough.
+std::vector<std::string> inflate_bzip2(const std::string& filename)
+{
+    const std::vector<unsigned char> data = read_file_bytes(filename);
+    std::vector<std::string> chunks;
+    const unsigned threads = std::max(1u, std::thread::hardware_concurrency());
+    if (threads > 1 and data.size() >= (size_t(1) << 20) and bzip2_decompress_parallel(data, chunks, threads)) return chunks;
+    chunks.assign(1, inflate_bzip2_sequential(data, filename));
+    return chunks;
 }
 #endif
 

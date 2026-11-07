@@ -31,8 +31,9 @@ namespace pg {
  *
  * A GameBuilder accumulates vertices (priority, owner, label) and edges, and
  * produces an immutable Game with build(). It is meant for parsing and
- * test/tool construction, not for solver hot loops, so it favours clarity over
- * raw performance.
+ * test/tool construction, not for solver hot loops. Edges are kept in one flat
+ * list; build() groups them by source vertex, keeping the order in which each
+ * vertex's edges were added (this matters for parsing games with many vertices).
  *
  * Vertices are numbered 0..vertex_count-1. Owner is 0 for Even, 1 for Odd.
  */
@@ -62,11 +63,11 @@ public:
 
 private:
     int vertex_count_;
-    size_t edge_count_ = 0;
     std::vector<int> priority_;
     bitset owner_;
     std::vector<std::string> labels_;
-    std::vector<std::vector<int>> outgoing_;
+    std::vector<int> edge_from_; // source of each edge, in the order added
+    std::vector<int> edge_to_;   // target of each edge, in the order added
 };
 
 }

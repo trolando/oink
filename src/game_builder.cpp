@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <algorithm>
 #include <cassert>
 #include <utility>
 
@@ -24,8 +25,7 @@ namespace pg {
 GameBuilder::GameBuilder(int vertex_count)
     : vertex_count_(vertex_count),
       priority_(vertex_count, 0),
-      owner_(vertex_count),
-      outgoing_(vertex_count)
+      owner_(vertex_count)
 {
     assert(vertex_count >= 0);
     // labels_ is grown lazily on first set_label, so unlabeled games (the large
@@ -59,20 +59,31 @@ GameBuilder::add_edge(int from, int to)
 {
     assert(from >= 0 and from < vertex_count_);
     assert(to >= 0 and to < vertex_count_);
-    outgoing_[from].push_back(to);
-    edge_count_++;
+    edge_from_.push_back(from);
+    edge_to_.push_back(to);
 }
 
 void
 GameBuilder::truncate(int new_count)
 {
     assert(new_count >= 0 and new_count <= vertex_count_);
-    for (int v = new_count; v < vertex_count_; v++) edge_count_ -= outgoing_[v].size();
+    if (new_count < vertex_count_) {
+        // drop the edges of the dropped vertices, keeping the order of the others
+        size_t j = 0;
+        for (size_t i = 0; i < edge_from_.size(); i++) {
+            if (edge_from_[i] < new_count) {
+                edge_from_[j] = edge_from_[i];
+                edge_to_[j] = edge_to_[i];
+                j++;
+            }
+        }
+        edge_from_.resize(j);
+        edge_to_.resize(j);
+    }
     vertex_count_ = new_count;
     priority_.resize(new_count);
     owner_.resize(new_count);
     if ((int)labels_.size() > new_count) labels_.resize(new_count);
-    outgoing_.resize(new_count);
 }
 
 Game
@@ -80,18 +91,33 @@ GameBuilder::build()
 {
     if (vertex_count_ == 0) return Game();
 
-    const size_t ne = edge_count_;
+    const int nv = vertex_count_;
+    const size_t ne = edge_to_.size();
 
-    // The Game accumulator constructor takes labels as nullable pointers; point
-    // them at our owned strings (empty string means no label). It copies them,
-    // so the borrowed pointers only need to be valid during the call. labels_ is
-    // grown lazily, so any index beyond its size has no label.
-    std::vector<std::string*> label_ptrs(vertex_count_, nullptr);
-    for (int v = 0; v < (int)labels_.size(); v++) {
-        if (!labels_[v].empty()) label_ptrs[v] = &labels_[v];
+    Game g(nv, static_cast<int>(ne));
+    g.n_vertices = nv;
+    g.n_edges = ne;
+    std::copy(priority_.begin(), priority_.end(), g._priority.begin());
+    g._owner = owner_;
+
+    // Group the edges by source vertex, keeping their order (a counting sort): each vertex
+    // gets a block of its out-degree plus a -1 terminator.
+    for (const int from : edge_from_) g._outcount[from]++;
+    size_t pos = 0;
+    for (int v = 0; v < nv; v++) {
+        g._firstouts[v] = static_cast<int>(pos);
+        pos += g._outcount[v];
+        g._outedges[pos++] = -1;
     }
+    std::vector<int> next(g._firstouts.begin(), g._firstouts.begin() + nv);
+    for (size_t i = 0; i < ne; i++) g._outedges[next[edge_from_[i]]++] = edge_to_[i];
+    g.e_size = pos;
 
-    return Game(static_cast<size_t>(vertex_count_), ne, priority_, owner_, outgoing_, label_ptrs);
+    // labels_ is grown lazily, so any index beyond its size has no label
+    for (int v = 0; v < (int)labels_.size(); v++) g._label[v] = labels_[v];
+
+    g.is_ordered = std::is_sorted(g._priority.begin(), g._priority.begin() + nv);
+    return g;
 }
 
 }

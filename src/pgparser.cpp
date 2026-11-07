@@ -16,7 +16,10 @@
 
 #include <algorithm>
 #include <climits>
+#include <cstdio>
+#include <istream>
 #include <stdexcept>
+#include <string>
 #include <map>
 #include <set>
 #include <vector>
@@ -28,54 +31,114 @@
 namespace pg {
 
 /**
- * Helper functions for parsing a PGSolver format parity game.
+ * Helper for parsing a PGSolver format parity game: reads the stream in large blocks and
+ * scans them with a pointer, which is much faster than reading characters through the
+ * stream (formatted extraction such as "in >> ch" costs a sentry and a locale per call).
+ * It reads ahead, so the stream is left after the game, at an unspecified position.
  */
+namespace {
 
-static void
-skip_whitespace(std::streambuf *rd)
+class Reader
 {
-    // read whitespace
-    while (true) {
-        int ch;
-        if ((ch=rd->sgetc()) == EOF) return;
-        if (ch != ' ' and ch != '\n' and ch != '\t' and ch != '\r') break;
-        rd->sbumpc();
+public:
+    explicit Reader(std::istream &in) : rd(in.rdbuf()), buf(1 << 20) { }
+
+    /** The next character, or EOF. */
+    inline int peek()
+    {
+        if (p == end and !fill()) return EOF;
+        return (unsigned char)*p;
+    }
+
+    /** Read the next character, or EOF. */
+    inline int get()
+    {
+        if (p == end and !fill()) return EOF;
+        return (unsigned char)*p++;
+    }
+
+    inline void skip_whitespace()
+    {
+        for (;;) {
+            if (p == end and !fill()) return;
+            const char ch = *p;
+            if (ch != ' ' and ch != '\n' and ch != '\t' and ch != '\r') return;
+            p++;
+        }
+    }
+
+    inline void skip_line()
+    {
+        for (;;) {
+            const int ch = get();
+            if (ch == EOF or ch == '\n' or ch == '\r') return;
+        }
+    }
+
+    inline bool read_uint64(uint64_t *res)
+    {
+        int ch = peek();
+        if (ch < '0' or ch > '9') return false;
+        uint64_t r = 0;
+        do {
+            r = (10*r)+(ch-'0');
+            p++;
+            ch = peek();
+        } while (ch >= '0' and ch <= '9');
+        *res = r;
+        return true;
+    }
+
+    /** Skip whitespace, then read the next character (EOF at the end). */
+    inline int next_token()
+    {
+        skip_whitespace();
+        return get();
+    }
+
+    /** Read a quoted label (after the opening quote); whitespace is left out, as before. */
+    std::string read_label()
+    {
+        std::string label;
+        for (;;) {
+            const int ch = next_token();
+            if (ch == EOF) throw std::runtime_error("unterminated label");
+            if (ch == '\"') return label;
+            label += (char)ch;
+        }
+    }
+
+private:
+    bool fill()
+    {
+        const std::streamsize k = rd->sgetn(buf.data(), (std::streamsize)buf.size());
+        p = buf.data();
+        end = p + (k > 0 ? k : 0);
+        return k > 0;
+    }
+
+    std::streambuf *rd;
+    std::vector<char> buf;
+    const char *p = nullptr;
+    const char *end = nullptr;
+};
+
+/** Read the "parity" keyword that starts a game. */
+void
+read_parity_keyword(Reader &rd)
+{
+    for (const char *kw = "parity"; *kw; kw++) {
+        if (rd.get() != *kw) throw std::runtime_error("expecting parity game specification");
     }
 }
 
-static void
-skip_line(std::streambuf *rd)
-{
-    while (true) {
-        int ch;
-        if ((ch=rd->sbumpc()) == EOF) return;
-        if (ch == '\n' or ch == '\r') return;
-    }
-}
-
-static bool
-read_uint64(std::streambuf *rd, uint64_t *res)
-{
-    uint64_t r = 0;
-    int ch;
-    if ((ch=rd->sgetc()) == EOF) return false;
-    if (ch < '0' or ch > '9') { return false; }
-    while (true) {
-        rd->sbumpc();
-        r = (10*r)+(ch-'0');
-        if ((ch=rd->sgetc()) == EOF) break;
-        if (ch < '0' or ch > '9') { break; }
-    }
-    *res = r;
-    return true;
 }
 
 Game
 PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 {
-    std::streambuf *rd = inp.rdbuf();
+    Reader rd(inp);
 
-    char buf[64];
     uint64_t n;
 
     /**
@@ -83,21 +146,19 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
      * "parity" <number of nodes> ;
      */
 
-    inp.read(buf, 6);
-    if (!inp) throw std::runtime_error("expecting parity game specification");
-    if (strncmp(buf, "parity", 6) != 0) throw std::runtime_error("expecting parity game specification");
+    read_parity_keyword(rd);
 
-    skip_whitespace(rd);
-    if (!read_uint64(rd, &n)) throw std::runtime_error("missing number of nodes");
+    rd.skip_whitespace();
+    if (!rd.read_uint64(&n)) throw std::runtime_error("missing number of nodes");
 
-    skip_whitespace(rd);
-    if (rd->sbumpc() != ';') throw std::runtime_error("missing ';'");
+    rd.skip_whitespace();
+    if (rd.get() != ';') throw std::runtime_error("missing ';'");
 
     // check if next token is 'start'
     {
-        skip_whitespace(rd);
-        int ch = rd->sgetc();
-        if (ch == 's') skip_line(rd);
+        rd.skip_whitespace();
+        int ch = rd.peek();
+        if (ch == 's') rd.skip_line();
     }
 
     /**
@@ -115,8 +176,8 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 
     while (node_count < res.n_vertices) {
         uint64_t id;
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &id)) {
+        rd.skip_whitespace();
+        if (!rd.read_uint64(&id)) {
             // we expect maybe one more node...
             if (node_count == res.n_vertices-1) {
                 res.v_resize(node_count);
@@ -132,13 +193,13 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         seen[id] = true;
         node_count++;
 
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &n)) throw std::runtime_error("missing priority");
+        rd.skip_whitespace();
+        if (!rd.read_uint64(&n)) throw std::runtime_error("missing priority");
         if (n > INT_MAX) throw std::runtime_error("priority too high"); // don't be ridiculous
         res._priority[id] = n;
 
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &n)) throw std::runtime_error("missing owner");
+        rd.skip_whitespace();
+        if (!rd.read_uint64(&n)) throw std::runtime_error("missing owner");
 
         if (n == 0) { /* nothing */ }
         else if (n == 1) { res._owner[id] = true; }
@@ -151,8 +212,8 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 
         // parse successors and optional label
         for (;;) {
-            skip_whitespace(rd);
-            if (!read_uint64(rd, &n)) throw std::runtime_error("missing successor");
+            rd.skip_whitespace();
+            if (!rd.read_uint64(&n)) throw std::runtime_error("missing successor");
             if (n >= (uint64_t)res.n_vertices) {
                 std::cout << "id " << id << " with successor " << n << std::endl;
                 throw std::runtime_error("invalid successor");
@@ -166,20 +227,14 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
                 count++;
             }
 
-            char ch;
-            skip_whitespace(rd);
-            if (!(inp >> ch)) throw std::runtime_error("missing ; to end line");
+            const int ch = rd.next_token();
+            if (ch == EOF) throw std::runtime_error("missing ; to end line");
             if (ch == ',') continue; // next successor
             if (ch == ';') break; // end of line
             if (ch == '\"') {
-                while (true) {
-                    inp >> ch;
-                    if (ch == '\"') break;
-                    res._label[id] += ch;
-                }
+                res._label[id] += rd.read_label();
                 // now read ;
-                skip_whitespace(rd);
-                if (!(inp >> ch) or ch != ';') throw std::runtime_error("missing ; to end line");
+                if (rd.next_token() != ';') throw std::runtime_error("missing ; to end line");
             }
             break;
         }
@@ -347,9 +402,8 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 Game
 PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
 {
-    std::streambuf *rd = in.rdbuf();
+    Reader rd(in);
 
-    char buf[64];
     uint64_t n;
 
     /**
@@ -358,23 +412,21 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
      * "parity" <highest vertex id> ;
      */
 
-    in.read(buf, 6);
-    if (!in) throw std::runtime_error("expecting parity game specification");
-    if (strncmp(buf, "parity", 6) != 0) throw std::runtime_error("expecting parity game specification");
+    read_parity_keyword(rd);
 
-    skip_whitespace(rd);
-    if (!read_uint64(rd, &n)) throw std::runtime_error("missing number of nodes");
+    rd.skip_whitespace();
+    if (!rd.read_uint64(&n)) throw std::runtime_error("missing number of nodes");
 
-    skip_whitespace(rd);
-    if (rd->sbumpc() != ';') throw std::runtime_error("missing ';'");
+    rd.skip_whitespace();
+    if (rd.get() != ';') throw std::runtime_error("missing ';'");
 
     // check if next token is 'start'
     // that means "start" <initial vertex id> ";"
     // which we ignore...
     {
-        skip_whitespace(rd);
-        int ch = rd->sgetc();
-        if (ch == 's') skip_line(rd);
+        rd.skip_whitespace();
+        int ch = rd.peek();
+        if (ch == 's') rd.skip_line();
     }
 
     /**
@@ -399,9 +451,9 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
 
     while (node_count < n_vertices) {
         uint64_t id;
-        skip_whitespace(rd);
+        rd.skip_whitespace();
         // TODO: assume size is n, not n+1
-        if (!read_uint64(rd, &id)) {
+        if (!rd.read_uint64(&id)) {
             // we expect maybe one more node...
             if (node_count == n_vertices - 1 && !seen[n_vertices - 1]) {
                 n_vertices -= 1;
@@ -418,12 +470,12 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         seen[id] = true;
         node_count++;
 
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &n)) throw std::runtime_error("missing priority");
+        rd.skip_whitespace();
+        if (!rd.read_uint64(&n)) throw std::runtime_error("missing priority");
         priority[id] = n;
 
-        skip_whitespace(rd);
-        if (!read_uint64(rd, &n)) throw std::runtime_error("missing owner");
+        rd.skip_whitespace();
+        if (!rd.read_uint64(&n)) throw std::runtime_error("missing owner");
         if (n != 0 and n != 1) throw std::runtime_error("invalid owner (must be 0 or 1)");
         const int cur_owner = (int) n;
         builder.set_owner((int)id, player_from_int(cur_owner));
@@ -433,8 +485,8 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
 
         // parse successors and optional label
         for (;;) {
-            skip_whitespace(rd);
-            if (!read_uint64(rd, &n)) throw std::runtime_error("missing successor");
+            rd.skip_whitespace();
+            if (!rd.read_uint64(&n)) throw std::runtime_error("missing successor");
             if (n >= (uint64_t)n_vertices) {
                 std::stringstream err;
                 err << "invalid successor for id " << id;
@@ -448,22 +500,14 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
                 count++;
             }
 
-            char ch;
-            skip_whitespace(rd);
-            if (!(in >> ch)) throw std::runtime_error("missing ; to end line");
+            const int ch = rd.next_token();
+            if (ch == EOF) throw std::runtime_error("missing ; to end line");
             if (ch == ',') continue; // next successor
             if (ch == ';') break; // end of line
             if (ch == '\"') {
-                std::string label;
-                while (true) {
-                    in >> ch;
-                    if (ch == '\"') break;
-                    label += ch;
-                }
+                builder.set_label((int)id, rd.read_label());
                 // now read ;
-                skip_whitespace(rd);
-                if (!(in >> ch) or ch != ';') throw std::runtime_error("missing ; to end line");
-                builder.set_label((int)id, label);
+                if (rd.next_token() != ';') throw std::runtime_error("missing ; to end line");
             }
             break;
         }

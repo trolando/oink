@@ -450,6 +450,7 @@ private:
     inline long rng(long low, long high) { return std::uniform_int_distribution<> (low, high)(generator); }
 
     friend class PGParser;
+    friend class GameBuilder;
 };
 
 }

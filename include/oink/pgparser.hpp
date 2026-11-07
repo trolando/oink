@@ -25,6 +25,9 @@ namespace pg {
 
 /**
  * Parse a .pg file
+ *
+ * The parsers read the stream in large blocks, so they may consume input after the end
+ * of the game: do not read anything else from the same stream afterwards.
  */
 class PGParser
 {
