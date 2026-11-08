@@ -20,6 +20,7 @@
 
 
 #define PARTIALLY_CLOSED 0 // find tangles in partially locally closed regions, but costs time on practical games
+                           // (its search uses <Q> as a stack, which needs a change for the kept regions, see tl)
 
 namespace pg {
 
@@ -43,17 +44,31 @@ TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
 {
     // attract vertices with an edge to <v>
     for (auto curedge = ins(v); *curedge != -1; curedge++) {
-        int from = *curedge;
-        if (Z[from]) {
-            // already in Z, maybe set strategy (for vertices in the original target set)
-            if (owner(from) == pl and str[from] == -1) str[from] = v;
-        } else if (R[from]) {
+        const int from = *curedge;
+        // (only vertices in <R> but not in <Z>; the heads of <pl> get their strategy after the
+        // attraction, see tl)
+        if (C[from]) {
             if (owner(from) != pl) {
                 // check if opponent can escape
                 unsigned int e = escs[from];
                 if (e == 0) {
-                    for (auto curedge = outs(from); *curedge != -1; curedge++) {
-                        if (G[*curedge]) e++;
+                    if (count_in_R) {
+                        // the higher regions are kept from the last pass, so their vertices
+                        // were not attracted in this one: count the successors that are not
+                        // attracted yet (in <R>), and <v>
+                        e = 1;
+                        for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                            if (R[*curedge]) e++;
+                        }
+                    } else {
+                        // first time in this attraction: start from the number of successors in G
+                        e = gdeg[from];
+                        if (e == 0) {
+                            for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                                if (G[*curedge]) e++;
+                            }
+                            gdeg[from] = e;
+                        }
                     }
                 }
                 escs[from] = --e;
@@ -61,6 +76,7 @@ TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
             }
             // attract
             Z[from] = true;
+            C[from] = false;
             str[from] = owner(from) == pl ? v : -1;
             Q.push(from);
 #ifndef NDEBUG
@@ -83,7 +99,7 @@ TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
  * Update <str> with the obtained attractor strategy.
  */
 bool
-TLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int maxpr)
+TLSolver::attractTangle(const int t, const int v0, const int pl, bitset &R, bitset &Z, int maxpr)
 {
     /**
      * Check if tangle is won by player <pl> and not deleted.
@@ -91,6 +107,7 @@ TLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int max
     {
         const int tangle_pr = tpr[t];
         if (tangle_pr == -1) return false; // deleted tangle
+        if (tlazy[t] == 2) return false; // a broken region tangle (analysed later)
         if (tangle_pr > maxpr) return false; // too high...
         if (pl != (tangle_pr&1)) return false; // not of desired parity
     }
@@ -101,9 +118,27 @@ TLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int max
     {
         int e = tescs[t];
         if (e == 0) {
-            int v, *ptr = tout[t];
-            while ((v=*ptr++) != -1) {
-                if (G[v]) e++;
+            int v, *ptr = &toutdata[toutpos[t]];
+            if (count_in_R) {
+                // The higher regions are kept from the last pass (see tl), so their vertices
+                // were not attracted in this pass: count the escapes not attracted yet (in
+                // <R>) and <v0>. As in a full pass, where the counter starts at the first
+                // escape attracted into a region the tangle can be attracted into, an escape
+                // in another region (of the other player or lower than the tangle) blocks it.
+                const int tpr_t = tpr[t];
+                while ((v=*ptr++) != -1) {
+                    if (!G[v]) continue;
+                    if (R[v] or v == v0) {
+                        e++;
+                    } else {
+                        const Region &r = regions[regidx[v]];
+                        if ((r.pr&1) != pl or r.pr < tpr_t) { e = INT_MAX/2; break; }
+                    }
+                }
+            } else {
+                while ((v=*ptr++) != -1) {
+                    if (G[v]) e++;
+                }
             }
         }
         tescs[t] = --e;
@@ -114,18 +149,20 @@ TLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int max
      * On-the-fly detect out-of-game tangles
      */
     {
-        int *ptr = tv[t];
+        int *ptr = &tvdata[tvpos[t]];
         for (;;) {
             const int v = *ptr++;
             if (v == -1) break;
             ptr++; // skip strategy
             if (!G[v]) {
                 // on-the-fly detect out-of-game tangles
+                if (tlazy[t]) { tlazy[t] = 2; return false; } // (a region tangle: analysed later)
                 tpr[t] = -1; // delete the tangle
                 return false; // is now a deleted tangle
             }
         }
     }
+    if (tlazy[t]) lreg[t] = cur_ridx;
 
     if (maxpr == INT_MAX) {
         // attracted to a dominion, so delete the tangle
@@ -136,14 +173,14 @@ TLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int max
      * Attract!
      */
     {
-        int *ptr = tv[t];
+        int *ptr = &tvdata[tvpos[t]];
         for (;;) {
             const int v = *ptr++;
             if (v == -1) break;
             const int s = *ptr++;
-            if (Z[v]) continue; // already in <Z>
-            if (!R[v]) continue; // not in <R> (might be higher region)
+            if (!C[v]) continue; // already in <Z>, or not in <R> (might be higher region)
             Z[v] = true;
+            C[v] = false;
             str[v] = s;
             Q.push(v);
 
@@ -174,8 +211,72 @@ TLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int max
 __attribute__((always_inline)) void
 TLSolver::attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr)
 {
-    const auto &in_cur = tin[v];
-    for (int from : in_cur) attractTangle(from, pl, R, Z, maxpr);
+    if (!has_tin[v]) return;
+    const int *ts = &tin_pool[tin_off[v]];
+    for (unsigned int i = 0, n = tin_size[v]; i < n; i++) attractTangle(ts[i], v, pl, R, Z, maxpr);
+}
+
+
+/**
+ * Before attracting to <Z> from <R>: the candidates for attraction are the vertices in <R>
+ * but not in <Z> (in <C>). Every vertex added to <Z> is then removed from <C>. (Testing
+ * one bitset instead of <Z> and then <R> makes the attraction about twice as fast on games
+ * with many edges.)
+ */
+void
+TLSolver::setCandidates(const bitset &R, const bitset &Z)
+{
+    C = R;
+    C -= Z;
+}
+
+
+/**
+ * Store the tangle in <tangle> (with the strategy in <strat>) of priority <pr>, with the
+ * escapes in <tangleto>, and link it into <tin>.
+ */
+void
+TLSolver::addTangle(const int pr, const int *strat)
+{
+    // new tangle idx
+    const int tidx = tpr.size();
+
+    // add back links to all normal vertices in our [out]
+    for (unsigned int x = 0; x < tangleto.size(); x++) {
+        const int e = tangleto[x];
+        if (!has_tin[e]) {
+            has_tin[e] = true;
+            tin_size[e] = 0;
+            tin_cap[e] = 0;
+        }
+        if (tin_size[e] == tin_cap[e]) {
+            // move the list of <e> to a new block of twice the size at the end of the pool
+            const unsigned int cap = tin_cap[e] ? 2*tin_cap[e] : 2;
+            const size_t off = tin_pool.size();
+            tin_pool.resize(off+cap);
+            if (tin_size[e]) std::copy(&tin_pool[tin_off[e]], &tin_pool[tin_off[e]]+tin_size[e], &tin_pool[off]);
+            tin_off[e] = off;
+            tin_cap[e] = cap;
+        }
+        tin_pool[tin_off[e]+tin_size[e]++] = tidx;
+    }
+
+    // store the tangle: its vertex-strategy pairs and its escapes (each ending with -1)
+    tvpos.push_back(tvdata.size());
+    for (const int v : tangle) {
+        tvdata.push_back(v);
+        tvdata.push_back(strat[v]);
+    }
+    tvdata.push_back(-1);
+    toutpos.push_back(toutdata.size());
+    toutdata.insert(toutdata.end(), &tangleto[0], &tangleto[0]+tangleto.size());
+    toutdata.push_back(-1);
+
+    // and set p to pr
+    tpr.push_back(pr);
+    tescs.push_back(0);
+    tlazy.push_back(0);
+    lreg.push_back(-1);
 }
 
 
@@ -186,10 +287,10 @@ TLSolver::attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr)
  * If the tangle is closed, it is a dominion and added to <S> and <Q>.
  */
 bool
-TLSolver::extractTangles(int startvertex, bitset &R, int *str)
+TLSolver::extractTangles(int startvertex, bitset &R, int *str, int tangle_pr)
 {
     bool new_tangles = false;
-    const int pr = priority(startvertex);
+    const int pr = tangle_pr >= 0 ? tangle_pr : priority(startvertex);
     const int pl = pr&1;
 
     /**
@@ -365,31 +466,7 @@ pearce_again:
         }
 #endif
 
-        // new tangle idx
-        const int tidx = tpr.size();
-
-        // add back links to all normal vertices in our [out]
-        for (unsigned int x = 0; x < tangleto.size(); x++) tin[tangleto[x]].push_back(tidx);
-
-        // move tangleto into vout
-        int* _tout = new int[tangleto.size()+1];
-        std::copy(&tangleto[0], &tangleto[tangleto.size()], _tout);
-        _tout[tangleto.size()] = -1;
-        tout.push_back(_tout);
-
-        // move tangle into vv
-        int* _vv = new int[tangle.size()*2+1], c=0;
-        for (const int v : tangle) {
-            _vv[c++] = v;
-            _vv[c++] = str[v];
-        }
-        _vv[c] = -1;
-        tv.push_back(_vv);
-
-        // and set p to pr
-        tpr.push_back(pr);
-        tescs.push_back(0);
-
+        addTangle(pr, str);
         tangles++;
         tangle.clear();
         tangleto.clear();
@@ -401,48 +478,317 @@ pearce_again:
 }
 
 
+/**
+ * Learn the closed region <ridx> (of player <pl> and priority <pr>, in <Z>) as one region
+ * tangle, if all its escapes are in the highest region of <pl> (in <H>): then none of its
+ * tangles can be attracted into a higher region than the region as a whole, so it is only
+ * decomposed into its tangles once it is broken (see analyseLazies). This avoids learning
+ * many small tangles that all go into the highest region. Returns whether it was learned.
+ */
+bool
+TLSolver::learnRegion(const int ridx, const int pl, const int pr)
+{
+    bool single = true;
+    for (size_t i = regions[ridx].begin; single and i < Q.size(); i++) {
+        const int u = Q[i];
+        if (owner(u) == pl) continue;
+        for (auto curedge = outs(u); *curedge != -1; curedge++) {
+            const int to = *curedge;
+            if (!G[to] or Z[to] or escapes[to]) continue;
+            if (!H[pl][to]) { single = false; break; }
+            escapes[to] = true;
+            tangleto.push(to);
+        }
+    }
+    for (unsigned int x = 0; x < tangleto.size(); x++) escapes[tangleto[x]] = false;
+    if (!single or tangleto.empty()) { // (without escapes, extracting finds the dominion)
+        tangleto.clear();
+        return false;
+    }
+    for (size_t i = regions[ridx].begin; i < Q.size(); i++) tangle.push_back(Q[i]);
+    addTangle(pr, str);
+    tlazy.back() = 1;
+    lreg.back() = ridx;
+    lazies.push_back((int)tpr.size()-1);
+    tangles++;
+    tangle.clear();
+    tangleto.clear();
+    return true;
+}
+
+
+/**
+ * Decompose region tangles into their tangles (see learnRegion): all of them (after a
+ * dominion), or (if <broken>) those of earlier passes that this pass did not attract again
+ * as a whole, into the highest region of their player, or that lost vertices. Their tangles
+ * are learned from their vertices that are still in <G>, with their strategy, and dominions
+ * found are solved. Returns whether dominions were found.
+ */
+bool
+TLSolver::analyseLazies(const bool broken)
+{
+    bool found = false;
+    size_t keepn = 0;
+    for (size_t li = 0; li < lazies.size(); li++) {
+        const int t = lazies[li];
+        if (tpr[t] == -1 or tlazy[t] == 0) continue;
+        if (broken and (size_t)t >= pass_tangles) { lazies[keepn++] = t; continue; } // (new)
+        const int pr = tpr[t], pl = pr&1;
+        // (still delayed if it is (as a whole) in the highest region of its player)
+        if (broken and tlazy[t] == 1 and lreg[t] >= 0 and (size_t)lreg[t] < regions.size() and
+            (pl == 0 ? regions[lreg[t]].highest0 : regions[lreg[t]].highest1)) { lazies[keepn++] = t; continue; }
+        // its vertices in <G> and their strategy, without the vertices of <pl> whose strategy
+        // leaves them
+        for (int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) {
+            if (G[*ptr]) { LB[*ptr] = true; astr[*ptr] = *(ptr+1); pea_vidx[*ptr] = 0; }
+        }
+        for (bool changed = true; changed; ) {
+            changed = false;
+            for (int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) {
+                const int v = *ptr;
+                if (LB[v] and owner(v) == pl and (astr[v] < 0 or !LB[astr[v]])) { LB[v] = false; changed = true; }
+            }
+        }
+        const auto D = dominions;
+        pea_curidx = 1;
+        for (auto v = LB.find_last(); v != bitset::npos; v = LB.find_prev(v)) {
+            if (pea_vidx[v] == 0) extractTangles((int)v, LB, astr, pr);
+        }
+        for (int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) LB[*ptr] = false;
+        tpr[t] = -1;
+        tlazy[t] = 0;
+        if (D != dominions) {
+            // solve the dominions (in <S>) with their attractor in <G>
+            for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) str[v] = astr[v];
+            count_in_R = false;
+            std::fill(escs, escs+nodecount(), '\0');
+            std::fill(tescs.begin(), tescs.end(), '\0');
+            Q.clear();
+            for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) Q.push(v);
+            setCandidates(G, S);
+            for (unsigned int qh = 0; qh < Q.size(); qh++) {
+                const int v = Q[qh];
+                attractVertices(pl, v, G, S);
+                attractTangles(pl, v, G, S, INT_MAX);
+            }
+            Q.clear();
+            for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) Solver::solve(v, pl, str[v]);
+            G -= S;
+            S.reset();
+            std::fill(gdeg, gdeg+nodecount(), 0); // (counted again when needed)
+            escs_is_gdeg = false;
+            found = true;
+        }
+    }
+    lazies.resize(keepn);
+    return found;
+}
+
+
+/**
+ * The region of the current pass that tangle <t> would be attracted into in the next pass:
+ * the lowest region of its escapes, as its last escape is attracted there, if all its
+ * escapes are in regions of its player that are not lower than the tangle. Returns -1 if
+ * there is none.
+ */
+int
+TLSolver::tangleTarget(const int t)
+{
+    if (tpr[t] == -1) return -1;
+    const int tpl = tpr[t]&1;
+    int k = -1;
+    for (int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ptr++) {
+        if (!G[*ptr]) continue;
+        const int r = regidx[*ptr];
+        if ((regions[r].pr&1) != tpl or regions[r].pr < tpr[t]) return -1;
+        if (r > k) k = r;
+    }
+    return k;
+}
+
+
 bool
 TLSolver::tl(void)
 {
     bool new_tangles = false;
 
-    std::fill(escs, escs+nodecount(), '\0');
+    if (escs_is_gdeg) {
+        // The last dominion attraction left in <escs>, for each vertex still in <G> that has an
+        // edge into the dominion, its number of successors that are not in the dominion.
+        for (int v=0; v<nodecount(); v++) {
+            if (escs[v] != 0 and G[v]) gdeg[v] = escs[v];
+            escs[v] = 0;
+        }
+        escs_is_gdeg = false;
+    } else {
+        std::fill(escs, escs+nodecount(), '\0');
+    }
     std::fill(tescs.begin(), tescs.end(), '\0');
 
     bool highest0 = true;
     bool highest1 = true;
+    bool first_region = true; // the first region is attracted in the full unsolved game <G>
 
-    R = G;
+    pass_tangles = tpr.size();
+    int extend = -1; // the region of the last pass that this pass extends (see below)
+    const bool kept = keep >= 0;
+    // (<H> keeps the highest region of each player if that region is kept, see below)
+    for (int p = 0; p < 2; p++) {
+        bool k = false;
+        for (int i = 0; kept and i < keep; i++) if ((regions[i].pr&1) == p) { k = true; break; }
+        if (!k) H[p].reset();
+    }
+    const int xreg = keep; // (the region extended by this pass, or -1)
+    if (kept) {
+        // The regions above region <keep> of the last pass did not change: none of its new
+        // tangles can be attracted into them, so this pass would compute them again exactly
+        // (and find no new tangles in them). Keep them. Region <keep> itself is computed in
+        // the same subgame again, with more tangles, so it only grows: start from its
+        // vertices (and heads), attract the new tangles that go into it, and attract from
+        // there. Then continue with the lower regions, in the subgame of their vertices.
+        const Region &k = regions[keep];
+        highest0 = k.highest0;
+        highest1 = k.highest1;
+        first_region = keep == 0;
+        const bool last = keep+1 == (int)regions.size();
+        const size_t kend = last ? Q.size() : regions[keep+1].begin;
+        const size_t hend = last ? heads.size() : regions[keep+1].hbegin;
+        // (the vertices and heads of the region are in <Zx> and <Vx> if the last pass ended it
+        // there, see the end of the region below)
+        if (zx != keep) {
+            Zx.reset();
+            Vx.reset();
+            for (size_t i = k.begin; i < kend; i++) Zx[Q[i]] = true;
+            for (size_t i = k.hbegin; i < hend; i++) Vx[heads[i]] = true;
+        }
+        Z.swap(Zx);
+        V.swap(Vx);
+        zx = -1;
+        if (keep == 0) {
+            R = G;
+            R -= Z;
+        } else {
+            R.reset();
+            for (size_t i = kend; i < Q.size(); i++) R[Q[i]] = true;
+        }
+        while (Q.size() > kend) Q.pop();
+        heads.resize(hend);
+        regions.resize(keep+1);
+        count_in_R = true;
+        extend = keep;
+        // (region tangles in the recomputed regions are attracted again, or analysed at the end)
+        for (const int t : lazies) if (tlazy[t] == 1 and lreg[t] > keep) lreg[t] = -1;
+    } else {
+        // After a dominion: analyse the region tangles (see the end of tl).
+        if (analyseLazies(false)) { keep = -1; return true; }
+        R = G;
+        Q.clear();
+        heads.clear();
+        regions.clear();
+        count_in_R = false;
+        zx = -1;
+    }
+    setCandidates(R, Z);
+    // During a pass, <Q> holds the vertices of its regions, region by region, in the order of
+    // attraction; the first <qn> have been processed (their predecessors attracted).
+    unsigned int qn = Q.size();
     auto top = R.find_last();
-
-    while (top != bitset::npos) {
-        const int pr = priority(top);
-        const int pl = priority(top)&1;
+    while (top != bitset::npos or extend >= 0) {
+        int pr, pl, ridx;
         unsigned int vcnt = 0;
 
-        // attract from all heads with priority <pr> that are in <R>
-        for (; top != bitset::npos; top = R.find_prev(top)) {
-            if ((priority(top)&1) != (pr&1)) break; // otf compress
-            // if (priority(top) != pr) break; // disable otf compress
-
-            vcnt++;
-            V[top] = true; // heads
-            Z[top] = true; // add to <Z>
-            str[top] = -1;
-            Q.push(top);
-
-#ifndef NDEBUG
-            // maybe report event
-            if (trace >= 3) {
-                logger << "\033[1;37mattracting towards \033[36m" << label_vertex(top) << "\033[m for \033[1;36m" << pl << "\033[m" << std::endl;
+        if (extend >= 0) {
+            ridx = extend;
+            cur_ridx = ridx;
+            extend = -1;
+            pr = regions[ridx].pr;
+            pl = pr&1;
+            // attract the new tangles that go into this region (see the end of tl)
+            for (const int t : seeds) {
+                bool ingame = true;
+                for (int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) {
+                    if (!G[*ptr]) { ingame = false; break; }
+                }
+                if (!ingame) {
+                    if (tlazy[t]) tlazy[t] = 2; // (a region tangle: analysed later)
+                    else tpr[t] = -1;
+                    continue;
+                }
+                if (tlazy[t]) lreg[t] = ridx;
+                for (int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) {
+                    const int u = *ptr;
+                    if (!C[u]) continue; // (in <Z>, or not in <R>)
+                    Z[u] = true;
+                    C[u] = false;
+                    str[u] = *(ptr+1);
+                    Q.push(u);
+                }
             }
-#endif
-
-            while (Q.nonempty()) {
-                const int v = Q.pop();
+            for (; qn < Q.size(); qn++) {
+                const int v = Q[qn];
                 R[v] = false; // remove from <R>
+                if (kept) regidx[v] = ridx; // (see the end of tl)
                 attractVertices(pl, v, R, Z);
                 attractTangles(pl, v, R, Z, pr);
+            }
+            // (more heads, of lower priorities, if no vertex of the other parity is left)
+            top = R.find_last();
+        } else {
+            pr = priority(top);
+            pl = priority(top)&1;
+            ridx = (int)regions.size();
+            cur_ridx = ridx;
+            regions.push_back({Q.size(), heads.size(), pr, highest0, highest1});
+        }
+
+        // attract from all heads with priority <pr> that are in <R>
+        while (top != bitset::npos and (priority(top)&1) == (pr&1)) { // otf compress
+            // first add all heads of the same parity that are in <R> to <Z>, then attract
+            // once: the region is the same, but the vertices of these priorities that the
+            // earlier heads would attract are now heads, so the opponent's need no escape
+            // counter (attracting from each head separately did several times more counter
+            // updates, even on games where every vertex is a head)
+            for (; top != bitset::npos; top = R.find_prev(top)) {
+                if ((priority(top)&1) != (pr&1)) break;
+                // if (priority(top) != pr) break; // disable otf compress
+
+                vcnt++;
+                V[top] = true; // heads
+                heads.push_back(top);
+                Z[top] = true; // add to <Z>
+                C[top] = false;
+                str[top] = -1;
+                Q.push(top);
+
+#ifndef NDEBUG
+                // maybe report event
+                if (trace >= 3) {
+                    logger << "\033[1;37mattracting towards \033[36m" << label_vertex(top) << "\033[m for \033[1;36m" << pl << "\033[m" << std::endl;
+                }
+#endif
+            }
+
+            // (the queue is processed in FIFO order)
+            for (; qn < Q.size(); qn++) {
+                const int v = Q[qn];
+                R[v] = false; // remove from <R>
+                if (kept) regidx[v] = ridx; // (see the end of tl)
+                attractVertices(pl, v, R, Z);
+                attractTangles(pl, v, R, Z, pr);
+            }
+
+            // (more heads, of lower priorities, if no vertex of the other parity is left; the
+            // vertices above <top> are no longer in <R>, so search down from <top>)
+            if (top != bitset::npos and !R[top]) top = R.find_prev(top);
+        }
+
+        // the heads of <pl> without a strategy play to <Z> if they can (doing this during the
+        // attraction costs a test of each predecessor in <Z> of each attracted vertex)
+        for (size_t i = regions[ridx].hbegin; i < heads.size(); i++) {
+            const int h = heads[i];
+            if (owner(h) != pl or str[h] != -1) continue;
+            for (auto curedge = outs(h); *curedge != -1; curedge++) {
+                if (Z[*curedge]) { str[h] = *curedge; break; }
             }
         }
 
@@ -550,9 +896,6 @@ TLSolver::tl(void)
                  * Note: each bottom SCC must contain a top vertex.
                  */
 
-                std::fill(pea_vidx, pea_vidx+nodecount(), '\0');
-                pea_curidx = 1;
-
                 bool highest = pl == 0 ? highest0 : highest1;
                 if (highest) {
                     // dominion
@@ -570,16 +913,30 @@ TLSolver::tl(void)
 #endif
                     dominions++;
 
-                    // start anew with escs
-                    std::fill(escs, escs+nodecount(), '\0');
-                    std::fill(tescs.begin(), tescs.end(), '\0');
+                    // Extend the dominion to its attractor in the full unsolved game <G>. Not
+                    // needed for the first region: it was attracted in <G> with every tangle
+                    // of <pl> (none has a higher priority), so it is already closed under
+                    // attraction. Its tangles are deleted lazily once found out of the game.
+                    // (If this pass extended the first region of the last one, its vertices of
+                    // the last pass were not attracted again, so <escs> does not have the number
+                    // of successors left in <G> of all vertices next to it: count those again.)
+                    const bool recount = first_region and count_in_R;
+                    if (!first_region) {
+                        // start anew with escs
+                        count_in_R = false;
+                        std::fill(escs, escs+nodecount(), '\0');
+                        std::fill(tescs.begin(), tescs.end(), '\0');
 
-                    for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) Q.push(v);
+                        Q.clear();
+                        for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) Q.push(v);
 
-                    while (Q.nonempty()) {
-                        const int v = Q.pop();
-                        attractVertices(pl, v, G, Z);
-                        attractTangles(pl, v, G, Z, INT_MAX);
+                        setCandidates(G, Z);
+                        for (unsigned int qh = 0; qh < Q.size(); qh++) {
+                            const int v = Q[qh];
+                            attractVertices(pl, v, G, Z);
+                            attractTangles(pl, v, G, Z, INT_MAX);
+                        }
+                        Q.clear();
                     }
 
                     for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) {
@@ -587,49 +944,105 @@ TLSolver::tl(void)
                     }
 
                     G -= Z; // remove from G
+                    if (recount) {
+                        std::fill(gdeg, gdeg+nodecount(), 0); // (counted again when needed)
+                        escs_is_gdeg = false;
+                    } else {
+                        escs_is_gdeg = true;
+                    }
                     V.reset();
                     Z.reset();
+                    keep = -1;
                     return true; // end tl so that we can restart...
                 } else {
                     const auto D = dominions;
-                    for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
-                        if (extractTangles(v, Z, str)) new_tangles = true;
+                    if (learnRegion(ridx, pl, pr)) {
+                        new_tangles = true;
+                    } else {
+                        std::fill(pea_vidx, pea_vidx+nodecount(), '\0');
+                        pea_curidx = 1;
+                        for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
+                            if (extractTangles(v, Z, str)) new_tangles = true;
+                        }
                     }
 
                     // Extend any dominions that were found.
                     // (Any solved vertices are now in <S>.)
                     if (D != dominions) {
                         // start anew with escs
+                        count_in_R = false;
                         std::fill(escs, escs+nodecount(), '\0');
                         std::fill(tescs.begin(), tescs.end(), '\0');
 
+                        Q.clear();
                         for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) Q.push(v);
 
-                        while (Q.nonempty()) {
-                            const int v = Q.pop();
+                        setCandidates(G, S);
+                        for (unsigned int qh = 0; qh < Q.size(); qh++) {
+                            const int v = Q[qh];
                             attractVertices(pl, v, G, S);
                             attractTangles(pl, v, G, S, INT_MAX);
                         }
+                        Q.clear();
 
                         for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) {
                             Solver::solve(v, pl, str[v]);
                         }
 
                         G -= S; // remove from G
+                        escs_is_gdeg = true;
                         S.reset();
                         V.reset();
                         Z.reset();
+                        keep = -1;
                         return true; // end tl so that we can restart...
                     }
                 }
             }
         }
 
+        if (pl == 0 ? regions[ridx].highest0 : regions[ridx].highest1) H[pl] = Z;
+        if (ridx == 0 or ridx == xreg) {
+            // (keep the vertices and heads of the first region and of an extended region, for
+            // the next pass if it extends the region, see above)
+            Z.swap(Zx);
+            V.swap(Vx);
+            zx = ridx;
+        }
         V.reset();
         Z.reset();
 
         if (pr&1) highest1 = false;
         else highest0 = false;
+        first_region = false;
+    }
+
+    // A new tangle is attracted (in the next pass) into the lowest region of its escapes, if
+    // that region is of its player and not lower than the tangle, as its last escape is
+    // attracted there. The next pass keeps the regions above the highest such region.
+    // A region tangle that was not attracted again (as a whole) in a recomputed region, or
+    // that lost vertices, is analysed now: its tangles are learned.
+    if (analyseLazies(true)) { keep = -1; return true; }
+    if (tpr.size() > pass_tangles) new_tangles = true;
+
+    keep = -1;
+    if (new_tangles) {
+        // (a pass that keeps regions needs <regidx> while it runs, see attractTangle)
+        if (!kept) {
+            for (size_t k = 0; k < regions.size(); k++) {
+                const size_t end = k+1 < regions.size() ? regions[k+1].begin : Q.size();
+                for (size_t i = regions[k].begin; i < end; i++) regidx[Q[i]] = (int)k;
+            }
+        }
+        int q = INT_MAX;
+        seeds.clear();
+        for (size_t t = pass_tangles; t < tpr.size(); t++) {
+            const int k = tangleTarget((int)t);
+            if (k < 0 or k > q) continue;
+            if (k < q) { q = k; seeds.clear(); }
+            seeds.push_back((int)t);
+        }
+        if (q != INT_MAX) keep = q;
     }
 
     return new_tangles;
@@ -639,14 +1052,32 @@ TLSolver::tl(void)
 void
 TLSolver::run()
 {
-    tin = new std::vector<int>[nodecount()];
+    tin_off = new size_t[nodecount()];
+    tin_size = new unsigned int[nodecount()];
+    tin_cap = new unsigned int[nodecount()];
+    has_tin.resize(nodecount());
     str = new int[nodecount()];
     escs = new unsigned int[nodecount()];
+    gdeg = new unsigned int[nodecount()];
+    regidx = new int[nodecount()];
+    astr = new int[nodecount()];
+    LB.resize(nodecount());
+    C.resize(nodecount());
+    H[0].resize(nodecount());
+    H[1].resize(nodecount());
+    // if no vertex is disabled, every successor is in <G>; otherwise count lazily
+    if (disabled.none()) {
+        for (int v=0; v<nodecount(); v++) gdeg[v] = game.outcount(v);
+    } else {
+        std::fill(gdeg, gdeg+nodecount(), 0);
+    }
 
     V.resize(nodecount());
     W.resize(nodecount());
     R.resize(nodecount());
     Z.resize(nodecount());
+    Zx.resize(nodecount());
+    Vx.resize(nodecount());
     S.resize(nodecount());
     G = disabled;
     G.flip();
@@ -681,12 +1112,15 @@ TLSolver::run()
 #endif
 
     // Free all explicitly allocated memory
-    for (auto &x : tv) delete[] x;
-    for (auto &x : tout) delete[] x;
-    delete[] tin;
+    delete[] tin_off;
+    delete[] tin_size;
+    delete[] tin_cap;
+    delete[] regidx;
+    delete[] astr;
     delete[] str;
     delete[] pea_vidx;
     delete[] escs;
+    delete[] gdeg;
 }
 
 }
