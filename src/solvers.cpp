@@ -72,7 +72,7 @@ Solvers::Solvers()
     _add("ssi", "symmetric strategy improvement", 0, [] (Oink& oink, Game& game) { return std::make_unique<SSISolver>(oink, game); });
     _add("spm", "accelerated small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<SPMSolver>(oink, game); });
     _add("tspm", "traditional small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<TSPMSolver>(oink, game); });
-    _add("mspm", "Maciej' modified small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<MSPMSolver>(oink, game); });
+    _add("mspm", "small progress measures with both strategies from one measure (Gazda, Willemse)", 0, [] (Oink& oink, Game& game) { return std::make_unique<MSPMSolver>(oink, game); });
     _add("sspm", "succinct small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<SSPMSolver>(oink, game); });
     _add("bsspm", "bounded succinct small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<BoundedSSPMSolver>(oink, game); });
     _add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<QPTSolver>(oink, game); });

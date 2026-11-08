@@ -156,7 +156,7 @@ Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
 TSPM            | Traditional small progress measures (standard variant without cycle acceleration)
 SPM             | Accelerated version of small progress measures (cycle acceleration variant by TvD)
-MSPM            | Maciej Gazda's modified small progress measures
+MSPM            | Small progress measures with strategies for both players from one measure (Gazda and Willemse's algorithm)
 SSPM            | Quasi-polynomial time succinct progress measures
 BSSPM           | Quasi-polynomial time succinct progress measures (bounding variant by TvD and MJ, often faster)
 QPT             | Quasi-polynomial time ordered progress measures
