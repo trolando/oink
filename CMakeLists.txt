@@ -27,7 +27,7 @@ if(NOT TARGET lace::lace)
     FetchContent_Declare(
         lace
         GIT_REPOSITORY https://github.com/trolando/lace.git
-        GIT_TAG        v2.3.2
+        GIT_TAG        v2.6.0
     )
     # Keep the bundled lace's CPU tuning consistent with Oink's. Uses the cache
     # default so an explicit -DLACE_NATIVE_OPT still wins.
