@@ -48,6 +48,6 @@ jobs:
     - name: '🚧 Configure'
       run: cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DOINK_BUILD_TESTS=ON
     - name: '🏗️ Build library and tests (excluding the CLI tool)'
-      run: cmake --build build --target oink test_solvers test_parser test_solution test_builder test_game
+      run: cmake --build build --target oink test_solvers test_parser test_io test_solution test_builder test_game test_verifier
     - name: '🧪 Test'
       run: ctest --test-dir build --output-on-failure -C ${{matrix.build_type}} -VV --timeout 60
