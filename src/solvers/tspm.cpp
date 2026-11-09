@@ -94,12 +94,15 @@ TSPMSolver::Prog(int *dst, int *src, int d, int pl)
     for (; i<d; i+=2) dst[i] = 0;
 
     int carry = (d == i) ? 1 : 0; // only increase if <d> has parity <pl>
+    const int first = i;
 
     for (; i<k; i+=2) {
         // increase or copy for same parity
         int v = src[i] + carry;
         if (v > counts[i]) {
-            dst[i] = 0;
+            // overflow: also reset the values copied below <i>, which are not 0 when <src>
+            // exceeds a count that was lowered after <src> was computed
+            for (int j=first; j<=i; j+=2) dst[j] = 0;
             carry = 1;
         } else {
             dst[i] = v;
