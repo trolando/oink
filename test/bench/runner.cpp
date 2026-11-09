@@ -137,7 +137,7 @@ struct LaceRunning
     explicit LaceRunning(int workers)
     {
         if (workers < 0) return;
-        lace_start((unsigned)workers, 10000000UL, 0);
+        lace_start((unsigned)workers, 10000000UL);
         running = true;
     }
 
@@ -445,7 +445,7 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
     // the worker is forked with the prepared game; Lace runs in the worker
     Worker worker([&](size_t s, uint32_t seed) { return execute(prepared, solvers[s], o, seed); },
                   [&] {
-                      if (o.workers >= 0) lace_start((unsigned)o.workers, 10000000UL, 0);
+                      if (o.workers >= 0) lace_start((unsigned)o.workers, 10000000UL);
                   },
                   [&] {
                       if (o.workers >= 0) lace_stop();

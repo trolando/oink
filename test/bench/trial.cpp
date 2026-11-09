@@ -240,7 +240,7 @@ execute(const Prepared& prepared, const SolverRun& run, const Options& options, 
         result.effective_solver = solver.effectiveSolver().value_or("none");
         result.effective_config = solver.effectiveSolver() ? solver.effectiveSolverOptions() : "";
         result.parallel = solver.parallel();
-        result.workers = options.workers < 0 ? -1 : (int)lace_worker_count();
+        result.workers = options.workers < 0 ? -1 : (int)lace_workers();
 
         // verify every strategy of the solution, outside the measurement
         start = Clock::now();

@@ -99,7 +99,7 @@ int
 test_fpi_parallel()
 {
     constexpr int workers = 4;
-    lace_start(workers, 100000, 0);
+    lace_start(workers, 100000);
     int result = 0;
     try {
         for (int invert : {0, 1}) check("fpi", invert, workers);
