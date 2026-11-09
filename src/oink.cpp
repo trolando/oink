@@ -535,9 +535,12 @@ Oink::run()
     logger << "solving using " << Solvers::desc(*solver) << std::endl;
 
     if (parallel_) {
-        // start Lace, unless it is already running
+        // start Lace, unless it is already running, with a task deque per worker that fits a
+        // task for every vertex: zlk's parallel attractor can have that many spawned at once,
+        // more than Lace's default of 100000 (Lace reserves the deques lazily, so this costs no
+        // memory up front)
         if (lace_worker_count() == 0) { // FIXME we should use lace_is_running or something like that, but it doesn't exist yet
-            lace_start(workers, 0, 0);
+            lace_start(workers, std::max<size_t>(100000, (size_t)game->vertexcount()+1000), 0);
             logger << "initialized Lace with " << lace_worker_count() << " workers" << std::endl;
             solve_loop(this);
             lace_stop();
