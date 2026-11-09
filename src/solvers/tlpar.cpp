@@ -397,7 +397,7 @@ TLParSolver::attractTanglePar(const int t, std::vector<int> &out)
 void
 TLParSolver::roundChunk(int start, int n)
 {
-    auto &out = pbuf[lace_worker_id()].v;
+    auto &out = pbuf[lace_get_worker()->worker].v;
     out.clear();
     const bool has_backlinks = !has_tin.empty();
     for (int i = start; i < start+n; i++) {
@@ -417,13 +417,12 @@ TLParSolver::roundChunk(int start, int n)
 }
 
 VOID_TASK_3(tlpar_round, TLParSolver*, s, int, start, int, n)
-void tlpar_round_CALL(lace_worker* lw, TLParSolver* s, int start, int n)
 {
     if (n > s->par_chunk) {
         const int half = n/2;
-        tlpar_round_SPAWN(lw, s, start+half, n-half);
-        tlpar_round_CALL(lw, s, start, half);
-        tlpar_round_SYNC(lw);
+        SPAWN(tlpar_round, s, start+half, n-half);
+        CALL(tlpar_round, s, start, half);
+        SYNC(tlpar_round);
     } else {
         s->roundChunk(start, n);
     }
@@ -458,7 +457,7 @@ TLParSolver::drain(const int pl, bitset &R, bitset &Z, const int maxpr, unsigned
             par_R = &R;
             par_Z = &Z;
             q_tail = end;
-            tlpar_round_CALL(lw, this, qh, end-qh);
+            tlpar_round_CALL(lw, lw_head, this, qh, end-qh);
             Q.grow(q_tail-end); // (the vertices attracted in the round, see roundChunk)
             par_rounds++;
             par_vertices += end-qh;
@@ -1323,26 +1322,26 @@ TLParSolver::parseOptions(std::string& opts)
 }
 
 VOID_TASK_1(tlpar_run, TLParSolver*, s)
-void tlpar_run_CALL(lace_worker* lw, TLParSolver* s)
 {
-    s->runPar(lw);
+    s->runPar(__lace_worker, __lace_dq_head);
 }
 
 void
 TLParSolver::run()
 {
     if (parallel()) {
-        pbuf.resize(lace_worker_count());
-        tlpar_run(this); // runs runPar on a Lace worker
+        pbuf.resize(lace_workers());
+        RUN(tlpar_run, this); // runs runPar on a Lace worker
     } else {
-        runPar(nullptr);
+        runPar(nullptr, nullptr);
     }
 }
 
 void
-TLParSolver::runPar(lace_worker* lw)
+TLParSolver::runPar(WorkerP* __lace_worker, Task* __lace_dq_head)
 {
-    this->lw = lw;
+    this->lw = __lace_worker;
+    this->lw_head = __lace_dq_head;
 
     str = new int[nodecount()];
     escs = new unsigned int[nodecount()];

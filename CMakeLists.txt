@@ -22,12 +22,12 @@ option(OINK_BUILD_NATIVE "Optimize for the build CPU (-march=native; not portabl
 # Dependencies
 include(FetchContent)
 if(NOT TARGET lace::lace)
-  find_package(lace QUIET)
+  find_package(lace 1.10 QUIET)
   if(NOT lace_FOUND)
     FetchContent_Declare(
         lace
         GIT_REPOSITORY https://github.com/trolando/lace.git
-        GIT_TAG        v2.6.0
+        GIT_TAG        v1.10.0
     )
     # Keep the bundled lace's CPU tuning consistent with Oink's. Uses the cache
     # default so an explicit -DLACE_NATIVE_OPT still wins.

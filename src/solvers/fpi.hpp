@@ -40,8 +40,8 @@ public:
     void runPar(void);
     void runSeq(void);
 
-    int update_block_rec(lace_worker*, int i, int n);
-    void run_par(lace_worker*);
+    int update_block_rec(WorkerP*, Task*, int i, int n);
+    void run_par(WorkerP*, Task*);
 
 private:
     template<bool Parallel, bool TrackChanges = false>

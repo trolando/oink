@@ -49,9 +49,9 @@ public:
     int switch_strategy_seq(int pl);
 
     void compute_val(int v, std::vector<int>& next);
-    void compute_all_val(lace_worker*);
-    int switch_strategy(lace_worker*, int pl, int begin, int count);
-    void run_par(lace_worker*);
+    void compute_all_val(WorkerP*, Task*);
+    int switch_strategy(WorkerP*, Task*, int pl, int begin, int count);
+    void run_par(WorkerP*, Task*);
 };
 
 }
