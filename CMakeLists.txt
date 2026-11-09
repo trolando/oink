@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 
 project(oink
-    VERSION 1.0.0
+    VERSION 1.1.0
     DESCRIPTION "Oink, an implementation of modern parity game solvers"
     HOMEPAGE_URL "https://github.com/trolando/oink"
     LANGUAGES C CXX
