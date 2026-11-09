@@ -117,6 +117,10 @@ PMTLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitse
                 continue; // already attracted
             } else if (!R[v]) {
                 return false; // not contained in Z+R
+            } else if (!G[v]) {
+                // the top of a higher region, which update() removes from Z again (the special
+                // case), so the other vertices of the tangle would play out of the region
+                return false;
             } else if (max_prio >= 0 and priority(v) > max_prio and ((priority(v) & 1) != pl)) {
                 return false;
             } else {
@@ -245,6 +249,9 @@ pearce_again:
                 i++;
             }
         } else {
+#ifndef NDEBUG
+            if (str[n] == -1 or !R[str[n]]) LOGIC_ERROR; // our strategy must stay in the region
+#endif
             const int s = str[n];
             if (i == 0) {
                 // beginEdge
@@ -781,6 +788,9 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
                 attractTangles(player, v, G, S, G, -1);
             }
 
+            // the solved vertices leave G, which can take away the only escape of an opponent
+            // vertex, so shortcuts() must treat them as changed (like lifted vertices)
+            Updated |= S;
             G -= S; // and remove from G
             S.reset();
         }
@@ -807,6 +817,22 @@ PMTLSolver::shortcuts(const int player, Measures &pm, Measures &target1, Measure
     }
     while (Q.nonempty()) {
         const int v = Q.pop();
+        // update attracts tangles as well as vertices: a tangle of <player> with an escape to
+        // <v> can be attracted into a higher region once <v> is lifted, which lifts all its
+        // vertices, so they are potentially liftable too (without this, a vertex of such a
+        // tangle could be given to the opponent and then lifted to top by <player>, leaving it
+        // unsolved)
+        if (use_tangles) {
+            for (const int t : tin[v]) {
+                if (tpr[t] == -1 or (tpr[t]&1) != player) continue;
+                for (int *ptr = tv[t]; *ptr != -1; ptr += 2) {
+                    const int u = *ptr;
+                    if (L[u] || !G[u]) continue;
+                    L[u] = true;
+                    Q.push(u);
+                }
+            }
+        }
         for (auto curedge = ins(v); *curedge != -1; curedge++) {
             int from = *curedge;
             if (L[from] || !G[from]) continue; // don't attract
@@ -834,6 +860,7 @@ PMTLSolver::shortcuts(const int player, Measures &pm, Measures &target1, Measure
 
     }
     L ^= G;
+    L &= G; // only the unsolved vertices that are not potentially liftable
     for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
         // logger << "\033[1;36mplayer " << (1-player) << " should win " << label_vertex(v) << "\033[m" << std::endl;
         target1.copy_top(v);
