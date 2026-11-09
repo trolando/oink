@@ -1,6 +1,9 @@
 # Oink
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![CI testing](https://github.com/trolando/oink/actions/workflows/ci-build.yml/badge.svg)](https://github.com/trolando/oink/actions/workflows/ci-build.yml)
+[![Linux](https://github.com/trolando/oink/actions/workflows/linux.yml/badge.svg)](https://github.com/trolando/oink/actions/workflows/linux.yml)
+[![macOS](https://github.com/trolando/oink/actions/workflows/macos.yml/badge.svg)](https://github.com/trolando/oink/actions/workflows/macos.yml)
+[![Windows](https://github.com/trolando/oink/actions/workflows/windows.yml/badge.svg)](https://github.com/trolando/oink/actions/workflows/windows.yml)
+[![FreeBSD](https://github.com/trolando/oink/actions/workflows/freebsd.yml/badge.svg)](https://github.com/trolando/oink/actions/workflows/freebsd.yml)
 
 Oink is a modern implementation of parity game solvers written in C++.
 Oink aims to provide high-performance implementations of state-of-the-art
@@ -40,6 +43,8 @@ See also:
 Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
 TL              | Tangle learning (standard variant)
+TLPAR           | (parallel) Tangle learning with parallel attraction
+TLJ             | Tangle learning with justifications (after Algorithm 7 of Lapauw, Bruynooghe and Denecker)
 RTL             | Recursive Tangle Learning (research variant)
 ORTL            | One-sided Recursive Tangle Learning (research variant)
 PTL             | Progressive Tangle Learning (research variant)
@@ -64,6 +69,8 @@ Algorithm       | Description
 FPI             | (parallel) Distraction Fixpoint Iteration (similar to APT algorithm and to Bruse/Falk/Lange)
 FPJ             | Fixpoint Iteration using Justifications
 FPJG            | Fixpoint Iteration using Justifications (greedy variant by TvD)
+FPIM            | Fixpoint Iteration that computes multi-strategies (all winning moves)
+FPJM            | Fixpoint Iteration using Justifications that computes multi-strategies
 
 ### Priority promotion family
 
@@ -188,6 +195,7 @@ verify        | Small tool that just verifies a solution (can be done by Oink to
 nudge         | Swiss army knife for transforming parity games
 dotty         | Small tool that just generates a .dot graph of a parity game
 test\_solvers | Main testing tool for parity game solvers and benchmarking
+multistrat    | Inspects and benchmarks the multi-strategy solvers FPIM and FPJM
 
 ### Game generators
 
@@ -204,7 +212,7 @@ counter\_rob   | SCC version of counter\_core.
 counter\_dtl   | Counterexample to the DTL solver
 counter\_ortl  | Counterexample to the ORTL solver
 counter\_symsi | Counterexample of Matthew Maat to (standard) symmetric strategy improvement
-tc             | Two binary counters generator (game family that is an exponential lower bound for many algorithms). See also Tom van Dijk (2019) [A Parity Game Tale of Two Counters](https://doi.org/10.4204/EPTCS.305.8). In: GandALF 2019.
+tc             | Two binary counters generator (game family that is an exponential lower bound for many algorithms). See also Tom van Dijk (2019) [A Parity Game Tale of Two Counters](https://doi.org/10.4204/EPTCS.305.8). In: GandALF 2019. With `--tangle-loop`, each high vertex is connected back to its own tangle.
 tc+            | TC modified to defeat the RTL solver
 
 ### Two binary counters
@@ -229,7 +237,7 @@ Some algorithms can solve the two binary counters games in polynomial time:
 
 ### Prerequisites
 
-- A C++17 compiler (GCC 9 or newer, Clang, or MSVC) and CMake 3.14 or newer.
+- A C++17 compiler (GCC 9 or newer, or Clang) and CMake 3.14 or newer. On Windows, the library and the tests build with MSYS2.
 - [Lace](https://github.com/trolando/lace), the work-stealing framework used by the parallel solvers. By default CMake downloads it automatically with `git` during configuration, so the first build needs network access. To build offline, install Lace yourself and CMake will pick it up via `find_package(lace)`.
 - Optional: the `zlib`, `libbz2` and `liblzma` development packages enable transparent decompression of `.gz`, `.bz2` and `.xz` parity games. They are detected automatically; a missing library simply disables that input format.
 
