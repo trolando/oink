@@ -33,6 +33,7 @@
 #include "solvers/mspm.hpp"
 #include "solvers/qpt.hpp"
 #include "solvers/tl.hpp"
+#include "solvers/tlpar.hpp"
 #include "solvers/rtl.hpp"
 #include "solvers/npp.hpp"
 #include "solvers/sspm.hpp"
@@ -83,6 +84,7 @@ Solvers::Solvers()
     _add("rtl", "recursive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<RTLSolver>(oink, game); });
     _add("ortl", "one-sided recursive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<ORTLSolver>(oink, game); });
     _add("tl", "tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLSolver>(oink, game); });
+    _add("tlpar", "parallel tangle learning", 1, [] (Oink& oink, Game& game) { return std::make_unique<TLParSolver>(oink, game); });
     _add("tlq", "qpt recursive with tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLQSolver>(oink, game); });
     _add("pmtl", "progress measures and tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game); });
     _add("pmtl-small", "progress measures and tangle learning, small measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Small); });

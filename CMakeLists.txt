@@ -220,6 +220,7 @@ target_sources(oink
     src/solvers/sspm.cpp
     src/solvers/qpt.cpp
     src/solvers/tl.cpp
+    src/solvers/tlpar.cpp
     src/solvers/rtl.cpp
     src/solvers/zlkpp.cpp
     src/solvers/ptl.cpp
@@ -397,6 +398,8 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolverPPQ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ppq)
         # test TL and variations
         add_test(NAME TestSolverTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tl)
+        add_test(NAME TestSolverTLPARseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlpar -w -1)
+        add_test(NAME TestSolverTLPARpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlpar -w 0 -c parmin=1,chunk=4,pargame=0)
         add_test(NAME TestSolverRTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --rtl)
         add_test(NAME TestSolverORTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ortl)
         add_test(NAME TestSolverPTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ptl)
