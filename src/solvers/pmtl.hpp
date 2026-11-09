@@ -47,16 +47,28 @@ private:
     std::vector<int> *tin; // for each normal vertex
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
+    std::vector<std::vector<int>> tangles_of_pr; // for each priority, its tangles (in order of creation)
+    std::vector<int> Zlist; // the vertices added to <Z> (some may have been removed again), so that
+                            // work per region is proportional to its size, not to the whole game
 
     bitset G; // remaining unsolved game
     uintqueue Q; // main queue when attracting vertices
     int *str; // stores currently assigned strategy of each vertex
-    int *order;
+    // for each player, its unsolved vertices by measure as sorted in its last update, and the
+    // vertices whose measure changed since (so that only these need to be sorted again)
+    std::vector<int> order[2];
+    bitset Changed[2];
+    bool sorted[2] = {false, false};
+    std::vector<int> moved, merged;
 
     bitset Z;
     bitset R;
     bitset E;
     bitset Updated;
+    bitset OpenHead; // heads of the current region that can escape it
+    bitset WasHead; // vertices that were an extra head in this round (at most once)
+    bitset TZ; // the part of a partially closed region that does not depend on open heads
+    std::vector<int> heads; // the heads of the current region
 
     inline void attractVertices(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
     bool attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitset &G, const int max_prio);

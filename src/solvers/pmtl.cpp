@@ -66,6 +66,7 @@ PMTLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z, bit
             }
             // attract
             Z[from] = true;
+            Zlist.push_back(from);
             str[from] = owner(from) == pl ? v : -1;
             Q.push(from);
 #ifndef NDEBUG
@@ -152,6 +153,7 @@ PMTLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitse
             const int s = *ptr++;
             if (Z[v]) continue; // already in <Z>
             Z[v] = true;
+            Zlist.push_back(v);
             str[v] = s;
             Q.push(v);
 
@@ -439,6 +441,8 @@ pearce_again:
 
         // and set p to pr
         tpr.push_back(pr);
+        if ((int)tangles_of_pr.size() <= pr) tangles_of_pr.resize(pr+1);
+        tangles_of_pr[pr].push_back(tidx);
 
         tangles++;
         new_tangles = true;
@@ -470,13 +474,36 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
             return a > b;
         };
 
-    // first order all vertices by value then priority
-    std::sort(order, order+nodecount(), max_pm_first);
+    // order the unsolved vertices by value then priority. Only the vertices whose measure
+    // changed since the last update of <player> are sorted and then merged into the order of
+    // that update (the order is total, so this is the same as sorting all vertices)
+    auto &order = this->order[player];
+    if (!sorted[player]) {
+        order.clear();
+        for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) order.push_back(v);
+        std::sort(order.begin(), order.end(), max_pm_first);
+        sorted[player] = true;
+    } else {
+        moved.clear();
+        size_t j = 0;
+        for (const int v : order) {
+            if (!G[v]) continue; // solved
+            if (Changed[player][v]) moved.push_back(v);
+            else order[j++] = v;
+        }
+        order.resize(j);
+        std::sort(moved.begin(), moved.end(), max_pm_first);
+        merged.resize(order.size() + moved.size());
+        std::merge(order.begin(), order.end(), moved.begin(), moved.end(), merged.begin(), max_pm_first);
+        order.swap(merged);
+    }
+    Changed[player].reset();
+    const int norder = (int)order.size();
 
 #ifndef NDEBUG
     if (trace >= 2) {
         // echo current order
-        for (int x=0; x<nodecount(); x++) {
+        for (int x=0; x<norder; x++) {
             auto v = order[x];
             if (!G[v]) continue;
             logger << "vertex " << label_vertex(v) << ": ";
@@ -487,12 +514,14 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
 #endif
 
     R = G; // initialize remainder (including unattracted top vertices) with G
+    WasHead.reset();
+    int scanned = 0; // the ties up to here were scanned for heads
     E = G; // initialize escapes (for opponent) with G
     Updated.reset();
     bool any_updated = false;
 
     // go from "best" to "worst" vertex
-    for (int x=0; x<nodecount(); x++) {
+    for (int x=0; x<norder; x++) {
         auto top = order[x];
         if (!R[top]) continue; // not in remainder
 
@@ -501,9 +530,14 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         if (UseTangles) {
             // first check if <top> happens to be a the top of a tangle that we already have
             // if so, this "initializes" Z with that tangle
-            for (int i=0; i<(int)tpr.size(); i++) {
-                if (tpr[i] == priority(top)) {
-                    if (attractTangle(i, player, R, Z, E, priority(top))) {
+            // (only the tangles of this priority, in order of creation; deleted ones have tpr -1)
+            const int pr = priority(top);
+            if (pr < (int)tangles_of_pr.size()) {
+                const auto& ts = tangles_of_pr[pr];
+                for (size_t j=0; j<ts.size(); j++) {
+                    const int i = ts[j];
+                    if (tpr[i] != pr) continue;
+                    if (attractTangle(i, player, R, Z, E, pr)) {
                         if (Z[top]) {
                             known_tangle = true;
                             break;
@@ -513,11 +547,33 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
             }
         }
 
-        // attract with max prio pr(top)
+        // attract with max prio pr(top), to <top> and to the next vertices in the order with
+        // the same measure and priority (one region with all these heads, as in TL, rather
+        // than a region per vertex)
         int max_pr = priority(top);
+        heads.clear();
+        heads.push_back(top);
         Z[top] = true; // add to <Z>
+        Zlist.push_back(top);
         str[top] = -1; // don't care, but needed for correct trace reporting
         Q.push(top);
+        if (!Updated[top] and x >= scanned) {
+            // (each run of tied vertices is scanned once: a vertex skipped here cannot become
+            // a head later in this round, as it stays out of R, Updated, or was a head)
+            int y = x+1;
+            for (; y < norder; y++) {
+                const int w = order[y];
+                if (priority(w) != max_pr or !pm.eq(w, top)) break;
+                if (!R[w] or Z[w] or Updated[w] or WasHead[w]) continue;
+                WasHead[w] = true; // (an open head is later processed as a single top)
+                heads.push_back(w);
+                Z[w] = true;
+                Zlist.push_back(w);
+                str[w] = -1;
+                Q.push(w);
+            }
+            scanned = y;
+        }
 
 #ifndef NDEBUG
         if (trace) {
@@ -567,18 +623,24 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
             }
         }
 
+        // a head is open if it can escape the region (or has no strategy into it); open heads
+        // are not lifted and stay in R, and the region is closed if no head is open
         bool closed_region = true;
-        if (owner(top) == player) {
-            if (str[top] == -1) {
-                closed_region = false;
-            }
-        } else {
-            for (auto curedge = outs(top); *curedge != -1; curedge++) {
-                int to = *curedge;
-                if (E[to]) {
-                    closed_region = false;
-                    break;
+        for (const int h : heads) {
+            bool open = false;
+            if (owner(h) == player) {
+                open = str[h] == -1;
+            } else {
+                for (auto curedge = outs(h); *curedge != -1; curedge++) {
+                    if (E[*curedge]) {
+                        open = true;
+                        break;
+                    }
                 }
+            }
+            if (open) {
+                OpenHead[h] = true;
+                closed_region = false;
             }
         }
 
@@ -595,9 +657,13 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         }
 #endif
 
-        R -= Z;
-        if (!closed_region) {
-            R[top] = true; // put top back into R
+        for (const int v : Zlist) if (Z[v]) R[v] = false; // R -= Z
+        // put open heads back into R: <top> as before (it can still be attracted to a later
+        // region), the other heads as if they were never heads, so they get a region later
+        for (const int h : heads) {
+            if (!OpenHead[h]) continue;
+            R[h] = true;
+            if (h != top) E[h] = true;
         }
 
         // If the measure of top was already increased in a higher we might not be able to immediately use that measure
@@ -605,13 +671,16 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         // solution is to keep track of a separate new set of measures pm2 and only replace pm with pm2 at the end. That
         // is likely faster.
         if (Updated[top]) {
-            Z.reset();
+            for (const int v : Zlist) Z[v] = false; // Z.reset()
+            Zlist.clear();
+            for (const int h : heads) OpenHead[h] = false;
             continue;
         }
 
         // update all vertices with prog
-        for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) {
-            if (v == (unsigned)top && !closed_region) continue;
+        for (const int v : Zlist) {
+            if (!Z[v]) continue;
+            if (OpenHead[v]) continue;
             if (Updated[v]) continue; // already updated to a higher pm
 
             pm.copy(top, -1);
@@ -633,12 +702,84 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         }
 
         if (UseTangles) {
-            // check if the region is closed, but only if correct priority
-            if (!known_tangle && closed_region && (priority(top)&1) == player) {
-                // if closed, learn a tangle (could be duplicate!)
-                memset(pea_vidx, 0, sizeof(int[nodecount()]));
-                pea_curidx=1;
-                extractTangles(top, Z, str);
+            // As in TL: a closed region from which the opponent cannot escape in the game is a
+            // dominion, without decomposing it into tangles. Its heads have our parity and a
+            // higher priority than any of the opponent in it, and the attractor strategy either
+            // stays in a tangle of ours or reaches a head again, so <player> wins every play.
+            bool dominion = false;
+            if (closed_region && (priority(top)&1) == player) {
+                dominion = true;
+                for (const int v : Zlist) {
+                    if (!Z[v]) continue;
+                    if (owner(v) == player) {
+                        // (our strategy must stay in the region too: a vertex attracted via a
+                        // vertex that was then removed from Z again, as the top of a higher
+                        // region (the special case above), or via a tangle containing such a
+                        // vertex, still plays to it)
+                        if (str[v] == -1 or !Z[str[v]]) {
+                            dominion = false;
+                            break;
+                        }
+                        continue;
+                    }
+                    for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                        const int to = *curedge;
+                        if (G[to] and !Z[to]) {
+                            dominion = false;
+                            break;
+                        }
+                    }
+                    if (!dominion) break;
+                }
+                if (dominion) {
+                    if (trace) logger << "\033[1;38;5;201mdominion (closed region) \033[36m" << priority(top) << "\033[m" << std::endl;
+                    for (const int v : Zlist) {
+                        if (Z[v] and !S[v]) {
+                            S[v] = true;
+                            dom_vector.push_back(v);
+                            dom_vector.push_back(str[v]);
+                        }
+                    }
+                    dominions++;
+                }
+            }
+            // otherwise learn tangles (could be duplicate!) if the region is closed, but only if
+            // correct priority; with open heads, in the part of the region that does not depend on them
+            if (!dominion && !known_tangle && (priority(top)&1) == player) {
+                bool any_closed_head = false;
+                for (const int h : heads) if (!OpenHead[h]) { any_closed_head = true; break; }
+                if (any_closed_head) {
+                    bitset *TR = &Z;
+                    if (!closed_region) {
+                        // TZ := Z without the open heads and the vertices that depend on them
+                        // (opponent vertices with an edge to them, and our vertices that play to them)
+                        for (const int v : Zlist) if (Z[v]) TZ[v] = true;
+                        for (const int h : heads) {
+                            if (OpenHead[h]) {
+                                TZ[h] = false;
+                                Q.push(h);
+                            }
+                        }
+                        while (Q.nonempty()) {
+                            const int v = Q.pop();
+                            for (auto curedge = ins(v); *curedge != -1; curedge++) {
+                                const int from = *curedge;
+                                if (TZ[from] and (str[from] == -1 or str[from] == v)) {
+                                    TZ[from] = false;
+                                    Q.push(from);
+                                }
+                            }
+                        }
+                        TR = &TZ;
+                    }
+                    for (const int v : Zlist) pea_vidx[v] = 0; // extractTangles only visits <Z>
+                    pea_curidx=1;
+                    for (const int h : heads) {
+                        // (not if open, or already visited from another head)
+                        if ((*TR)[h] and pea_vidx[h] == 0) extractTangles(h, *TR, str);
+                    }
+                    if (!closed_region) for (const int v : Zlist) TZ[v] = false;
+                }
             }
         }
 
@@ -646,7 +787,7 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
             // attract with increasing priority
             const int d = priority(nodecount()-1);
             for (max_pr=priority(top)+1; max_pr<=d; max_pr++) {
-                for (auto v = Z.find_first(); v!=bitset::npos; v = Z.find_next(v)) Q.push(v);
+                for (const int v : Zlist) if (Z[v]) Q.push(v);
 
 #ifndef NDEBUG
                 if (trace >= 2) {
@@ -683,7 +824,8 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
             }
         } else { // !GoUp
             // we now update all vertices that are attracted to any vertex in Z...
-            for (auto v = Z.find_first(); v != bitset::npos; v = Z.find_next(v)) {
+            for (const int v : Zlist) {
+                if (!Z[v]) continue;
                 for (auto curedge = ins(v); *curedge != -1; curedge++) {
                     int from = *curedge;
                     if (!R[from]) continue; // but only if still in R
@@ -749,7 +891,9 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
             }
         }
 
-        Z.reset();
+        for (const int v : Zlist) Z[v] = false; // Z.reset()
+        Zlist.clear();
+        for (const int h : heads) OpenHead[h] = false;
 
         if (any_updated) {
 #ifndef NDEBUG
@@ -796,6 +940,7 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         }
     }
 
+    Changed[player] |= Updated; // (the lifted vertices)
     return any_updated;
 }
 
@@ -865,6 +1010,7 @@ PMTLSolver::shortcuts(const int player, Measures &pm, Measures &target1, Measure
         // logger << "\033[1;36mplayer " << (1-player) << " should win " << label_vertex(v) << "\033[m" << std::endl;
         target1.copy_top(v);
         target2.copy_top(v);
+        Changed[1-player][v] = true;
     }
 }
 
@@ -994,9 +1140,12 @@ PMTLSolver::run()
     pea_root.resize(nodecount());
     Q.resize(nodecount());
 
-    // vertex order
-    order = new int[nodecount()];
-    for (int i=0;i<nodecount();i++) order[i]=i;
+    // vertex orders
+    for (int pl=0; pl<2; pl++) {
+        order[pl].clear();
+        Changed[pl].resize(nodecount());
+        sorted[pl] = false;
+    }
 
     Measures *pm0 = new_measure(measure_kind, game, 0);
     Measures *pm1 = new_measure(measure_kind, game, 1);
@@ -1010,6 +1159,9 @@ PMTLSolver::run()
     R.resize(nodecount());
     E.resize(nodecount());
     Updated = disabled;
+    OpenHead.resize(nodecount());
+    WasHead.resize(nodecount());
+    TZ.resize(nodecount());
 
     bool c0 = true;
     bool c1 = true;
@@ -1087,7 +1239,6 @@ PMTLSolver::run()
     delete[] tin;
     delete[] str;
     delete[] pea_vidx;
-    delete[] order;
     delete pm0;
     delete pm1;
     delete pm0b;
