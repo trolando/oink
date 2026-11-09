@@ -57,7 +57,7 @@ public:
     int par_chunk = 256; // vertices per task in a parallel round ("chunk=N")
 
     // the Lace task bodies
-    void runPar(lace_worker* lw);
+    void runPar(WorkerP* __lace_worker, Task* __lace_dq_head);
     void roundChunk(int start, int n);
 
 protected:
@@ -135,7 +135,8 @@ protected:
     bitset W; // heads 2 (only with PARTIALLY_CLOSED)
 
     // parallel attraction
-    lace_worker* lw = nullptr; // the Lace worker running this solver, if any
+    WorkerP* lw = nullptr; // the Lace worker running this solver, if any
+    Task* lw_head = nullptr; // and its deque head (runPar has no tasks outstanding when it starts a round)
     // per Lace worker: the vertices attracted by the current chunk of a round (each in its own
     // cache line, as the workers update them all the time)
     struct alignas(64) WorkerBuf { std::vector<int> v; };

@@ -415,8 +415,8 @@ main(int argc, char **argv)
     };
 
     if (opt_workers >= 0) {
-        lace_start(opt_workers, 10000000UL, 0);
-        std::cout << "Workers: " << lace_worker_count() << " (Lace"
+        lace_start(opt_workers, 10000000UL);
+        std::cout << "Workers: " << lace_workers() << " (Lace"
                   << (opt_workers == 0 ? ", autodetected" : "") << ")" << std::endl;
     } else {
         std::cout << "Workers: sequential" << std::endl;

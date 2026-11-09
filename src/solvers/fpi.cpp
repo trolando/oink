@@ -30,28 +30,27 @@ FPISolver::~FPISolver()
 }
 
 TASK_3(int, update_block_rec, FPISolver*, solver, int, i, int, n)
-int update_block_rec_CALL(lace_worker* lace, FPISolver* solver, int i, int n)
 {
-    return solver->update_block_rec(lace, i, n);
+    return solver->update_block_rec(__lace_worker, __lace_dq_head, i, n);
 }
 
 int
-FPISolver::update_block_rec(lace_worker* lace, int i, int n)
+FPISolver::update_block_rec(WorkerP* __lace_worker, Task* __lace_dq_head, int i, int n)
 {
     if (n>128) {
         // because dynamic bitset is not thread safe, work in blocks of 64...
         if (i&127) {
             // start not yet aligned
             int N = 128 - (i&127);
-            update_block_rec_SPAWN(lace, this, i+N, n-N);
+            SPAWN(update_block_rec, this, i+N, n-N);
             int a = this->updateBlock(i, N);
-            int b = update_block_rec_SYNC(lace);
+            int b = SYNC(update_block_rec);
             return a+b;
         } else {
             int N = (n/128)*64;
-            update_block_rec_SPAWN(lace, this, i+N, n-N);
-            int a = update_block_rec_CALL(lace, this, i, N);
-            int b = update_block_rec_SYNC(lace);
+            SPAWN(update_block_rec, this, i+N, n-N);
+            int a = CALL(update_block_rec, this, i, N);
+            int b = SYNC(update_block_rec);
             return a+b;
         }
     } else {
@@ -60,21 +59,20 @@ FPISolver::update_block_rec(lace_worker* lace, int i, int n)
 }
 
 VOID_TASK_4(freeze_thaw_reset_rec, FPISolver*, solver, int, i, int, n, int, p)
-void freeze_thaw_reset_rec_CALL(lace_worker* lace, FPISolver* solver, int i, int n, int p)
 {
     if (n>128) {
         // because dynamic bitset is not thread safe, work in blocks of 64...
         if (i&127) {
             // start not yet aligned
             int N = 128 - (i&127);
-            freeze_thaw_reset_rec_SPAWN(lace, solver, i+N, n-N, p);
+            SPAWN(freeze_thaw_reset_rec, solver, i+N, n-N, p);
             solver->freezeThawReset(i, N, p);
-            freeze_thaw_reset_rec_SYNC(lace);
+            SYNC(freeze_thaw_reset_rec);
         } else {
             int N = (n/128)*64;
-            freeze_thaw_reset_rec_SPAWN(lace, solver, i+N, n-N, p);
-            freeze_thaw_reset_rec_CALL(lace, solver, i, N, p);
-            freeze_thaw_reset_rec_SYNC(lace);
+            SPAWN(freeze_thaw_reset_rec, solver, i+N, n-N, p);
+            CALL(freeze_thaw_reset_rec, solver, i, N, p);
+            SYNC(freeze_thaw_reset_rec);
         }
     } else {
         solver->freezeThawReset(i, n, p);
@@ -223,13 +221,12 @@ FPISolver::initState()
 }
 
 VOID_TASK_1(fpi_run_par, FPISolver*, _this)
-void fpi_run_par_CALL(lace_worker* lace, FPISolver* _this)
 {
-    _this->run_par(lace);
+    _this->run_par(__lace_worker, __lace_dq_head);
 }
 
 void
-FPISolver::run_par(lace_worker* lace)
+FPISolver::run_par(WorkerP* __lace_worker, Task* __lace_dq_head)
 {
     int d = this->priority(this->nodecount()-1);
     int *p_start = new int[d+1];
@@ -259,10 +256,10 @@ FPISolver::run_par(lace_worker* lace)
     while (p <= d) {
         if (p_len[p] == 0) {
             p++;
-        } else if (update_block_rec_CALL(lace, this, p_start[p], p_len[p])) {
+        } else if (CALL(update_block_rec, this, p_start[p], p_len[p])) {
             // something changed, freeze and reset
             if (p != 0) {
-                freeze_thaw_reset_rec_CALL(lace, this, 0, p_start[p], p);
+                CALL(freeze_thaw_reset_rec, this, 0, p_start[p], p);
                 p = 0;
             }
             this->iterations++;
@@ -297,7 +294,7 @@ FPISolver::runPar()
     const size_t frozen_size = (size_t(nodecount()) + 63) & ~size_t(63);
     frozen = new int[frozen_size]();
 
-    fpi_run_par(this);
+    RUN(fpi_run_par, this);
 
     // done
     for (int v=0; v<nodecount(); v++) {
