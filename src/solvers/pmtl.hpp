@@ -28,7 +28,7 @@ namespace pg {
 class PMTLSolver : public Solver
 {
 public:
-    PMTLSolver(Oink& oink, Game& game, MeasureKind kind = MeasureKind::Ordered);
+    PMTLSolver(Oink& oink, Game& game, MeasureKind kind = MeasureKind::Ordered, bool enable_tangles = true);
     virtual ~PMTLSolver();
 
     virtual void run();
@@ -49,7 +49,7 @@ private:
     bool use_shortcuts = true;
 
     std::vector<int*> tout; // for each tangle
-    std::vector<int> *tin; // for each normal vertex
+    std::vector<int> *tin = nullptr; // for each normal vertex
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
     std::vector<std::vector<int>> tangles_of_pr; // for each priority, its tangles (in order of creation)
@@ -88,7 +88,7 @@ private:
     uintqueue pea_vS; // vS
     uintqueue pea_iS; // iS
     uintqueue pea_S;  // S
-    unsigned int* pea_vidx;    // rindex
+    unsigned int* pea_vidx = nullptr;    // rindex
     bitset pea_root;  // root
     int pea_curidx;   // index
     std::vector<int> tangle; // stores the new tangle

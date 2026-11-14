@@ -26,7 +26,8 @@
 namespace pg {
 
 
-PMTLSolver::PMTLSolver(Oink& oink, Game& game, MeasureKind kind) : Solver(oink, game), measure_kind(kind)
+PMTLSolver::PMTLSolver(Oink& oink, Game& game, MeasureKind kind, bool enable_tangles)
+    : Solver(oink, game), measure_kind(kind), use_tangles(enable_tangles)
 {
 }
 
@@ -1215,22 +1216,25 @@ PMTLSolver::parseOptions(std::string& opts) {
 void
 PMTLSolver::run()
 {
-    tin = new std::vector<int>[nodecount()];
     str = new int[nodecount()];
     if (use_shortcuts) {
         escape_offset.resize(nodecount());
         escape_stamp.resize(nodecount());
     }
-    S.resize(nodecount());
     G = disabled;
     G.flip();
-    tangleto.resize(nodecount());
-    escapes.resize(nodecount());
-    pea_vS.resize(nodecount());
-    pea_iS.resize(nodecount());
-    pea_S.resize(nodecount());
-    pea_vidx = new unsigned int[nodecount()];
-    pea_root.resize(nodecount());
+    if (use_tangles) {
+        tin = new std::vector<int>[nodecount()];
+        S.resize(nodecount());
+        tangleto.resize(nodecount());
+        escapes.resize(nodecount());
+        pea_vS.resize(nodecount());
+        pea_iS.resize(nodecount());
+        pea_S.resize(nodecount());
+        pea_vidx = new unsigned int[nodecount()];
+        pea_root.resize(nodecount());
+        TZ.resize(nodecount());
+    }
     Q.resize(nodecount());
 
     // vertex orders
@@ -1267,8 +1271,6 @@ PMTLSolver::run()
     Updated = disabled;
     OpenHead.resize(nodecount());
     WasHead.resize(nodecount());
-    TZ.resize(nodecount());
-
     bool c0 = true;
     bool c1 = true;
 

@@ -103,6 +103,12 @@ Solvers::Solvers()
     _add("gpm-ordered", "generic progress measures, ordered measures (as gpm)", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Ordered); });
     _add("gpm-strahler", "generic progress measures, Strahler measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Strahler); });
 
+    _add("pma", "progress measures with attractors", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Ordered, false); }, true);
+    _add("pma-small", "progress measures with attractors, small measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Small, false); }, true);
+    _add("pma-succinct", "progress measures with attractors, succinct measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Succinct, false); }, true);
+    _add("pma-ordered", "progress measures with attractors, ordered measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Ordered, false); }, true);
+    _add("pma-strahler", "progress measures with attractors, Strahler measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Strahler, false); }, true);
+
     auto group = [&](Family family, std::initializer_list<const char*> ids) {
         int order = 0;
         for (const auto* id : ids) {
@@ -114,7 +120,8 @@ Solvers::Solvers()
     group(Family::TangleLearning, {"tl", "tlpar", "tlj", "tlq", "rtl", "ortl", "ptl", "spptl", "dtl", "idtl",
           "pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler"});
     group(Family::ProgressMeasures, {"spm", "tspm", "mspm", "sspm", "bsspm", "qpt", "bqpt",
-          "gpm", "gpm-small", "gpm-succinct", "gpm-ordered", "gpm-strahler"});
+          "gpm", "gpm-small", "gpm-succinct", "gpm-ordered", "gpm-strahler",
+          "pma", "pma-small", "pma-succinct", "pma-ordered", "pma-strahler"});
     group(Family::FixpointIteration, {"fpi", "fpim", "fpj", "fpjg", "fpjm"});
     group(Family::PriorityPromotion, {"npp", "pp", "ppj", "ppp", "rr", "dp", "rrdp", "ppq"});
     group(Family::StrategyImprovement, {"psi", "ssi"});
@@ -127,6 +134,9 @@ Solvers::Solvers()
         solvers[id].optionsHelp = "small, succinct, ordered, strahler, no-shortcuts (comma separated)";
     for (const char* id : {"pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler"})
         solvers[id].optionsHelp = "small, succinct, ordered, strahler, up/noup, tangles/notangles, no-shortcuts (comma separated)";
+
+    for (const char* id : {"pma", "pma-small", "pma-succinct", "pma-ordered", "pma-strahler"})
+        solvers[id].optionsHelp = "small, succinct, ordered, strahler, up/noup, tangles/notangles (default: notangles), no-shortcuts (comma separated)";
 
     // No incoming edges required up front; sequential FPI may build them lazily.
     for (const char* id : {"fpi", "fpim", "psi"}) solvers[id].needsInEdges = false;

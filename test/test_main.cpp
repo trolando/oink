@@ -26,6 +26,7 @@ int test_measure_ops();
 int test_parser();
 int test_io();
 int test_solution();
+int test_pma(const char* fixture);
 int test_ppj();
 int test_fpj_batch();
 int test_fpi_frontier();
@@ -50,6 +51,7 @@ const Test tests[] = {
     {"parser", test_parser},
     {"io", test_io},
     {"solution", test_solution},
+    {"pma", [] { return test_pma(OINK_TEST_DATA_DIR "/vb232"); }},
     {"ppj", test_ppj},
     {"fpj-batch", test_fpj_batch},
     {"fpi-frontier", test_fpi_frontier},

@@ -342,6 +342,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_solution.cpp
             test/test_ppj.cpp
             test/test_fpj_batch.cpp
+            test/test_pma.cpp
             test/test_fpi_frontier.cpp
             test/test_tlq_cache.cpp
             test/test_tlj_cache.cpp
@@ -353,6 +354,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_verifier.cpp
         )
         set_target_props(test_unit)
+        target_compile_definitions(test_unit PRIVATE OINK_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
         if(BZIP2_FOUND)
             target_link_libraries(test_unit BZip2::BZip2)
             target_compile_definitions(test_unit PRIVATE OINK_HAVE_BZIP2=1)
@@ -364,6 +366,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolution COMMAND test_unit solution)
         add_test(NAME TestFPJBatch COMMAND test_unit fpj-batch)
         add_test(NAME TestPPJ COMMAND test_unit ppj)
+        add_test(NAME TestPMA COMMAND test_unit pma)
         add_test(NAME TestFPIFrontier COMMAND test_unit fpi-frontier)
         add_test(NAME TestTLJCache COMMAND test_unit tlj-cache)
         add_test(NAME TestTLQCache COMMAND test_unit tlq-cache)
@@ -433,6 +436,12 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverPMTLordered COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-ordered)
             add_test(NAME TestSolverGPMstrahler COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --gpm-strahler)
             add_test(NAME TestSolverPMTLstrahler COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-strahler)
+            add_test(NAME TestSolverPMA COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pma)
+            add_test(NAME TestSolverPMAsmall COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pma-small)
+            add_test(NAME TestSolverPMAsuccinct COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pma-succinct)
+            add_test(NAME TestSolverPMAordered COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pma-ordered)
+            add_test(NAME TestSolverPMAstrahler COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pma-strahler)
+            add_test(NAME TestSolverPMAscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pma --scc)
             # test ZLK variations
             add_test(NAME TestSolverZLKseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w -1)
             add_test(NAME TestSolverZLKpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w 0 --force-parallel)

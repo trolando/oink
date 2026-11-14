@@ -44,8 +44,7 @@ public:
             Game game(input);
             std::ostringstream log;
             Oink controller(game, log, true);
-            PMTLSolver solver(controller, game, kind);
-            solver.use_tangles = tangles;
+            PMTLSolver solver(controller, game, kind, tangles);
             solver.lifts = solver.iterations = seed;
             solver.run();
             Verifier(game, controller.solution(), log).verify(true, true, true);
@@ -71,8 +70,7 @@ public:
     {
         std::ostringstream log;
         Oink controller(game, log, true);
-        PMTLSolver solver(controller, game, kind);
-        solver.use_tangles = tangles;
+        PMTLSolver solver(controller, game, kind, tangles);
         const int n = game.nodecount();
         solver.G.resize(n);
         solver.G.flip();
