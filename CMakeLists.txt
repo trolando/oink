@@ -338,6 +338,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_parser.cpp
             test/test_io.cpp
             test/test_solution.cpp
+            test/test_in_edge_map.cpp
             test/test_builder.cpp
             test/test_game.cpp
             test/test_verifier.cpp
@@ -351,6 +352,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestParser COMMAND test_unit parser)
         add_test(NAME TestIO COMMAND test_unit io)
         add_test(NAME TestSolution COMMAND test_unit solution)
+        add_test(NAME TestInEdgeMap COMMAND test_unit in-edge-map)
         add_test(NAME TestBuilder COMMAND test_unit builder)
         add_test(NAME TestGame COMMAND test_unit game)
         add_test(NAME TestVerifier COMMAND test_unit verifier)

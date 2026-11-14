@@ -376,7 +376,9 @@ public:
      * This lets a solver that walks ins(w) prune the corresponding strategy edge
      * in O(1) instead of scanning the source's outgoing edges. Used by fpjm.
      */
+    // Opt in to reusing valid incoming counts; use the default after edge edits.
     void build_in_to_out();
+    void build_in_to_out(bool reuse_incoming);
 
     /**
      * The in->out edge index map (see build_in_to_out). Indexed like inedges().

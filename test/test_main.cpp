@@ -25,6 +25,7 @@
 int test_parser();
 int test_io();
 int test_solution();
+int test_in_edge_map();
 int test_builder();
 int test_game();
 int test_verifier();
@@ -40,6 +41,7 @@ const Test tests[] = {
     {"parser", test_parser},
     {"io", test_io},
     {"solution", test_solution},
+    {"in-edge-map", test_in_edge_map},
     {"builder", test_builder},
     {"game", test_game},
     {"verifier", test_verifier},

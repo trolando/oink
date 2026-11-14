@@ -750,16 +750,25 @@ Game::build_in_array(bool rebuild)
 void
 Game::build_in_to_out()
 {
-    // Build the in-edge array and a parallel map to out-edge indices in one pass,
-    // so the two arrays are guaranteed to be aligned slot-for-slot.
-    _inedges.assign(e_size, 0);
-    _in_to_out.assign(e_size, -1);
-    _firstins.assign(n_vertices, 0);
-    _incount.assign(n_vertices, 0);
+    build_in_to_out(false);
+}
 
-    for (int v=0; v<n_vertices; v++) {
-        for (auto curedge = outs(v); *curedge != -1; curedge++) {
-            _incount[*curedge]++;
+void
+Game::build_in_to_out(bool reuse_incoming)
+{
+    // Counts may be reused only while the incoming data still describes this graph.
+    const bool reuse = reuse_incoming && !_inedges.empty();
+    if (reuse) _inedges.resize(e_size); // copies can have only N+E incoming slots
+    else _inedges.assign(e_size, 0);
+    _in_to_out.assign(e_size, -1);
+
+    if (!reuse) {
+        _firstins.assign(n_vertices, 0);
+        _incount.assign(n_vertices, 0);
+        for (int v=0; v<n_vertices; v++) {
+            for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                _incount[*curedge]++;
+            }
         }
     }
 

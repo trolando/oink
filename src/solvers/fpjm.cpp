@@ -82,7 +82,7 @@ FPJMSolver::runSeq()
 
     // build the in-edge array plus the in->out edge map, so that pruning the
     // strategy edge from->v while walking ins(v) is O(1) (no scan of from's edges)
-    game.build_in_to_out();
+    game.build_in_to_out(true);
     const int* in_base = game.inedges();
     const int* in_to_out = game.inToOut();
 
