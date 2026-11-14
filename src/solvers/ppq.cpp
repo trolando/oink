@@ -30,7 +30,8 @@ namespace pg {
  * In <solve>, the left/right sides of the universal tree follow from Lehtinen et al's version.
  */
 
-PPQSolver::PPQSolver(Oink& oink, Game& game) : Solver(oink, game)
+PPQSolver::PPQSolver(Oink& oink, Game& game)
+    : Solver(oink, game), escape_witness(game.nodecount(), -1)
 {
 }
 
@@ -38,50 +39,58 @@ PPQSolver::~PPQSolver()
 {
 }
 
-/**
- * Attract vertices in <R> from subgame <Y> to <v> in region <Z> as player <pl>.
- * We attract only vertices in <R>, but the opponent may escape to <R> and <Y>.
- * Attracted vertices are added to <Z> and to the queue <Q>.
- */
+/** Add predecessors that can be attracted to the current region. */
 void
-PPQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y)
+PPQSolver::attractVertices(int pl, int v, bitset &Z)
 {
-    auto curedge = ins(v);
-    for (int from = *curedge; from != -1; from = *++curedge) {
-        if (Z[from]) {
-            // already in Z, set strategy if not yet set
-            if (owner(from) == pl and str[from] == -1) {
+    for (auto edge = ins(v); *edge != -1; ++edge) {
+        const int from = *edge;
+        if (!candidates[from]) continue;
+        const bool ours = owner(from) == pl;
+        if (!ours) {
+            auto out = outs(from);
+            // The first successor is often an escape in low-degree games.
+            // Avoid touching the witness cache in that common case.
+            if (*out != -1 && candidates[*out]) continue;
+            // Revalidate against the current candidate set after region changes.
+            const int witness = escape_witness[from];
+            if (witness != -1 && candidates[witness]) continue;
+            if (*out != -1) ++out;
+            for (; *out != -1; ++out) {
+                const int to = *out;
+                if (candidates[to]) break;
+            }
+            if (*out != -1) {
+                escape_witness[from] = *out;
+                continue;
+            }
+        }
+        Z[from] = true;
+        candidates[from] = false;
+        str[from] = ours ? v : -1;
+        Q.push(from);
 #ifndef NDEBUG
-                if (trace >= 3) {
-                    logger << "\033[1;37msetting strategy of \033[36m" << label_vertex(from) << "\033[m to \033[1;36m" << label_vertex(v) << "\033[m" << std::endl;
-                }
+        if (trace >= 3) {
+            logger << "attracted " << label_vertex(from) << " by " << pl;
+            if (ours) logger << " via " << label_vertex(v);
+            logger << std::endl;
+        }
 #endif
-                str[from] = v;
+    }
+}
+
+/** Fill in strategies for the seeds after the attraction is complete. */
+void
+PPQSolver::finishSeeds(int pl, const bitset& Z, unsigned seeds)
+{
+    for (unsigned i = 0; i < seeds; ++i) {
+        const int v = Q[i];
+        if (owner(v) != pl || str[v] != -1) continue;
+        for (auto edge = outs(v); *edge != -1; ++edge) {
+            if (Z[*edge]) {
+                str[v] = *edge;
+                break;
             }
-        } else if (R[from]) {
-            // a vertex in <R> that is not yet in <Z>
-            if (owner(from) != pl) {
-                // check each exit
-                bool escapes = false;
-                auto curedge = outs(from);
-                for (int to = *curedge; !escapes and to != -1; to = *++curedge) {
-                    // check if escapes to a vertex in <R> or <Y> that is not in <Z>
-                    if (!Z[to] and (R[to] or Y[to])) escapes = true;
-                }
-                if (escapes) continue;
-            }
-            // vertex does not escape, so attract it
-            Z[from] = true;
-            str[from] = owner(from) == pl ? v : -1;
-            Q.push(from);
-#ifndef NDEBUG
-            // maybe report event
-            if (trace >= 3) {
-                logger << "\033[1;37mattracted \033[36m" << label_vertex(from) << "\033[m by \033[1;36m" << pl << "\033[m";
-                if (owner(from) == pl) logger << " (via " << label_vertex(v) << ")" << std::endl;
-                else logger << " (forced)" << std::endl;
-            }
-#endif
         }
     }
 }
@@ -155,13 +164,18 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
             Q.push(v);
         }
 
-        while (Q.nonempty()) {
-            int v = Q.pop();
+        const unsigned w_seeds = Q.size();
+        candidates = G;
+        candidates -= W;
+        for (unsigned i = 0; i < Q.size(); ++i) {
+            const int v = Q[i];
             G[v] = false;
             r[v] = -1;
             u[v] = -1;
-            attractVertices(pl, v, W, G, G);
+            attractVertices(pl, v, W);
         }
+        finishSeeds(pl, W, w_seeds);
+        Q.clear();
     } else if (best_u < best_r) {
         if (trace) logger << "\033[1;33mpromoted \033[36m" << pr << " \033[37mto \033[36mu " << best_u << "\033[m" << std::endl;
 
@@ -182,12 +196,17 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
         /**
          * Since R is everything that was attracted, we can just attract to R from L...
          */
-        while (Q.nonempty()) {
-            int v = Q.pop();
+        const unsigned r_seeds = Q.size();
+        candidates = L;
+        candidates -= R;
+        for (unsigned i = 0; i < Q.size(); ++i) {
+            const int v = Q[i];
             u[v] = best_u;
             r[v] = -1;
-            attractVertices(pl, v, R, L, L);
+            attractVertices(pl, v, R);
         }
+        finishSeeds(pl, R, r_seeds);
+        Q.clear();
     } else {
         if (trace) logger << "\033[1;33mpromoted \033[36m" << pr << " \033[37mto \033[36mr " << best_r << "\033[m" << std::endl;
 
@@ -207,75 +226,57 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
         /**
          * Since R is everything that was attracted, we can just attract to R from L...
          */
-        while (Q.nonempty()) {
-            int v = Q.pop();
+        const unsigned r_seeds = Q.size();
+        candidates = L;
+        candidates -= R;
+        for (unsigned i = 0; i < Q.size(); ++i) {
+            const int v = Q[i];
             r[v] = best_r;
             u[v] = -1;
-            attractVertices(pl, v, R, L, L);
+            attractVertices(pl, v, R);
         }
+        finishSeeds(pl, R, r_seeds);
+        Q.clear();
     }
 
     // At this point, because of the promotions, it is possible that some vertices are attracted to higher regions...
     // So we perform the "maximize" operation now; it's not precise, but it's sufficient.
 
-    // The maximize operation here considers the entire game.
-    // We find the next highest vtop, which is the highest u or r, s.t. u 8 > r 8 > u 7 > r 7
-    // Then simply set R to all vertices currently in that region, and attract from the remainder of the game
-    // Continue this until the game is empty or the highest r equals pr.
-
+    // A u region ranks just above an r region of the same priority. Keep
+    // the seeds of the highest region in FIFO order while scanning L.
     L = G;
-    while (L.any()) {
-        // Find highest vtop to attract to
-        int vtop = L.find_last();
+    const int64_t cutoff = 2LL * pr;
+    while (true) {
+        int64_t best = cutoff;
         for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
-            if (r[vtop] != -1) {
-                if (r[v] > r[vtop] or u[v] >= r[vtop]) vtop = v;
-            } else {
-                if (r[v] > u[vtop] or u[v] > u[vtop]) vtop = v;
+            assert((r[v] == -1) != (u[v] == -1));
+            const int64_t rank = r[v] != -1 ? 2LL * r[v] : 2LL * u[v] + 1;
+            if (rank > best) {
+                best = rank;
+                Q.clear();
             }
+            if (rank == best && rank > cutoff) Q.push(v);
         }
-        if (r[vtop] != -1) {
-            // it's an r
-            int apr = r[vtop];
-            if (apr <= pr) break; // stop attracting below pr, because that results in errors
+        if (Q.empty()) break;
+        const int apr = int(best / 2);
+        const bool is_u = (best & 1) != 0;
+        const int attractor = (apr & 1) ^ is_u;
 #ifndef NDEBUG
-            if (trace >= 2) logger << "maximizing to r " << r[vtop] << std::endl;
+        if (trace >= 2) logger << "maximizing to " << (is_u ? 'u' : 'r') << ' ' << apr << std::endl;
 #endif
-            R.reset();
-            for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
-                if (r[v] == apr) {
-                    R[v] = true;
-                    Q.push(v);
-                }
-            }
-            while (Q.nonempty()) {
-                int v = Q.pop();
-                r[v] = apr;
-                u[v] = -1;
-                attractVertices(apr&1, v, R, L, L);
-            }
-        } else {
-            // it's a u
-            int apr = u[vtop];
-            if (apr < pr) break; // no need to investigate further (but this also probably never occurs)
-#ifndef NDEBUG
-            if (trace >= 2) logger << "maximizing to u " << u[vtop] << std::endl;
-#endif
-            R.reset();
-            for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
-                if (u[v] == apr) {
-                    R[v] = true;
-                    Q.push(v);
-                }
-            }
-            while (Q.nonempty()) {
-                int v = Q.pop();
-                u[v] = apr;
-                r[v] = -1;
-                attractVertices(1-(apr&1), v, R, L, L);
-            }
+        R.reset();
+        const unsigned seeds = Q.size();
+        for (unsigned i = 0; i < seeds; ++i) R[Q[i]] = true;
+        candidates = L;
+        candidates -= R;
+        for (unsigned i = 0; i < Q.size(); ++i) {
+            const int v = Q[i];
+            r[v] = is_u ? -1 : apr;
+            u[v] = is_u ? apr : -1;
+            attractVertices(attractor, v, R);
         }
-
+        finishSeeds(attractor, R, seeds);
+        Q.clear();
         L -= R;
     }
 
@@ -343,12 +344,17 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
 
     // Attract for pl from L to R
 
-    while (Q.nonempty()) {
-        int v = Q.pop();
+    const unsigned r_seeds = Q.size();
+    candidates = L;
+    candidates -= R;
+    for (unsigned i = 0; i < Q.size(); ++i) {
+        const int v = Q[i];
         r[v] = pr;    // set r ; we already know/assume that u[v] == -1
         // L[v] = false; // remove from L
-        attractVertices(pl, v, R, L, L);
+        attractVertices(pl, v, R);
     }
+    finishSeeds(pl, R, r_seeds);
+    Q.clear();
 
 #ifndef NDEBUG
     if (trace >= 2) {
@@ -457,12 +463,17 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     } 
 
     // Attract to U from L
-    while (Q.nonempty()) {
-        int v = Q.pop();
+    const unsigned u_seeds = Q.size();
+    candidates = L;
+    candidates -= U;
+    for (unsigned i = 0; i < Q.size(); ++i) {
+        const int v = Q[i];
         u[v] = pr;
         r[v] = -1;
-        attractVertices(1-pl, v, U, L, L);
+        attractVertices(1-pl, v, U);
     }
+    finishSeeds(1-pl, U, u_seeds);
+    Q.clear();
 
     // Update R and L
     R -= U;
@@ -540,6 +551,7 @@ PPQSolver::run()
     L.resize(nodecount());
     R.resize(nodecount());
     U.resize(nodecount());
+    candidates.resize(nodecount());
 
     W0.resize(nodecount());
     W1.resize(nodecount());

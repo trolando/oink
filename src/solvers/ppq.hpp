@@ -45,12 +45,15 @@ protected:
     bitset R;
     bitset L;
     bitset U;
+    std::vector<int> escape_witness;
+    bitset candidates;
     int *r, *u;
 
     bitset W0;
     bitset W1;
 
-    inline void attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y);
+    inline void attractVertices(int pl, int v, bitset &Z);
+    void finishSeeds(int pl, const bitset& Z, unsigned seeds);
     bool maybePromote(int pr, int pl, bitset &R, bitset &L);
     void solve(int vtop, int pr, int prc, int pe, int po);
 };
