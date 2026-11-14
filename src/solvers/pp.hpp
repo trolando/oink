@@ -43,6 +43,9 @@ protected:
     bitset Z;
     std::vector<int> escape_witness;
     int top_vertex; // highest vertex that may still be enabled
+    // entries[p]: pairs (x, m) of a member m of region p and a predecessor x of m in a higher
+    // region, recorded during attraction
+    std::vector<std::vector<std::pair<int,int>>> entries;
 
     bool isTopmost(int priority);
 

@@ -29,6 +29,7 @@ PPSolver::PPSolver(Oink& oink, Game& game)
     : Solver(oink, game), Z(game.nodecount()), escape_witness(game.nodecount(), -1),
       top_vertex(game.nodecount()-1)
 {
+    if (game.nodecount() > 0) entries.resize(game.priority(game.nodecount()-1)+1);
 }
 
 /**
@@ -61,7 +62,9 @@ PPSolver::attract(int prio, size_t first)
         for (auto curedge = ins(cur); *curedge != -1; curedge++) {
             int from = *curedge;
             if (disabled[from] or region[from] >= prio) {
-                // if not in the subgame of <prio>, skip
+                // if not in the subgame of <prio>, skip, but remember predecessors in higher
+                // regions: after a promotion, only they can be attracted
+                if (!disabled[from] and region[from] > prio) entries[prio].emplace_back(from, cur);
                 continue;
             } else if (owner(from) == pl) {
                 // if owned by same parity, attract to a-maximal region
@@ -139,13 +142,49 @@ PPSolver::promote(int from, int to)
     }
 
     // Promote and append the new attraction seeds to the target region.
-    const size_t first = regions[to].size();
     for (int i : regions[from]) region[i] = to;
 
     regions[to].insert(regions[to].end(), regions[from].begin(), regions[from].end());
     regions[from].clear();
 
-    // attract from the newly promoted nodes
+    // The region <from> was closed under attraction, so only its predecessors in the regions
+    // between <from> and <to> can be attracted now: those with a lower region still have their
+    // escape below <from>. Attract them first, then continue from the newly attracted vertices.
+    const int pl = to&1;
+    auto &rv = regions[to];
+    const size_t first = rv.size();
+    for (const auto &entry : entries[from]) {
+        const int x = entry.first;
+        if (disabled[x]) continue;
+        const int r = region[x];
+        if (r == to) continue;
+        if (r > to) {
+            entries[to].push_back(entry); // still in a higher region
+            continue;
+        }
+        if (owner(x) == pl) {
+            rv.push_back(x);
+            region[x] = to;
+            strategy[x] = entry.second;
+            continue;
+        }
+        const int witness = escape_witness[x];
+        if (witness != -1 && !disabled[witness] && region[witness] < to) continue;
+        bool can_escape = false;
+        for (auto curedge = outs(x); *curedge != -1; curedge++) {
+            const int y = *curedge;
+            if (!disabled[y] and region[y] < to) {
+                escape_witness[x] = y;
+                can_escape = true;
+                break;
+            }
+        }
+        if (can_escape) continue;
+        rv.push_back(x);
+        region[x] = to;
+        strategy[x] = -1;
+    }
+    entries[from].clear();
     attract(to, first);
 
     promotions++;
@@ -167,6 +206,7 @@ PPSolver::resetRegion(int p)
         }
     }
     regions[p].clear();
+    entries[p].clear();
 }
 
 /**
@@ -177,7 +217,9 @@ bool
 PPSolver::setupRegion(int i, int p, bool mustReset)
 {
     // NOTE: a node can be "disabled" and in a region (after dominion attraction)
-    
+
+    entries[p].clear(); // the attraction below records them again for all members
+
     if (!mustReset) {
         // Check if we must reset anyway (because region is tainted)
         // When must a region be reset?
