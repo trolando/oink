@@ -1279,12 +1279,15 @@ PMTLSolver::run()
             } else {
                 c0 = update<false, false>(*pm0, *pm0b, 0);
             }
+            evenlifts += lifts;
+            // All remaining vertices may have been solved by dominion attraction.
+            if (G.none()) break;
             pm0->set(*pm0b);
             if (use_shortcuts) shortcuts(0, *pm0, *pm1, *pm1b);
-            evenlifts += lifts;
             if (!c0) {
                 solve(*pm0, 1);
                 logger << "done with Even at iteration " << iterations << std::endl;
+                if (G.none()) break;
             }
         }
 
@@ -1302,12 +1305,15 @@ PMTLSolver::run()
             } else {
                 c1 = update<false, false>(*pm1, *pm1b, 1);
             }
+            oddlifts += lifts;
+            // All remaining vertices may have been solved by dominion attraction.
+            if (G.none()) break;
             pm1->set(*pm1b);
             if (use_shortcuts) shortcuts(1, *pm1, *pm0, *pm0b);
-            oddlifts += lifts;
             if (!c1) {
                 solve(*pm1, 0);
                 logger << "done with Odd at iteration " << iterations << std::endl;
+                if (G.none()) break;
             }
         }
 
