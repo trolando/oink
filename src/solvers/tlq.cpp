@@ -126,6 +126,7 @@ TLQSolver::attract(int pl, bitset &Z, bitset &R, const bitset *crossing)
     if (Q.empty()) return false;
     if (++attract_epoch == 0) {
         std::fill(esc_epoch, esc_epoch+nodecount(), 0u);
+        std::fill(tdone.begin(), tdone.end(), 0u);
         ++attract_epoch;
     }
     Processed = Z;
@@ -159,6 +160,7 @@ TLQSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G)
         const int tangle_pr = tpr[t];
         if (tangle_pr == -1) return false; // deleted tangle
         if (pl != (tangle_pr&1)) return false; // not of desired parity
+        if (tdone[t] == attract_epoch) return false;
     }
 
     /**
@@ -196,7 +198,12 @@ TLQSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G)
                 can_attract_new = true; // has vertices not yet attracted
             }
         }
-        if (!can_attract_new) return false; // either no vertices in R\Z or strategy leaves R+Z
+        if (!can_attract_new) {
+            tdone[t] = attract_epoch;
+            return false;
+        }
+        // R and global G stay fixed and Z only grows during this attraction.
+        tdone[t] = attract_epoch;
     }
 
     /**
@@ -463,6 +470,7 @@ pearce_again:
 
         // and set p to pr
         tpr.push_back(pr);
+        tdone.push_back(0);
 
         tangles++;
         tangle.clear();

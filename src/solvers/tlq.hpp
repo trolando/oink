@@ -49,6 +49,7 @@ protected:
     std::vector<int> *tin; // for each normal vertex
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
+    std::vector<unsigned int> tdone; // all members in Z in this attraction
 
     uintqueue pea_state; // v,i,...
     uintqueue pea_S;  // S

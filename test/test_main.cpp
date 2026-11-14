@@ -28,6 +28,7 @@ int test_solution();
 int test_ppj();
 int test_fpj_batch();
 int test_fpi_frontier();
+int test_tlq_cache();
 int test_tlj_cache();
 int test_in_edge_map();
 int test_builder();
@@ -48,6 +49,7 @@ const Test tests[] = {
     {"ppj", test_ppj},
     {"fpj-batch", test_fpj_batch},
     {"fpi-frontier", test_fpi_frontier},
+    {"tlq-cache", test_tlq_cache},
     {"tlj-cache", test_tlj_cache},
     {"in-edge-map", test_in_edge_map},
     {"builder", test_builder},
