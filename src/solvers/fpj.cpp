@@ -43,7 +43,7 @@ FPJSolver::~FPJSolver()
  * - otherwise: only new distractions are justified immediately, and the other evaluated
  *   vertices of a block are justified when the block ends without new distractions.
  */
-template<bool ReuseWitness>
+template<bool ReuseWitness, bool SkipCleanResets>
 void
 FPJSolver::solveSeq(bool greedy)
 {
@@ -74,6 +74,9 @@ FPJSolver::solveSeq(bool greedy)
         won[1-par].set(v);
     };
     auto clearDistraction = [&](int v) {
+        if constexpr (SkipCleanResets) {
+            if (!distraction[v]) return;
+        }
         const int par = parity.test(v);
         distraction.reset(v);
         won[1-par].reset(v);
@@ -245,13 +248,13 @@ FPJSolver::solveSeq(bool greedy)
 void
 FPJSolver::runSeqGreedy()
 {
-    solveSeq<false>(true);
+    solveSeq<false, true>(true);
 }
 
 void
 FPJSolver::runSeq()
 {
-    solveSeq<true>(false);
+    solveSeq<true, false>(false);
 }
 
 void

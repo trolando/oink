@@ -37,7 +37,7 @@ public:
     virtual void run();
 
 private:
-    template<bool ReuseWitness>
+    template<bool ReuseWitness, bool SkipCleanResets>
     void solveSeq(bool greedy);
 };
 
