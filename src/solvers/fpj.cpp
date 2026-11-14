@@ -294,6 +294,17 @@ FPJSolver::solveSeq(bool greedy)
             }
         }
 
+        // Already justified blocks cannot change any hypothesis or strategy.
+        // Resume at the first enabled vertex that still needs justification.
+        if constexpr (PreserveBatch) {
+            if (i < n) {
+                int word = i >> 6;
+                uint64_t bits = (EN[word] & ~J[word]) & (~uint64_t(0) << (i & 63));
+                while (!bits && ++word < int(enabled.block_count())) bits = EN[word] & ~J[word];
+                const int next = bits ? (word << 6) + intrinsics::countr_zero64(bits) : n;
+                i = next < n ? next : n;
+            }
+        }
         if (i == n) break;
 
         // continue with the block of vertex i
