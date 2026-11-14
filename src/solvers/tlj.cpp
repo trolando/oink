@@ -18,6 +18,7 @@
  */
 
 #include <algorithm>
+#include <cassert>
 #include <climits>
 
 #include "tlj.hpp"
@@ -177,6 +178,7 @@ pearce_again:
         tpr.push_back(pr);
         tcnt.push_back(-1);
         tcpos.push_back(0);
+        tblock.push_back(-1);
         pending_next.push_back(-1);
 
         tangles++;
@@ -281,11 +283,26 @@ TLJSolver::attractTangleInto(const int t, const unsigned vpos, const int p, cons
     // each that joins region p later is subtracted when it is popped (-2: done for now)
     if (tcnt[t] == -2) return false;
     if (tcnt[t] == -1) {
+        // A remembered enabled escape can still rule out attraction at p.
+        // Recheck its current region; another visit or a dominion can change it.
+        const int blocked = tblock[t];
+        if (blocked >= 0 && G[blocked] &&
+            (region[blocked] < p || (region[blocked]&1) != pl)) {
+#ifndef NDEBUG
+            bool is_escape = false;
+            for (int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ++ptr) is_escape |= *ptr == blocked;
+            assert(is_escape);
+#endif
+            return false;
+        }
         int c = 0;
         for (int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ptr++) {
             const int e = *ptr;
             if (!G[e]) continue;
-            if (region[e] < p || (region[e]&1) != pl) c++;
+            if (region[e] < p || (region[e]&1) != pl) {
+                if (c == 0) tblock[t] = e;
+                c++;
+            }
         }
         tcnt[t] = c;
         tcpos[t] = (unsigned)zlist.size();
@@ -294,6 +311,13 @@ TLJSolver::attractTangleInto(const int t, const unsigned vpos, const int p, cons
         tcnt[t]--;
     }
     if (tcnt[t] != 0) return false;
+#ifndef NDEBUG
+    // A zero count must certify the current assignment, including queued escapes.
+    for (int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ++ptr) {
+        const int e = *ptr;
+        assert(!G[e] || (region[e] >= p && (region[e]&1) == pl));
+    }
+#endif
     tcnt[t] = -2;
 
     // verify the tangle is still entirely in G (on-the-fly delete otherwise)

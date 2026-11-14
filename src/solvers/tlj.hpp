@@ -65,6 +65,7 @@ protected:
     std::vector<int> tpr; // priority of a tangle (-1 = deleted)
     std::vector<int> tcnt; // for attracting: the escapes of a tangle (-1: not counted)
     std::vector<unsigned> tcpos; // the size of <zlist> when <tcnt> was counted
+    std::vector<int> tblock; // remembered escape, revalidated before counting
     std::vector<int> ttouched; // the tangles with a counter
 
     uintqueue Q; // work queue when attracting to a dominion
