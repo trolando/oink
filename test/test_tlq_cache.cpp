@@ -15,7 +15,7 @@
  */
 
 /**
- * Unit tests for the completed-tangle markers of TLQ.
+ * Unit tests for TLQ: the completed-tangle markers, and chains of dominions.
  */
 
 #include <algorithm>
@@ -26,6 +26,7 @@
 
 #include "oink/oink.hpp"
 #include "solvers/tlq.hpp"
+#include "verifier.hpp"
 
 using namespace pg;
 
@@ -89,6 +90,50 @@ public:
     }
 };
 
+/**
+ * Odd heads lead down a chain of even self-loops. Removing one even dominion
+ * invalidates the previous odd attractor, exposing the next loop. Three links
+ * already exceed the revisits in the initial precision tree.
+ */
+static void
+check_dominion_restarts()
+{
+    for (int links : {1, 2, 3, 4, 7, 8, 15, 16, 31, 32}) {
+        for (int winner : {0, 1}) {
+            for (int head_owner : {0, 1}) {
+                const int n = links*2+1;
+                Game game(n);
+                for (int v = 0; v < n; ++v) {
+                    game.init_vertex(v, (v <= links ? 0 : 1)+winner, v <= links ? 1-winner : head_owner);
+                    game.e_start(v);
+                    if (v <= links) {
+                        game.e_add(v, v);
+                        if (v > 0) game.e_add(v, links+v);
+                    } else {
+                        game.e_add(v, v-links-1);
+                    }
+                    game.e_finish();
+                }
+                game.ensure_sorted();
+                std::ostringstream log;
+                Oink controller(game, log, true);
+                controller.setRemoveLoops(false);
+                controller.setRemoveWCWC(false);
+                controller.setSolveSingle(false);
+                controller.setWorkers(-1);
+                controller.setSolver("tlq");
+                controller.run();
+                Verifier(game, controller.solution(), log).verify(true, true, true);
+                for (int v = 0; v < n; ++v) {
+                    if (controller.solution().winner(v) != winner) {
+                        throw std::runtime_error("TLQ retained a stale region after removing dominions");
+                    }
+                }
+            }
+        }
+    }
+}
+
 int
 test_tlq_cache()
 {
@@ -105,5 +150,7 @@ test_tlq_cache()
     Oink controller(game, log, true);
     Probe(controller, game).check();
     std::cout << "Completed-tangle markers survive epoch wrap and repeated callbacks." << std::endl;
+    check_dominion_restarts();
+    std::cout << "Dominion removal revisits stale regions for both players." << std::endl;
     return 0;
 }
