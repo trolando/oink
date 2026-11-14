@@ -56,8 +56,10 @@ protected:
     std::vector<int> toutdata; // the escapes of the tangles (each ending with -1)
     std::vector<size_t> tvpos; // for each tangle, its vertex-strategy pairs in <tvdata>
     std::vector<size_t> toutpos; // for each tangle, its escapes in <toutdata>
-    std::vector<int> *tin; // for each vertex, the tangles that escape to it
-    bitset has_tin; // the vertices with tangles that escape to it (to skip reading <tin>)
+    struct Backlinks { std::vector<int> by_player[2]; };
+    std::vector<Backlinks> tin; // allocated only for vertices with backlinks
+    std::vector<int> tin_index;
+    bitset has_tin[2]; // vertices with a backlink from each player
     bitset tangled; // the vertices of the opponent attracted into their region with a tangle
                     // (the mark can remain when it moves on: see solveDominion)
     std::vector<int> tpr; // priority of a tangle (-1 = deleted)

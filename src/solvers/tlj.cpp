@@ -276,7 +276,6 @@ TLJSolver::attractTangleInto(const int t, const unsigned vpos, const int p, cons
 {
     if (tpr[t] == -1) return false;       // deleted
     if (tpr[t] > p) return false;         // cannot be attracted this high
-    if ((tpr[t]&1) != pl) return false;   // wrong parity
 
     // all escapes must be won by <pl> at priority >= p: count the others when first seen;
     // each that joins region p later is subtracted when it is popped (-2: done for now)
@@ -563,7 +562,9 @@ TLJSolver::improveRegion(int p)
             }
         }
         // tangle attraction (tangles escaping to <v> may now be attractable)
-        if (has_tin[v]) for (int t : tin[v]) attractTangleInto(t, qi, p, pl);
+        if (has_tin[pl][v]) {
+            for (int t : tin[tin_index[v]].by_player[pl]) attractTangleInto(t, qi, p, pl);
+        }
     }
     for (const int t : ttouched) tcnt[t] = -1;
     ttouched.clear();
@@ -689,8 +690,13 @@ TLJSolver::promote()
         bool good = true; // whether all escapes are in regions of <tpl>
         for (int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ptr++) {
             const int e = *ptr;
-            tin[e].push_back((int)t);
-            has_tin[e] = true;
+            int& index = tin_index[e];
+            if (index == -1) {
+                index = (int)tin.size();
+                tin.emplace_back();
+            }
+            tin[index].by_player[tpl].push_back((int)t);
+            has_tin[tpl][e] = true;
             if (!G[e]) continue;
             const int r = region[e];
             if (r == -1 || (r&1) != tpl) good = false;
@@ -711,8 +717,9 @@ TLJSolver::promote()
 void
 TLJSolver::run()
 {
-    tin = new std::vector<int>[nodecount()];
-    has_tin.resize(nodecount());
+    tin_index.assign(nodecount(), -1);
+    has_tin[0].resize(nodecount());
+    has_tin[1].resize(nodecount());
     tangled.resize(nodecount());
     str = new int[nodecount()];
     region = new int[nodecount()];
@@ -837,7 +844,6 @@ TLJSolver::run()
     }
 #endif
 
-    delete[] tin;
     delete[] str;
     delete[] pea_vidx;
     delete[] region;
