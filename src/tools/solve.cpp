@@ -366,7 +366,7 @@ int main(int argc, char **argv)
         en.run();
         double end = wctime();
         out << "total solving time: " << std::fixed << (end-begin) << " sec." << std::endl;
-    } catch (pg::Error &err) {
+    } catch (const std::exception &err) {
         out << "solving error: " << err.what() << std::endl;
         return -1;
     }

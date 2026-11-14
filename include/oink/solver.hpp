@@ -58,7 +58,7 @@ public:
     /**
      * Set solver options (via -c "...")
      */
-    virtual bool parseOptions(std::string&) { return true; }
+    virtual bool parseOptions(std::string& options) { return options.empty(); }
 
 protected:
     Game& game;

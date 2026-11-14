@@ -521,7 +521,10 @@ PSISolver::parseOptions(std::string& opts)
         const std::string key = opt.substr(0, eq);
         int value = 0;
         try {
-            value = eq == std::string::npos ? 0 : std::stoi(opt.substr(eq+1));
+            const std::string number = eq == std::string::npos ? "" : opt.substr(eq+1);
+            size_t parsed = 0;
+            value = std::stoi(number, &parsed);
+            if (parsed != number.size()) value = 0;
         } catch (...) {
             value = 0;
         }

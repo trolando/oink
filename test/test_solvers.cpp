@@ -237,7 +237,7 @@ test_solver(Game &game, const SolverRun& run, double &time, std::ostream &log)
     double begin = wctime();
     try {
         solver.run();
-    } catch (pg::Error &err) {
+    } catch (const std::exception &err) {
         log << "solver error: " << err.what() << std::endl;
         return 1;
     }

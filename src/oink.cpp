@@ -392,7 +392,7 @@ Oink::solveLoop()
             auto s = Solvers::construct(*solver, *this, *game);
             if (!s->parseOptions(options)) {
                 logger << "error parsing options: " << options << std::endl;
-                exit(-1);
+                throw std::runtime_error("invalid solver options: "+options);
             }
             s->run();
 
@@ -417,7 +417,7 @@ Oink::solveLoop()
             bool fullSolver = true; // every solver is actually a full solver
             if (!s->parseOptions(options)) {
                 logger << "error parsing options: " << options << std::endl;
-                exit(-1);
+                throw std::runtime_error("invalid solver options: "+options);
             }
             s->run();
 
