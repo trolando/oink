@@ -2,6 +2,14 @@
 
 All notable changes to Oink will be documented in this file.
 
+## [1.1.1] - 2026-11-14
+
+### Fixed
+
+- TLQ could give wrong solutions: after removing a dominion, it did not
+  always revisit the older regions that attracted to the removed heads.
+  This bug dates from the first TLQ.
+
 ## [1.1.0] - 2026-11-09
 
 This release makes tangle learning and PMTL much faster, adds parallel
