@@ -301,7 +301,10 @@ private:
     bitset L1; // lifted in last iteration for 1
 
     void attractVertices(int pl, int v, bitset &R, bitset &Z);
-    bool lift(Measures &pm, const int player, int v);
+    template<class Measure>
+    bool lift(Measure &pm, const int player, int v);
+    template<class Measure>
+    bool updateMeasure(Measure &pm, const int player);
     bool update(Measures &pm, const int player);
     void solve(Measures &pm, const int player);
     void shortcuts(const int player, Measures &pm0, Measures &pm1);

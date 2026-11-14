@@ -1325,8 +1325,9 @@ GPMSolver::~GPMSolver()
 {
 }
 
+template<class Measure>
 bool
-GPMSolver::lift(Measures &pm, const int player, int v) {
+GPMSolver::lift(Measure &pm, const int player, int v) {
     const int p = priority(v);
     // Small's bounds shrink as vertices reach Top. Incrementing a stale tuple
     // can reverse the order of two successors, but truncation preserves it.
@@ -1399,8 +1400,9 @@ GPMSolver::lift(Measures &pm, const int player, int v) {
     return updated;
 }
 
+template<class Measure>
 bool
-GPMSolver::update(Measures &pm, const int player) {
+GPMSolver::updateMeasure(Measure &pm, const int player) {
     auto &Q = player == 0 ? Q0 : Q1;
     //auto &R = player == 0 ? R0 : R1;
     auto &T = player == 0 ? T0 : T1;
@@ -1461,6 +1463,21 @@ GPMSolver::update(Measures &pm, const int player) {
 
     Q.swap(QQ);
     return Q.any();
+}
+
+
+bool
+GPMSolver::update(Measures &pm, const int player)
+{
+    // The kind also selects the measure objects in run(). Dispatch once per
+    // update wave so the lifting loop can call the concrete operations directly.
+    switch (measure_kind) {
+        case MeasureKind::Small: return updateMeasure(static_cast<Small&>(pm), player);
+        case MeasureKind::Succinct: return updateMeasure(static_cast<Succinct&>(pm), player);
+        case MeasureKind::Ordered: return updateMeasure(static_cast<Ordered&>(pm), player);
+        case MeasureKind::Strahler: return updateMeasure(static_cast<Strahler&>(pm), player);
+    }
+    LOGIC_ERROR;
 }
 
 
