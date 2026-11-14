@@ -40,7 +40,7 @@ public:
 
 private:
     static constexpr int SOLVED = INT_MAX;
-    bitset G, dirty, nonempty[2], dom;
+    bitset G, dirty, nonempty[2];
     std::unique_ptr<int[]> workspace;
     int *region, *str, *native, *degree, *cnt, *witness;
     std::vector<int> count, headfirst, headend, members;

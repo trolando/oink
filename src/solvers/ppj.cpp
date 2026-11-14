@@ -242,42 +242,45 @@ PPJSolver::solveDominion(int p, bool attract)
     dominions++;
     length[p] = 0;
     if (trace) logger << "dominion " << p << " (" << work.size() << " vertices before attraction)" << std::endl;
-    for (unsigned i = 0; i < work.size(); ++i) dom[work[i]] = true;
-    for (unsigned i = 0; attract && i < work.size(); ++i) {
-        const int v = work[i];
-        for (const int *e = ins(v); *e != -1; ++e) {
-            const int u = *e;
-            if (!G[u] || dom[u]) continue;
-            if (owner(u) != pl) {
-                if (cnt[u] < 0) {
-                    cnt[u] = degree[u];
-                    touched.push(u);
-                }
-                if (--cnt[u] != 0) continue;
-                str[u] = -1;
-            } else {
-                str[u] = v;
-            }
-            dom[u] = true;
-            work.push(u);
-        }
-    }
+    // Solve each vertex when it is attracted, and attract in stack order, as Oink::flush
+    // does: the vertex attracted last is expanded next, while its data is still in the cache.
     for (unsigned i = 0; i < work.size(); ++i) {
         const int v = work[i];
         G[v] = false;
         move(v, SOLVED);
         solve(v, pl, str[v]);
     }
+    while (attract && work.nonempty()) {
+        const int v = work.pop();
+        for (const int *e = ins(v); *e != -1; ++e) {
+            const int u = *e;
+            if (!G[u]) continue;
+            int s = v;
+            if (owner(u) != pl) {
+                if (cnt[u] < 0) {
+                    cnt[u] = degree[u];
+                    touched.push(u);
+                }
+                if (--cnt[u] != 0) continue;
+                s = -1;
+            }
+            G[u] = false;
+            move(u, SOLVED);
+            solve(u, pl, s);
+            work.push(u);
+        }
+    }
+    work.clear();
     for (unsigned i = 0; i < touched.size(); ++i) {
         const int u = touched[i];
         degree[u] = cnt[u];
         cnt[u] = -1;
         if (!G[u] || region[u] == -1) continue;
-        if (str[u] != -1 && dom[str[u]]) invalidate(u);
+        // (justifications never point to vertices solved in an earlier dominion)
+        if (str[u] != -1 && !G[str[u]]) invalidate(u);
     }
     touched.clear();
     invalidateClosure(SOLVED, -1);
-    for (unsigned i = 0; i < work.size(); ++i) dom[work[i]] = false;
     dirty |= nonempty[0];
     dirty |= nonempty[1];
 }
@@ -290,7 +293,6 @@ PPJSolver::run()
     G.flip();
     if (G.none()) return;
     const int maxp = priority(G.find_last());
-    dom.resize(n);
     dirty.resize(maxp+1);
     nonempty[0].resize(maxp+1);
     nonempty[1].resize(maxp+1);
