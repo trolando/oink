@@ -258,6 +258,7 @@ int
 PPSolver::getRegionStatus(int i, int p)
 {
     const int pl = p&1;
+    int lowest = -1; // the lowest higher region an opponent vertex can escape to
 
     // check if the region is closed in the subgame
     for (int j=i; j>=0 && priority(j)==p; j--) {
@@ -274,16 +275,17 @@ PPSolver::getRegionStatus(int i, int p)
             for (auto curedge = outs(j); *curedge != -1; curedge++) {
                 int to =*curedge;
                 if (disabled[to]) continue;
-                if (region[to] < p) return -2; // open
+                const int r = region[to];
+                if (r < p) return -2; // open
+                if (r > p && (r < lowest || lowest == -1)) lowest = r;
             }
         }
     }
     // closed in the subgame; without higher regions it is a dominion
     if (isTopmost(p)) return -1;
-    // closed in the subgame, so find lowest higher region for possible promotion
-    int lowest = -1;
+    // find lowest higher region for possible promotion (the heads were scanned above)
     for (int j : regions[p]) {
-        if (owner(j) != pl) {
+        if (owner(j) != pl and priority(j) != p) {
             // losing node, find lowest higher ...
             for (auto curedge = outs(j); *curedge != -1; curedge++) {
                 int to = *curedge;
