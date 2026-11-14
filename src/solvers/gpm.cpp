@@ -1327,6 +1327,35 @@ GPMSolver::~GPMSolver()
 
 bool
 GPMSolver::lift(Measures &pm, const int player, int v) {
+    const int p = priority(v);
+    // Small's bounds shrink as vertices reach Top. Incrementing a stale tuple
+    // can reverse the order of two successors, but truncation preserves it.
+    bool select_before_see = measure_kind != MeasureKind::Small || (p & 1) != player;
+#ifndef NDEBUG
+    // Detailed tracing reports the lifted value of every successor.
+    if (trace >= 2) select_before_see = false;
+#endif
+    if (select_before_see) {
+        const bool maximize = owner(v) == player;
+        int best = -1;
+        for (auto edge = outs(v); *edge != -1; ++edge) {
+            const int to = *edge;
+            if (!G[to]) continue;
+            if (best == -1) {
+                best = to;
+            } else {
+                const int order = pm.compare(to, best);
+                if (maximize ? order > 0 : order < 0) best = to;
+            }
+        }
+        if (best == -1) return false;
+
+        // A monotone see operation preserves the minimum or maximum value.
+        pm.copy(best, -4);
+        pm.see(-4, p);
+        return true;
+    }
+
     bool updated = false;
     if (owner(v) == player) {
         // Take the highest successor
@@ -1380,46 +1409,51 @@ GPMSolver::update(Measures &pm, const int player) {
 
     QQ.reset();
     L.reset();
-    for (auto v = Q.find_first(); v != bitset::npos; v = Q.find_next(v)) {
-        lift_attempts++;
-        if (lift(pm, player, v)) {
-            auto res = pm.compare(-4, v);
-            if (res < 0) {
+    for (std::size_t word = 0; word < Q.block_count(); ++word) {
+        uint64_t pending = Q.data()[word];
+        while (pending != 0) {
+            const int v = int(word * 64 + intrinsics::countr_zero64(pending));
+            pending &= pending - 1;
+            lift_attempts++;
+            if (lift(pm, player, v)) {
+                auto res = pm.compare(-4, v);
+                if (res < 0) {
 #ifndef NDEBUG
-                if (trace) {
-                    logger << "\033[1m" << player << "-lifting\033[m \033[36m" << label_vertex(v) << "\033[m from \033[1m";
-                    pm.stream(logger, v);
-                    logger << " to ";
-                    pm.stream(logger, -4);
-                    logger << std::endl;
-                }
+                    if (trace) {
+                        logger << "\033[1m" << player << "-lifting\033[m \033[36m" << label_vertex(v) << "\033[m from \033[1m";
+                        pm.stream(logger, v);
+                        logger << " to ";
+                        pm.stream(logger, -4);
+                        logger << std::endl;
+                    }
 #endif
-                //LOGIC_ERROR;
-            }
-            if (res > 0) {
-                lifts++;
+                    //LOGIC_ERROR;
+                }
+                if (res > 0) {
+                    lifts++;
 #ifndef NDEBUG
-                if (trace) {
-                    logger << "\033[1m" << player << "-lifting\033[m \033[36m" << label_vertex(v) << "\033[m from \033[1m";
-                    pm.stream(logger, v);
-                    logger << "\033[m to \033[1m";
-                    pm.stream(logger, -4);
-                    logger << "\033[m" << std::endl;
-                }
+                    if (trace) {
+                        logger << "\033[1m" << player << "-lifting\033[m \033[36m" << label_vertex(v) << "\033[m from \033[1m";
+                        pm.stream(logger, v);
+                        logger << "\033[m to \033[1m";
+                        pm.stream(logger, -4);
+                        logger << "\033[m" << std::endl;
+                    }
 #endif
-                L[v] = 1;
-                // actually lift
-                pm.copy(-4, v);
-                // update B and R
-                if (pm.is_top(-4)) {
-                    T[v] = true;
-                    //R[v] = false;
-                }
-                //B[v] = false;
-                // update QQ
-                for (auto curedge = ins(v); *curedge != -1; curedge++) {
-                    int from = *curedge;
-                    if (!T[from]) QQ[from] = true;
+                    L[v] = 1;
+                    // actually lift
+                    pm.copy(-4, v);
+                    // update B and R
+                    if (pm.is_top(-4)) {
+                        T[v] = true;
+                        //R[v] = false;
+                    }
+                    //B[v] = false;
+                    // update QQ
+                    for (auto curedge = ins(v); *curedge != -1; curedge++) {
+                        int from = *curedge;
+                        if (!T[from]) QQ[from] = true;
+                    }
                 }
             }
         }
@@ -1525,8 +1559,8 @@ GPMSolver::shortcuts(const int player, Measures &pm0, Measures &pm1)
     for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
         Queue.push(v);
     }
-    while (Queue.nonempty()) {
-        const int v = Queue.pop();
+    for (unsigned i = 0; i < Queue.size(); ++i) {
+        const int v = Queue[i];
         for (auto curedge = ins(v); *curedge != -1; curedge++) {
             int from = *curedge;
             if (L[from] || !G[from]) continue; // don't attract
@@ -1553,6 +1587,8 @@ GPMSolver::shortcuts(const int player, Measures &pm0, Measures &pm1)
         }
 
     }
+    Queue.clear();
+
     L ^= G;
     for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
         // logger << "player " << (1-player) << " should win " << label_vertex(v) << std::endl;
