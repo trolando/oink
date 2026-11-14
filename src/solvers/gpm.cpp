@@ -1552,6 +1552,12 @@ GPMSolver::shortcuts(const int player, Measures &pm0, Measures &pm1)
 
     // logger<<"running shortcuts for player " << player << std::endl; 
 
+    // Measures and G stay fixed during this closure; L only grows.
+    // Start a fresh epoch because the measures can change between calls.
+    if (++escape_epoch == 0) {
+        std::fill(escape_stamp.begin(), escape_stamp.end(), 0);
+        escape_epoch = 1;
+    }
     // now find vertices that are "stable"
     // any vertex in L is lifted previously, so it's increasing for L
     // also add all in T
@@ -1565,9 +1571,15 @@ GPMSolver::shortcuts(const int player, Measures &pm0, Measures &pm1)
             int from = *curedge;
             if (L[from] || !G[from]) continue; // don't attract
             if (owner(from) != player) {
-                // see if opponent can escape
+                int first = 0;
+                if (escape_stamp[from] == escape_epoch) {
+                    const int previous = escape_offset[from];
+                    if (!L[outs(from)[previous]]) continue;
+                    // Earlier edges cannot become escapes while L grows.
+                    first = previous + 1;
+                }
                 bool escapes = false;
-                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                for (auto curedge = outs(from) + first; *curedge != -1; curedge++) {
                     int to = *curedge;
                     if (!G[to] || L[to]) continue; // not a potential escape
                     // it is only a valid escape if the measure obtained by going from
@@ -1575,6 +1587,8 @@ GPMSolver::shortcuts(const int player, Measures &pm0, Measures &pm1)
                     pm.copy(to, -1);
                     pm.see(-1, priority(from));
                     if (pm.compare(-1, from) <= 0) {
+                        escape_offset[from] = int(curedge - outs(from));
+                        escape_stamp[from] = escape_epoch;
                         escapes = true;
                         break;
                     }
@@ -1694,6 +1708,10 @@ void
 GPMSolver::run()
 {
     str = new int[nodecount()];
+    if (use_shortcuts) {
+        escape_offset.resize(nodecount());
+        escape_stamp.resize(nodecount());
+    }
     G = disabled;
     G.flip();
 

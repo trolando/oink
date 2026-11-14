@@ -345,6 +345,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_fpi_frontier.cpp
             test/test_tlq_cache.cpp
             test/test_tlj_cache.cpp
+            test/test_gpm_cache.cpp
             test/test_in_edge_map.cpp
             test/test_builder.cpp
             test/test_game.cpp
@@ -365,6 +366,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestFPIFrontier COMMAND test_unit fpi-frontier)
         add_test(NAME TestTLJCache COMMAND test_unit tlj-cache)
         add_test(NAME TestTLQCache COMMAND test_unit tlq-cache)
+        add_test(NAME TestGPMCache COMMAND test_unit gpm-cache)
         add_test(NAME TestInEdgeMap COMMAND test_unit in-edge-map)
         add_test(NAME TestBuilder COMMAND test_unit builder)
         add_test(NAME TestGame COMMAND test_unit game)

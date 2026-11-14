@@ -275,9 +275,13 @@ public:
     virtual bool parseOptions(std::string&);
 
 private:
+    friend class GPMCacheProbe;
     bitset G; // remaining unsolved game
     int *str; // stores currently assigned strategy of each vertex
     MeasureKind measure_kind = MeasureKind::Ordered;
+    std::vector<int> escape_offset;
+    std::vector<unsigned int> escape_stamp;
+    unsigned int escape_epoch = 0;
     int lifts = 0;
     int lift_attempts = 0;
     uintqueue Queue;
