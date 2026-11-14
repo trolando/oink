@@ -35,15 +35,15 @@ FPJSolver::~FPJSolver()
  *
  * Vertices are processed in blocks of consecutive (enabled) vertices with the same parity.
  * A vertex is justified when its current evaluation (winner and strategy) is known to be
- * consistent; justified vertices are skipped. When a block contains new distractions, all
- * justified vertices that depend on them are reset, and solving continues at the lowest
- * reset vertex.
+ * consistent; justified vertices are skipped. When a block contains new distractions, the
+ * justified vertices of the old winner that depend on them are reset, and solving continues
+ * at the lowest reset vertex. Justifications for the new winner remain valid.
  *
  * - greedy: every evaluated vertex is justified immediately (variation 1);
  * - otherwise: only new distractions are justified immediately, and the other evaluated
  *   vertices of a block are justified when the block ends without new distractions.
  */
-template<bool ReuseWitness, bool SkipCleanResets>
+template<bool ReuseWitness, bool SkipCleanResets, bool PreserveBatch>
 void
 FPJSolver::solveSeq(bool greedy)
 {
@@ -180,6 +180,12 @@ FPJSolver::solveSeq(bool greedy)
                 for (auto curedge = ins(v); *curedge != -1; curedge++) {
                     const int from = *curedge;
                     if (disabled[from]) continue;
+                    if constexpr (PreserveBatch) {
+                        // All assignments in this batch justify the same new
+                        // winner. Delayed reset consolidation invalidates only
+                        // the old winner's closure (Lapauw thesis, Theorem 3.11).
+                        if (won[1-cur_parity][from]) continue;
+                    }
                     if (justified[from]) {
                         if (strategy[from] == -1 or strategy[from] == v) {
 #ifndef NDEBUG
@@ -248,13 +254,13 @@ FPJSolver::solveSeq(bool greedy)
 void
 FPJSolver::runSeqGreedy()
 {
-    solveSeq<false, true>(true);
+    solveSeq<false, true, true>(true);
 }
 
 void
 FPJSolver::runSeq()
 {
-    solveSeq<true, false>(false);
+    solveSeq<true, false, true>(false);
 }
 
 void
