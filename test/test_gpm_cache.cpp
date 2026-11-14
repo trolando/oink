@@ -15,7 +15,8 @@
  */
 
 /**
- * Unit tests for GPM: the blocking escapes of the shortcuts.
+ * Unit tests for GPM: the blocking escapes of the shortcuts and the active
+ * subgame.
  */
 
 #include <algorithm>
@@ -33,6 +34,48 @@ namespace pg {
 class GPMCacheProbe
 {
 public:
+    static void checkDisabled(MeasureKind kind, int player, int priority)
+    {
+        Game game(2);
+        for (int v = 0; v < 2; ++v) game.init_vertex(v, priority, 0);
+        game.e_start(0);
+        game.e_add(0, 0);
+        game.e_finish();
+        game.e_start(1);
+        game.e_add(1, 0);
+        game.e_finish();
+        game.ensure_sorted();
+        std::ostringstream log;
+        Oink controller(game, log, true);
+        GPMSolver solver(controller, game, kind);
+        // Vertex 1 is a disabled predecessor of the active self-loop at 0,
+        // as can occur when Oink solves a bottom SCC of the original graph.
+        solver.G.resize(2);
+        solver.G[0] = true;
+        solver.Q0 = solver.Q1 = solver.G;
+        solver.QQ.resize(2);
+        solver.T0.resize(2);
+        solver.T1.resize(2);
+        solver.L0.resize(2);
+        solver.L1.resize(2);
+        solver.Queue.resize(2);
+        solver.escape_offset.resize(2);
+        solver.escape_stamp.resize(2);
+        std::unique_ptr<Measures> pm0(new_measure(kind, game, 0));
+        std::unique_ptr<Measures> pm1(new_measure(kind, game, 1));
+        auto& measure = player == 0 ? *pm0 : *pm1;
+        for (int wave = 0; wave < 2; ++wave) {
+            solver.update(measure, player);
+            const auto& pending = player == 0 ? solver.Q0 : solver.Q1;
+            const auto& lifted = player == 0 ? solver.L0 : solver.L1;
+            if (pending[1] || lifted[1]) throw std::runtime_error("GPM scheduled a disabled predecessor");
+        }
+        solver.shortcuts(player, *pm0, *pm1);
+        if (solver.T0[1] || solver.T1[1] || pm0->is_top(1) || pm1->is_top(1)) {
+            throw std::runtime_error("GPM shortcut escaped the active subgame");
+        }
+    }
+
     static void check(Game& game, MeasureKind kind)
     {
         std::ostringstream log;
@@ -116,6 +159,11 @@ test_gpm_cache()
     for (auto kind : {MeasureKind::Small, MeasureKind::Succinct, MeasureKind::Ordered, MeasureKind::Strahler}) {
         GPMCacheProbe::check(game, kind);
     }
-    std::cout << "Shortcut escape cursors preserve closure across repeated callbacks, player changes and epoch wrap." << std::endl;
+    for (auto kind : {MeasureKind::Small, MeasureKind::Succinct, MeasureKind::Ordered, MeasureKind::Strahler}) {
+        for (int player : {0, 1}) {
+            for (int priority : {0, 1, 2, 3}) GPMCacheProbe::checkDisabled(kind, player, priority);
+        }
+    }
+    std::cout << "GPM updates stay inside the active subgame; shortcut cursors preserve closure across repeated callbacks, player changes and epoch wrap." << std::endl;
     return 0;
 }

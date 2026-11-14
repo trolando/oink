@@ -1452,7 +1452,7 @@ GPMSolver::update(Measures &pm, const int player) {
                     // update QQ
                     for (auto curedge = ins(v); *curedge != -1; curedge++) {
                         int from = *curedge;
-                        if (!T[from]) QQ[from] = true;
+                        if (G[from] && !T[from]) QQ[from] = true;
                     }
                 }
             }
