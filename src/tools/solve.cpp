@@ -194,7 +194,7 @@ int main(int argc, char **argv)
         ("scc", "Iteratively solve bottom SCCs")
         ("s,solver", "Use given solver (--solvers for info)", cxxopts::value<std::string>())
         ("solvers", "List available solvers")
-        ("c,configure", "Additional configuration options for the solver", cxxopts::value<std::string>())
+        ("c,configure", "Solver-specific options (supported solvers/syntax: --solvers)", cxxopts::value<std::string>())
         ("w,workers", "Number of workers for parallel code", cxxopts::value<int>())
         ("force-parallel", "Run a parallel solver in parallel also on a game below its size threshold")
         ("z,timeout", "Number of seconds for timeout", cxxopts::value<int>())
@@ -223,6 +223,23 @@ int main(int argc, char **argv)
     if (options.count("solvers")) {
         Solvers::list(std::cout);
         return 0;
+    }
+
+    // pick the solver and check its options before reading the game
+    std::string solverid = "tl"; // default solver
+    if (options.count("solver")) {
+        solverid = options["solver"].as<std::string>();
+    } else {
+        for (const auto& id : Solvers::getSolverIDs()) {
+            if (options.count(id)) solverid = id;
+        }
+    }
+    if (!Solvers::getSolverIDs().count(solverid)) {
+        std::cerr << "unknown solver: " << solverid << std::endl;
+        return 1;
+    }
+    if (options.count("configure")) {
+        if (!Solvers::validateOptions(solverid, options["configure"].as<std::string>(), std::cerr)) return 1;
     }
 
     /* Setup timestamp filter */
@@ -314,15 +331,6 @@ int main(int argc, char **argv)
      */
 
     // pick the solver first: Oink builds the in-edges now, unless the solver never uses them
-    std::string solverid = "tl"; // default solver
-    if (options.count("solver")) {
-        solverid = options["solver"].as<std::string>();
-    } else {
-        for (const auto& id : Solvers::getSolverIDs()) {
-            if (options.count(id)) solverid = id;
-        }
-    }
-
     Oink en(pg, out, Solvers::needsInEdges(solverid));
     en.setTrace(options.count("t"));
 

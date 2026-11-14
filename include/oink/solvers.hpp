@@ -57,6 +57,18 @@ public:
         return instance().solvers[id].description;
     }
 
+    /** Configuration syntax for this solver; empty when it accepts no options. */
+    static std::string optionsHelp(const std::string& id)
+    {
+        const auto it = instance().solvers.find(id);
+        return it == instance().solvers.end() ? std::string() : it->second.optionsHelp;
+    }
+
+    /** Validate with the solver parser, without solving or modifying an input game. */
+    static bool validateOptions(const std::string& id, const std::string& options, std::ostream& errors);
+
+    static bool hasOptions(const std::string& id) { return !optionsHelp(id).empty(); }
+
     /**
      * Get whether solver <id> can be run in parallel
      */
@@ -109,6 +121,7 @@ public:
      * Add a solver to the set of solvers
      */
     static void add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor);
+    static void add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor, const std::string& optionsHelp);
 
     static std::set<std::string> getSolverIDs()
     {
@@ -127,6 +140,7 @@ private:
         bool needsInEdges = true;
         long parallelMinVertices = 100000; // (only for parallel solvers)
         std::string sequentialFallback = "";
+        std::string optionsHelp = "";
     };
 
     std::map<std::string, SolverInfo> solvers;

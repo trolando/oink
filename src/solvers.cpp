@@ -99,6 +99,14 @@ Solvers::Solvers()
     _add("gpm-ordered", "generic progress measures, ordered measures (as gpm)", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Ordered); });
     _add("gpm-strahler", "generic progress measures, Strahler measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Strahler); });
 
+    solvers["mspm"].optionsHelp = "even | odd (default: smaller measure domain)";
+    solvers["psi"].optionsHelp = "parmin=N,chunk=N (positive integers; defaults: 2048,256)";
+    solvers["tlpar"].optionsHelp = "parmin=N,chunk=N (positive integers; defaults: 2048,256)";
+    for (const char* id : {"gpm", "gpm-small", "gpm-succinct", "gpm-ordered", "gpm-strahler"})
+        solvers[id].optionsHelp = "small, succinct, ordered, strahler, no-shortcuts (comma separated)";
+    for (const char* id : {"pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler"})
+        solvers[id].optionsHelp = "small, succinct, ordered, strahler, up/noup, tangles/notangles, no-shortcuts (comma separated)";
+
     // solvers that never use the in-edges, so Oink need not build them
     for (const char* id : {"fpi", "fpim", "psi"}) solvers[id].needsInEdges = false;
 
@@ -119,6 +127,7 @@ Solvers::list(std::ostream &out)
         const auto& label = entry.first;
         const auto& info = entry.second;
         out << "* " << label << ":\t" << info.description << std::endl;
+        if (!info.optionsHelp.empty()) out << "    options: " << info.optionsHelp << std::endl;
     }
 }
 
@@ -131,10 +140,37 @@ Solvers::construct(const std::string& id, Oink& oink, Game& game)
     return instance().solvers[id].constructor(oink, game); 
 }
 
+bool
+Solvers::validateOptions(const std::string& id, const std::string& options, std::ostream& errors)
+{
+    if (options.empty()) return true;
+    if (!hasOptions(id)) {
+        errors << id << " does not accept configuration options" << std::endl;
+        return false;
+    }
+    Game game(1);
+    game.vec_init();
+    game.init_vertex(0, 0, 0);
+    game.vec_add_edge(0, 0);
+    game.vec_finish();
+    game.ensure_sorted();
+    Oink controller(game, errors, needsInEdges(id));
+    auto solver = construct(id, controller, game);
+    std::string text = options;
+    return solver->parseOptions(text);
+}
+
 void
-Solvers::add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor) 
+Solvers::add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor)
+{
+    add(id, description, isParallel, constructor, "");
+}
+
+void
+Solvers::add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor, const std::string& optionsHelp)
 {
     instance().solvers[id] = {description, isParallel, constructor};
+    instance().solvers[id].optionsHelp = optionsHelp;
 }
 
 }
