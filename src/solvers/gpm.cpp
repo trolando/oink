@@ -22,6 +22,7 @@
 #include <cstring>
 
 #include "gpm.hpp"
+#include "oink/oink.hpp"
 #include "oink/uintqueue.hpp"
 
 namespace pg {
@@ -1726,9 +1727,56 @@ GPMSolver::parseOptions(std::string& opts)
     return true;
 }
 
+// Whole-game measure storage is wasteful when a controller exposes a tiny
+// induced subgame. Keep graph construction and strategy remapping inside solve.
+bool
+GPMSolver::runSparseSubgame()
+{
+    if (nodecount() < 4096 || disabled.none()) return false;
+    const bitset active = ~disabled;
+    const auto count = active.count();
+    if (count == 0 || count*64 >= std::uint64_t(nodecount())) return false;
+
+    // A valid solver subgame is total. Retain the ordinary path for an
+    // arbitrary partial mask that does not meet that contract.
+    for (auto v=active.find_first(); v!=bitset::npos; v=active.find_next(v)) {
+        bool has_successor = false;
+        for (auto edge=outs(v); *edge!=-1; ++edge) {
+            if (active[*edge]) {
+                has_successor = true;
+                break;
+            }
+        }
+        if (!has_successor) return false;
+    }
+
+    std::vector<int> original;
+    auto compact = game.extract_subgame(active, original);
+    std::vector<int> permutation(count);
+    compact->sort(permutation.data());
+    const auto unsorted = original;
+    for (std::size_t v=0; v<count; ++v) original[v] = unsorted[permutation[v]];
+
+    Oink controller(*compact, logger, true);
+    controller.setWorkers(config.workers);
+    controller.setTrace(trace);
+    GPMSolver solver(controller, *compact, measure_kind);
+    solver.use_shortcuts = use_shortcuts;
+    solver.run();
+
+    const auto& answer = controller.solution();
+    for (std::size_t v=0; v<count; ++v) {
+        const int move = answer.strategy(v);
+        Solver::solve(original[v], answer.winner(v), move < 0 ? -1 : original[move]);
+    }
+    Solver::flush();
+    return true;
+}
+
 void
 GPMSolver::run()
 {
+    if (runSparseSubgame()) return;
     str = new int[nodecount()];
     if (use_shortcuts) {
         escape_offset.resize(nodecount());

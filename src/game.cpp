@@ -577,24 +577,23 @@ Game::extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game)
     SubgameView view(*this, mask);
     int nv = view.size();
     int ne = 0;
-    for (int v=0; v<n_vertices; v++) {
-        if (view.contains(v)) {
-            bool bad = true;
+    for (auto vertex=mask.find_first(); vertex!=bitset::npos; vertex=mask.find_next(vertex)) {
+        const int v = int(vertex);
+        bool bad = true;
+        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+            if (view.contains(*curedge)) {
+                bad = false;
+                ne++;
+            }
+        }
+        if (bad) {
+            std::cerr << "no successor for vertex " << label_vertex(v) << " in extract_subgame!" << std::endl;
+            std::cerr << "successors not in subgame:";
             for (auto curedge = outs(v); *curedge != -1; curedge++) {
-                if (view.contains(*curedge)) {
-                    bad = false;
-                    ne++;
-                }
+                std::cerr << " " << label_vertex(*curedge);
             }
-            if (bad) {
-                std::cerr << "no successor for vertex " << label_vertex(v) << " in extract_subgame!" << std::endl;
-                std::cerr << "successors not in subgame:";
-                for (auto curedge = outs(v); *curedge != -1; curedge++) {
-                    std::cerr << " " << label_vertex(*curedge);
-                }
-                std::cerr << std::endl;
-                abort(); // bad!
-            }
+            std::cerr << std::endl;
+            abort(); // bad!
         }
     }
 
@@ -603,11 +602,11 @@ Game::extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game)
     // create mapping from game to subgame
     // also count the number of vertices in the subgame
     std::map<int, int> game_to_subgame;
-    subgame_to_game.assign(n_vertices, 0);
+    subgame_to_game.assign(nv, 0);
 
     int vertices = 0;
-    for (int v=0; v<n_vertices; v++) {
-        if (!view.contains(v)) continue;
+    for (auto vertex=mask.find_first(); vertex!=bitset::npos; vertex=mask.find_next(vertex)) {
+        const int v = int(vertex);
 
         // update game_to_subgame and subgame_to_game
         int w = vertices++;

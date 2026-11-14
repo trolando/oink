@@ -287,6 +287,7 @@ private:
     uintqueue Queue;
 
     bool use_shortcuts = true;
+    bool runSparseSubgame();
 
     //bitset R0; // remainder (non-Top, in-Game) for 0
     //bitset R1; // remainder (non-Top, in-Game) for 0

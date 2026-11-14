@@ -15,8 +15,8 @@
  */
 
 /**
- * Unit tests for GPM: the blocking escapes of the shortcuts, the active subgame
- * and Top notifications.
+ * Unit tests for GPM: the blocking escapes of the shortcuts, the active subgame,
+ * Top notifications and compact subgames.
  */
 
 #include <algorithm>
@@ -28,8 +28,24 @@
 
 #include "oink/oink.hpp"
 #include "solvers/gpm.hpp"
+#include "verifier.hpp"
 
 namespace pg {
+
+/**
+ * A controller that solves only the given vertices.
+ */
+class GPMSubgameController : public Oink
+{
+public:
+    using Oink::Oink;
+
+    void select(const std::vector<int>& active)
+    {
+        disabled.set();
+        for (int v : active) disabled.reset(v);
+    }
+};
 
 class GPMCacheProbe
 {
@@ -89,6 +105,51 @@ public:
         }
         if (solver.L0.count() != 1 || !solver.L0[1]) {
             throw std::runtime_error("known-Top filtering changed the full stable complement");
+        }
+    }
+
+    static void checkSparseMapping(MeasureKind kind, int invert, bool duplicates, bool shortcuts)
+    {
+        constexpr int n = 8192;
+        const std::vector<int> old_active = {64, 767, 4098, 8001};
+        Game game(n);
+        for (int v = 0; v < n; ++v) game.init_vertex(v, v/128+invert, v&1);
+        for (int i = 0; i < 4; ++i) game.set_owner(old_active[i], (i&1)^invert);
+        for (int v = 0; v < n; ++v) {
+            game.e_start(v);
+            const auto found = std::find(old_active.begin(), old_active.end(), v);
+            if (found == old_active.end()) {
+                game.e_add(v, v);
+            } else {
+                const int i = int(found-old_active.begin());
+                game.e_add(v, old_active[(i+1)%4]);
+                if (duplicates) game.e_add(v, old_active[(i+1)%4]);
+                // A losing exit for the owner. Removing it preserves the
+                // active cycle's winner and matches a stable solved boundary.
+                game.e_add(v, ((1-game.owner(v))^invert) ? 128 : 256);
+            }
+            game.e_finish();
+        }
+        std::vector<int> permutation(n), inverse(n), active;
+        game.sort(permutation.data());
+        for (int v = 0; v < n; ++v) inverse[permutation[v]] = v;
+        for (int v : old_active) active.push_back(inverse[v]);
+        std::ostringstream log;
+        GPMSubgameController controller(game, log, true);
+        for (int v = 0; v < n; ++v) {
+            if (std::find(active.begin(), active.end(), v) != active.end()) continue;
+            const int winner = game.priority(v)&1;
+            controller.solve(v, winner, game.owner(v) == winner ? v : -1);
+        }
+        controller.select(active);
+        GPMSolver solver(controller, game, kind);
+        solver.use_shortcuts = shortcuts;
+        if (!solver.runSparseSubgame()) throw std::runtime_error("sparse GPM regression did not compact");
+        Verifier(game, controller.solution(), log).verify(true, true, true);
+        for (int v : active) {
+            if (controller.solution().winner(v) != invert) {
+                throw std::runtime_error("compact GPM changed the active winner or mapping");
+            }
         }
     }
 
@@ -221,6 +282,13 @@ test_gpm_cache()
     game.ensure_sorted();
     for (auto kind : {MeasureKind::Small, MeasureKind::Succinct, MeasureKind::Ordered, MeasureKind::Strahler}) {
         GPMCacheProbe::check(game, kind);
+        for (int invert : {0, 1}) {
+            for (bool duplicates : {false, true}) {
+                for (bool shortcuts : {false, true}) {
+                    GPMCacheProbe::checkSparseMapping(kind, invert, duplicates, shortcuts);
+                }
+            }
+        }
     }
     for (auto kind : {MeasureKind::Small, MeasureKind::Succinct, MeasureKind::Ordered, MeasureKind::Strahler}) {
         for (int player : {0, 1}) {
@@ -230,6 +298,6 @@ test_gpm_cache()
     for (auto kind : {MeasureKind::Succinct, MeasureKind::Ordered, MeasureKind::Strahler}) {
         GPMCacheProbe::checkKnownTop(kind);
     }
-    std::cout << "GPM updates stay inside the active subgame; shortcut cursors preserve closure across repeated callbacks, player changes and epoch wrap." << std::endl;
+    std::cout << "GPM updates stay inside the active subgame; shortcut cursors preserve closure across repeated callbacks, player changes and epoch wrap; sparse mappings preserve strategies across solved boundaries." << std::endl;
     return 0;
 }
