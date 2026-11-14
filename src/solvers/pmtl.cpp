@@ -1009,6 +1009,12 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
 void
 PMTLSolver::shortcuts(const int player, Measures &pm, Measures &target1, Measures &target2)
 {
+    // Source measures and G stay fixed while vertices and tangles grow L.
+    // Start a fresh epoch because measures can change between calls.
+    if (++escape_epoch == 0) {
+        std::fill(escape_stamp.begin(), escape_stamp.end(), 0);
+        escape_epoch = 1;
+    }
     auto& L = Updated;
 
     // we want to find all potentially liftable vertices for <player>
@@ -1043,9 +1049,15 @@ PMTLSolver::shortcuts(const int player, Measures &pm, Measures &target1, Measure
             int from = *curedge;
             if (L[from] || !G[from]) continue; // don't attract
             if (owner(from) != player) {
-                // see if opponent can escape
+                int first = 0;
+                if (escape_stamp[from] == escape_epoch) {
+                    const int previous = escape_offset[from];
+                    if (!L[outs(from)[previous]]) continue;
+                    // Earlier edges cannot become escapes while L grows.
+                    first = previous + 1;
+                }
                 bool escapes = false;
-                for (auto curedge = outs(from); *curedge != -1; curedge++) {
+                for (auto curedge = outs(from) + first; *curedge != -1; curedge++) {
                     int to = *curedge;
                     if (!G[to] || L[to]) continue; // not a potential escape
                     // it is only a valid escape if the measure obtained by going from
@@ -1053,6 +1065,8 @@ PMTLSolver::shortcuts(const int player, Measures &pm, Measures &target1, Measure
                     pm.copy(to, -1);
                     pm.see(-1, priority(from));
                     if (pm.compare(-1, from) <= 0) {
+                        escape_offset[from] = int(curedge - outs(from));
+                        escape_stamp[from] = escape_epoch;
                         escapes = true;
                         break;
                     }
@@ -1189,6 +1203,10 @@ PMTLSolver::run()
 {
     tin = new std::vector<int>[nodecount()];
     str = new int[nodecount()];
+    if (use_shortcuts) {
+        escape_offset.resize(nodecount());
+        escape_stamp.resize(nodecount());
+    }
     S.resize(nodecount());
     G = disabled;
     G.flip();

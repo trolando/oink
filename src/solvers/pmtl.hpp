@@ -34,9 +34,13 @@ public:
     virtual bool parseOptions(std::string&);
 
 private:
+    friend class PMTLCacheProbe;
     int iterations = 0;
     int dominions = 0;
     int tangles = 0;
+    std::vector<int> escape_offset;
+    std::vector<unsigned int> escape_stamp;
+    unsigned int escape_epoch = 0;
     int lifts = 0;
     MeasureKind measure_kind = MeasureKind::Ordered;
     bool use_tangles = true;

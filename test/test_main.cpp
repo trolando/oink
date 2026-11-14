@@ -32,6 +32,7 @@ int test_fpi_frontier();
 int test_tlq_cache();
 int test_tlj_cache();
 int test_gpm_cache();
+int test_pmtl_cache();
 int test_in_edge_map();
 int test_builder();
 int test_game();
@@ -55,6 +56,7 @@ const Test tests[] = {
     {"tlq-cache", test_tlq_cache},
     {"tlj-cache", test_tlj_cache},
     {"gpm-cache", test_gpm_cache},
+    {"pmtl-cache", test_pmtl_cache},
     {"in-edge-map", test_in_edge_map},
     {"builder", test_builder},
     {"game", test_game},
