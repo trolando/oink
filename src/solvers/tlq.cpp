@@ -58,12 +58,12 @@ TLQSolver::attracts(const int pl, const int v, bitset &Z, bitset &R)
 
 
 /**
- * Attract vertices in <R> from subgame <Y> to <v> in region <Z> as player <pl>.
- * We attract only vertices in <R>, but the opponent may escape to <R> and <Y>.
+ * Attract vertices in <R> to <v> in region <Z> as player <pl>.
+ * The opponent may escape to vertices of <R> that are not in <Z>.
  * Attracted vertices are added to <Z> and to the queue <Q>.
  */
 void
-TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y)
+TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R)
 {
     auto curedge = ins(v);
     for (int from = *curedge; from != -1; from = *++curedge) {
@@ -80,14 +80,22 @@ TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R, bits
         } else if (R[from]) {
             // a vertex in <R> that is not yet in <Z>
             if (owner(from) != pl) {
-                // check each exit
-                bool escapes = false;
-                auto curedge = outs(from);
-                for (int to = *curedge; !escapes and to != -1; to = *++curedge) {
-                    // check if escapes to a vertex in <R> or <Y> that is not in <Z>
-                    if (!Z[to] and (R[to] or Y[to])) escapes = true;
+                unsigned int e;
+                // Count unprocessed successors on first touch, then consume this edge.
+                // Keep v unprocessed until all its incoming edges have been handled, so
+                // parallel edges are counted and decremented with the same multiplicity.
+                if (esc_epoch[from] != attract_epoch) {
+                    esc_epoch[from] = attract_epoch;
+                    e = 0;
+                    for (auto edge = outs(from); *edge != -1; edge++) {
+                        if (R[*edge] and !Processed[*edge]) e++;
+                    }
+                } else {
+                    e = escs[from];
                 }
-                if (escapes) continue;
+                e -= R[v] ? 1 : 0;
+                escs[from] = e;
+                if (e != 0) continue;
             }
             // vertex does not escape, so attract it
             Z[from] = true;
@@ -107,6 +115,35 @@ TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R, bits
 
 
 /**
+ * Drain one attraction in FIFO order, with a fresh epoch for its fixed subgame R.
+ * Queued seeds are unprocessed even when already in Z. Some seeds (for example k_U)
+ * are outside R: they trigger attraction but must not decrement its escape counters.
+ * If crossing is given, report whether the attraction visits it.
+ */
+bool
+TLQSolver::attract(int pl, bitset &Z, bitset &R, const bitset *crossing)
+{
+    if (Q.empty()) return false;
+    if (++attract_epoch == 0) {
+        std::fill(esc_epoch, esc_epoch+nodecount(), 0u);
+        ++attract_epoch;
+    }
+    Processed = Z;
+    for (unsigned i=0; i<Q.size(); i++) Processed[Q[i]] = false;
+    bool crossed = false;
+    for (unsigned qi=0; qi<Q.size(); qi++) {
+        const int v = Q[qi];
+        if (crossing and (*crossing)[v]) crossed = true;
+        attractVertices(pl, v, Z, R);
+        Processed[v] = true;
+        attractTangles(pl, v, R, Z, R);
+    }
+    Q.clear();
+    return crossed;
+}
+
+
+/**
  * Try to attract tangle <t> for player <pl> to attractor set <Z>
  * All vertices in tangle <t> must be in <Z+R> and the opponent may not escape to subgame <R\Z>
  * Add attracted vertices to <Z> and to queue <Q>.
@@ -122,6 +159,18 @@ TLQSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G)
         const int tangle_pr = tpr[t];
         if (tangle_pr == -1) return false; // deleted tangle
         if (pl != (tangle_pr&1)) return false; // not of desired parity
+    }
+
+    /**
+     * Check if the tangle can escape to G\Z.
+     */
+    {
+        int *ptr = tout[t];
+        int v;
+        while ((v=*ptr++) != -1) {
+            if (Z[v]) continue;
+            if (G[v]) return false; // opponent escapes
+        }
     }
 
     /**
@@ -148,18 +197,6 @@ TLQSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G)
             }
         }
         if (!can_attract_new) return false; // either no vertices in R\Z or strategy leaves R+Z
-    }
-
-    /**
-     * Check if the tangle can escape to G\Z.
-     */
-    {
-        int *ptr = tout[t];
-        int v;
-        while ((v=*ptr++) != -1) {
-            if (Z[v]) continue;
-            if (G[v]) return false; // opponent escapes
-        }
     }
 
     /**
@@ -201,6 +238,7 @@ TLQSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G)
 void
 TLQSolver::attractTangles(int pl, int v, bitset &R, bitset &Z, bitset &G)
 {
+    if (!has_tin[v]) return;
     const auto &in_cur = tin[v];
     for (int from : in_cur) attractTangle(from, pl, R, Z, G);
 }
@@ -402,7 +440,11 @@ pearce_again:
         const int tidx = tpr.size();
 
         // add back links to all normal vertices in our [out]
-        for (unsigned int x = 0; x < tangleto.size(); x++) tin[tangleto[x]].push_back(tidx);
+        for (unsigned int x = 0; x < tangleto.size(); x++) {
+            const int v = tangleto[x];
+            has_tin[v] = true;
+            tin[v].push_back(tidx);
+        }
 
         // move tangleto into vout
         int* _tout = new int[tangleto.size()+1];
@@ -544,11 +586,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
         H[v] = true;
         str[v] = -1;
         Q.push(v);
-        while (Q.nonempty()) {
-            const int u = Q.pop();
-            attractVertices(pl, u, H, SG, SG);
-            attractTangles(pl, u, SG, H, SG);
-        }
+        attract(pl, H, SG);
     }
 
 #ifndef NDEBUG
@@ -595,11 +633,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
                 for (auto v = S.find_last(); v != bitset::npos; v = S.find_prev(v)) {
                     Q.push(v);
                 }
-                while (Q.nonempty()) {
-                    const int u = Q.pop();
-                    attractVertices(pl, u, S, G, G);
-                    attractTangles(pl, u, G, S, G);
-                }
+                attract(pl, S, G);
                 // remove them from the game
                 Wm |= S;
                 Wo -= S;
@@ -628,11 +662,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
                     for (auto v = k_U.find_last(); v != bitset::npos; v = k_U.find_prev(v)) {
                         Q.push(v);
                     }
-                    while (Q.nonempty()) {
-                        const int u = Q.pop();
-                        attractVertices(1-k_pl, u, k_U, k_R, k_R);
-                        attractTangles(1-k_pl, u, k_R, k_U, k_R);
-                    }
+                    attract(1-k_pl, k_U, k_R);
                     k_R -= k_U;
                     (k_pl == 1 ? W0 : W1) |= k_U;
                     (k_pl == 1 ? W1 : W0) -= k_U;
@@ -659,11 +689,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
                     for (auto v = k_H.find_last(); v != bitset::npos; v = k_H.find_prev(v)) {
                         Q.push(v);
                     }
-                    while (Q.nonempty()) {
-                        const int u = Q.pop();
-                        attractVertices(k_pl, u, k_H, k_R, k_R);
-                        attractTangles(k_pl, u, k_R, k_H, k_R);
-                    }
+                    attract(k_pl, k_H, k_R);
                     (k_pl == 1 ? W1 : W0) |= k_H;
                     (k_pl == 1 ? W0 : W1) -= k_H;
 #ifndef NDEBUG
@@ -751,12 +777,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
         }
     }
     if (Q.nonempty()) {
-        while (Q.nonempty()) {
-            const int v = Q.pop();
-            if (Wm[v]) opponent_attracted_from_us = true;
-            attractVertices(1-pl, v, Wo, SG, SG);
-            attractTangles(1-pl, v, SG, Wo, SG);
-        }
+        opponent_attracted_from_us = attract(1-pl, Wo, SG, &Wm);
     }
 
 #ifndef NDEBUG
@@ -817,7 +838,11 @@ TLQSolver::run()
     iterations = 0;
 
     tin = new std::vector<int>[nodecount()];
+    has_tin.resize(nodecount());
     str = new int[nodecount()];
+    Processed.resize(nodecount());
+    escs = new unsigned int[nodecount()];
+    esc_epoch = new unsigned int[nodecount()]();
 
     Q.resize(nodecount());
     W0.resize(nodecount());
@@ -895,6 +920,8 @@ TLQSolver::run()
     logger << "solved with " << iterations << " iterations." << std::endl;
 
     delete[] str;
+    delete[] escs;
+    delete[] esc_epoch;
     delete[] tin;
     delete[] pea_vidx;
     for (auto &x : tv) delete[] x;

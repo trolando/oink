@@ -45,6 +45,7 @@ protected:
     unsigned int tangles = 0;
 
     std::vector<int*> tout; // for each tangle
+    bitset has_tin; // vertices with incoming tangle escapes
     std::vector<int> *tin; // for each normal vertex
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
@@ -66,12 +67,16 @@ protected:
     std::vector<bitset*> Hs;
     std::vector<int> Ps; // priorities
     std::vector<int> heads; // record heads for the tangle learning
+    bitset Processed; // already processed vertices of the current attraction
+    unsigned int *escs, *esc_epoch; // lazy escape counts, scoped to one attraction
+    unsigned int attract_epoch = 0;
+    bool attract(int pl, bitset &Z, bitset &R, const bitset *crossing = nullptr);
     int *str;
 
     bitset W0, W1; // current approximation of winning areas
 
     bool attracts(const int pl, const int v, bitset &Z, bitset &R);
-    void attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y);
+    void attractVertices(const int pl, const int v, bitset &Z, bitset &R);
     bool attractTangle(int t, int pl, bitset &R, bitset &Z, bitset &G);
     void attractTangles(int pl, int v, bitset &R, bitset &Z, bitset &G);
     bool extractTangles(int startvertex, bitset &R);
