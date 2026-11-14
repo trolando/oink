@@ -578,15 +578,20 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
     bitset H(nodecount());
     Hs.push_back(&H);
 
-    for (int v=vtop; v!=-1; v--) {
-        if (!SG[v] || H[v]) continue;
-        // if (priority(v) != pr) break; // stop attracting when we reach the next priority
-        if ((priority(v)&1) != pl) break; // on-the-fly compression
-        heads.push_back(v);
-        H[v] = true;
-        str[v] = -1;
-        Q.push(v);
+    // Seed the same-parity heads together, as in TL, before expanding their attractor.
+    int next = vtop;
+    while (next >= 0) {
+        for (; next >= 0; next--) {
+            if (!SG[next] or H[next]) continue;
+            if ((priority(next)&1) != pl) break;
+            heads.push_back(next);
+            H[next] = true;
+            str[next] = -1;
+            Q.push(next);
+        }
+        if (Q.empty()) break;
         attract(pl, H, SG);
+        // Attraction can remove the opposite-parity vertex that stopped this batch.
     }
 
 #ifndef NDEBUG
@@ -625,83 +630,83 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
     if (!leaky) {
         std::fill(pea_vidx, pea_vidx+nodecount(), '\0');
         pea_curidx = 1;
-        for (auto v : heads) {
-            auto T = tangles, D = dominions;
-            extractTangles(v, H);
-            if (D != dominions) {
-                // maximize the found dominions
-                for (auto v = S.find_last(); v != bitset::npos; v = S.find_prev(v)) {
+        // Extract this batch against a fixed H and strategy. Maximize its dominions
+        // before using the new tangles to re-maximize all regions once.
+        const auto T = tangles, D = dominions;
+        for (const int v : heads) extractTangles(v, H);
+        if (D != dominions) {
+            // maximize the found dominions
+            for (auto v = S.find_last(); v != bitset::npos; v = S.find_prev(v)) {
+                Q.push(v);
+            }
+            attract(pl, S, G);
+            // remove them from the game
+            Wm |= S;
+            Wo -= S;
+            G -= S;
+            S.reset();
+        }
+        if (D != dominions or T != tangles) {
+            // now we need to re-maximize all regions
+            for (unsigned int k=0; k<Rs.size(); k++) {
+                int k_pr = Ps[k];
+                int k_pl = k_pr & 1;
+                bitset& k_R = *Rs[k];
+                bitset& k_H = *Hs[k];
+                bitset k_U;
+                // first: R[k] - H[k] >= R[k+1]
+                // and compute what remains of k_U
+                if (k == 0) {
+                    k_R &= G;
+                    k_U = G - k_R;
+                } else {
+                    bitset SG = *Rs[k-1] - *Hs[k-1];
+                    k_R &= SG;
+                    k_U = SG - k_R;
+                }
+                // maximize k_U
+                for (auto v = k_U.find_last(); v != bitset::npos; v = k_U.find_prev(v)) {
                     Q.push(v);
                 }
-                attract(pl, S, G);
-                // remove them from the game
-                Wm |= S;
-                Wo -= S;
-                G -= S;
-                S.reset();
-            }
-            if (D != dominions or T != tangles) {
-                // now we need to re-maximize all regions
-                for (unsigned int k=0; k<Rs.size(); k++) {
-                    int k_pr = Ps[k];
-                    int k_pl = k_pr & 1;
-                    bitset& k_R = *Rs[k];
-                    bitset& k_H = *Hs[k];
-                    bitset k_U;
-                    // first: R[k] - H[k] >= R[k+1]
-                    // and compute what remains of k_U
-                    if (k == 0) {
-                        k_R &= G;
-                        k_U = G - k_R;
-                    } else {
-                        bitset SG = *Rs[k-1] - *Hs[k-1];
-                        k_R &= SG;
-                        k_U = SG - k_R;
-                    }
-                    // maximize k_U 
-                    for (auto v = k_U.find_last(); v != bitset::npos; v = k_U.find_prev(v)) {
-                        Q.push(v);
-                    }
-                    attract(1-k_pl, k_U, k_R);
-                    k_R -= k_U;
-                    (k_pl == 1 ? W0 : W1) |= k_U;
-                    (k_pl == 1 ? W1 : W0) -= k_U;
+                attract(1-k_pl, k_U, k_R);
+                k_R -= k_U;
+                (k_pl == 1 ? W0 : W1) |= k_U;
+                (k_pl == 1 ? W1 : W0) -= k_U;
 #ifndef NDEBUG
-                    if (trace >= 2) {
-                        logger << "\033[1;33mlevel " << k << "-R\033[m";
-                        for (auto v = k_R.find_last(); v != bitset::npos; v = k_R.find_prev(v)) {
-                            logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
-                        }
-                        logger << std::endl;
+                if (trace >= 2) {
+                    logger << "\033[1;33mlevel " << k << "-R\033[m";
+                    for (auto v = k_R.find_last(); v != bitset::npos; v = k_R.find_prev(v)) {
+                        logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
                     }
-#endif
-#ifndef NDEBUG
-                    if (trace >= 2) {
-                        logger << "\033[1;33mlevel " << k << "-U\033[m";
-                        for (auto v = k_U.find_last(); v != bitset::npos; v = k_U.find_prev(v)) {
-                            logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
-                        }
-                        logger << std::endl;
-                    }
-#endif
-                    // maximize H
-                    k_H &= k_R;
-                    for (auto v = k_H.find_last(); v != bitset::npos; v = k_H.find_prev(v)) {
-                        Q.push(v);
-                    }
-                    attract(k_pl, k_H, k_R);
-                    (k_pl == 1 ? W1 : W0) |= k_H;
-                    (k_pl == 1 ? W0 : W1) -= k_H;
-#ifndef NDEBUG
-                    if (trace >= 2) {
-                        logger << "\033[1;33mlevel " << k << "-H\033[m";
-                        for (auto v = k_H.find_last(); v != bitset::npos; v = k_H.find_prev(v)) {
-                            logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
-                        }
-                        logger << std::endl;
-                    }
-#endif
+                    logger << std::endl;
                 }
+#endif
+#ifndef NDEBUG
+                if (trace >= 2) {
+                    logger << "\033[1;33mlevel " << k << "-U\033[m";
+                    for (auto v = k_U.find_last(); v != bitset::npos; v = k_U.find_prev(v)) {
+                        logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
+                    }
+                    logger << std::endl;
+                }
+#endif
+                // maximize H
+                k_H &= k_R;
+                for (auto v = k_H.find_last(); v != bitset::npos; v = k_H.find_prev(v)) {
+                    Q.push(v);
+                }
+                attract(k_pl, k_H, k_R);
+                (k_pl == 1 ? W1 : W0) |= k_H;
+                (k_pl == 1 ? W0 : W1) -= k_H;
+#ifndef NDEBUG
+                if (trace >= 2) {
+                    logger << "\033[1;33mlevel " << k << "-H\033[m";
+                    for (auto v = k_H.find_last(); v != bitset::npos; v = k_H.find_prev(v)) {
+                        logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
+                    }
+                    logger << std::endl;
+                }
+#endif
             }
         }
     }
