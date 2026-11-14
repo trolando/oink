@@ -836,7 +836,21 @@ TLQSolver::run()
 
     bitset GG(G);
     Rs.push_back(&GG);
-    solve(GG, nodecount()-1, nodecount(), nodecount());
+    for (;;) {
+        const auto previous_dominions = dominions;
+        solve(GG, nodecount()-1, nodecount(), nodecount());
+        if (G.none() or dominions == previous_dominions) break;
+
+        // Removing a dominion can invalidate older regions: their attractor
+        // strategies may lead to heads that have now left G. The precision
+        // bounds of this traversal need not suffice to revisit those regions.
+        // Recheck the remaining game with fresh approximations whenever a
+        // traversal removed dominions. Each retry strictly decreases G.
+        GG = G;
+        W0 -= G;
+        W1 -= G;
+        Ps.clear();
+    }
 
     // if you want to find any games with vertices that are not in found dominions,
     // then uncomment the following line
