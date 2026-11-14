@@ -431,28 +431,27 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
             continue;
         }
             
-        // attract from all heads with priority <pr> that are in <R>
-        for (; top != bitset::npos; top = R.find_prev(top)) {
-            if ((priority(top)&1) != (pr&1)) break; // otf compress
-            // if (priority(top) != pr) break; // disable otf compress
-
+        // Seed a run of same-parity heads before expanding their attractor.
+        while (top != bitset::npos && (priority(top)&1) == pl) {
+            for (; top != bitset::npos && (priority(top)&1) == pl; top = R.find_prev(top)) {
 #ifndef NDEBUG
-            if (trace >= 2) {
-                logger << "\033[1;37mattracting to \033[36m" << label_vertex(top) << "\033[m for \033[1;36m" << pl << "\033[m" << " (pr: " << priority(top) << ")" << std::endl;
-            }
+                if (trace >= 2) {
+                    logger << "\033[1;37mattracting to \033[36m" << label_vertex(top) << "\033[m for \033[1;36m" << pl << "\033[m" << " (pr: " << priority(top) << ")" << std::endl;
+                }
 #endif
-
-            V[top] = true; // heads
-            Z[top] = true; // add to <Z>
-            str[top] = -1;
-            Q.push(top);
-
-            while (Q.nonempty()) {
-                const int v = Q.pop();
-                R[v] = false; // remove from <R>
+                V[top] = true;
+                Z[top] = true;
+                str[top] = -1;
+                Q.push(top);
+            }
+            for (unsigned i = 0; i < Q.size(); ++i) {
+                const int v = Q[i];
+                R[v] = false;
                 attractVertices(pl, v, R, Z, R, pr);
                 attractTangles(pl, v, R, Z, R, pr);
             }
+            Q.clear();
+            if (top != bitset::npos && !R[top]) top = R.find_prev(top);
         }
 
 #ifndef NDEBUG
@@ -495,12 +494,13 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
 
             leaks = Q.nonempty();
 
-            while (Q.nonempty()) {
-                const int v = Q.pop();
+            for (unsigned i = 0; i < Q.size(); ++i) {
+                const int v = Q[i];
                 Z[v] = false; // remove from <Z>
                 attractVertices(1-pl, v, Z, W, Z, pr);
                 attractTangles(1-pl, v, Z, W, Z, pr);
             }
+            Q.clear();
         }
 
         if (!leaks) {
@@ -523,11 +523,12 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
             if (D != dominions) {
                 for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) Q.push(v);
 
-                while (Q.nonempty()) {
-                    const int v = Q.pop();
+                for (unsigned i = 0; i < Q.size(); ++i) {
+                    const int v = Q[i];
                     attractVertices(pl, v, G, S, G, INT_MAX);
                     attractTangles(pl, v, G, S, G, INT_MAX);
                 }
+                Q.clear();
 
                 for (auto v = S.find_first(); v != bitset::npos; v = S.find_next(v)) {
                     Solver::solve(v, pl, str[v]);
@@ -557,12 +558,13 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
                     }
                 }
 
-                while (Q.nonempty()) {
-                    const int v = Q.pop();
+                for (unsigned i = 0; i < Q.size(); ++i) {
+                    const int v = Q[i];
                     Z[v] = false; // remove from <Z>
                     attractVertices(1-pl, v, Z, W, Z, pr);
                     attractTangles(1-pl, v, Z, W, Z, pr);
                 }
+                Q.clear();
             }
         }
 
