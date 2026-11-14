@@ -42,6 +42,9 @@ protected:
     int *strategy;
     bitset Z;
     std::vector<int> escape_witness;
+    int top_vertex; // highest vertex that may still be enabled
+
+    bool isTopmost(int priority);
 
     void attract(int prio, size_t first = 0);
     void promote(int from, int to);

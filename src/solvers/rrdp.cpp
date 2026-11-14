@@ -51,6 +51,9 @@ RRDPSolver::getRegionStatus(int i, int p)
             }
         }
     }
+    // closed in the subgame; without higher regions it is a dominion (delayed promotions
+    // only target existing regions and are dropped after every dominion)
+    if (isTopmost(p)) return -1;
     // closed in the subgame, so find lowest higher region for possible promotion
     int lowest = -1;
     for (auto j : regions[p]) {

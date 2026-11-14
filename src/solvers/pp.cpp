@@ -26,8 +26,20 @@
 namespace pg {
 
 PPSolver::PPSolver(Oink& oink, Game& game)
-    : Solver(oink, game), Z(game.nodecount()), escape_witness(game.nodecount(), -1)
+    : Solver(oink, game), Z(game.nodecount()), escape_witness(game.nodecount(), -1),
+      top_vertex(game.nodecount()-1)
 {
+}
+
+/**
+ * Returns true if no vertex with a priority higher than <p> is left, so there are no regions
+ * above <p>. Vertices are only ever disabled, so <top_vertex> only moves down.
+ */
+bool
+PPSolver::isTopmost(int p)
+{
+    while (top_vertex >= 0 and disabled[top_vertex]) top_vertex--;
+    return top_vertex >= 0 and priority(top_vertex) == p;
 }
 
 PPSolver::~PPSolver()
@@ -226,6 +238,9 @@ PPSolver::setDominion(int p)
 {
     // found a dominion
     const int pl = p&1;
+    // Without higher regions, the region was attracted in the whole remaining game, so the
+    // flush would attract nothing. The solved vertices stay in the queue of the next flush.
+    const bool topmost = isTopmost(p);
     if (trace) logger << "\033[1;38;5;201mdominion \033[36m" << p << "\033[m";
     for (int i : regions[p]) {
         assert(region[i] == p);
@@ -236,7 +251,7 @@ PPSolver::setDominion(int p)
         Solver::solve(i, pl, owner(i) == pl ? strategy[i] : -1);
     }
     if (trace) logger << std::endl;
-    Solver::flush();
+    if (!topmost) Solver::flush();
 }
 
 int
@@ -263,6 +278,8 @@ PPSolver::getRegionStatus(int i, int p)
             }
         }
     }
+    // closed in the subgame; without higher regions it is a dominion
+    if (isTopmost(p)) return -1;
     // closed in the subgame, so find lowest higher region for possible promotion
     int lowest = -1;
     for (int j : regions[p]) {
