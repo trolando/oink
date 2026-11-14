@@ -20,6 +20,7 @@
 #ifndef GPM_HPP
 #define GPM_HPP
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -282,8 +283,8 @@ private:
     std::vector<int> escape_offset;
     std::vector<unsigned int> escape_stamp;
     unsigned int escape_epoch = 0;
-    int lifts = 0;
-    int lift_attempts = 0;
+    std::uint64_t lifts = 0;
+    std::uint64_t lift_attempts = 0;
     uintqueue Queue;
 
     bool use_shortcuts = true;

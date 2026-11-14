@@ -16,7 +16,7 @@
 
 /**
  * Unit tests for GPM: the blocking escapes of the shortcuts, the active subgame,
- * Top notifications and compact subgames.
+ * Top notifications, the work counters and compact subgames.
  */
 
 #include <algorithm>
@@ -105,6 +105,41 @@ public:
         }
         if (solver.L0.count() != 1 || !solver.L0[1]) {
             throw std::runtime_error("known-Top filtering changed the full stable complement");
+        }
+    }
+
+    static void checkCounters(MeasureKind kind)
+    {
+        Game input(3);
+        for (int v = 0; v < 3; ++v) {
+            input.init_vertex(v, v, v&1);
+            input.e_start(v);
+            input.e_add(v, (v+1)%3);
+            input.e_finish();
+        }
+        input.ensure_sorted();
+        struct Counts {
+            std::uint64_t lifts, attempts;
+        };
+        auto run = [&](std::uint64_t seed) {
+            Game game(input);
+            std::ostringstream log;
+            Oink controller(game, log, true);
+            GPMSolver solver(controller, game, kind);
+            solver.lifts = solver.lift_attempts = seed;
+            solver.run();
+            Verifier(game, controller.solution(), log).verify(true, true, true);
+            return Counts{solver.lifts, solver.lift_attempts};
+        };
+        const auto baseline = run(0);
+        if (baseline.lifts == 0) throw std::runtime_error("counter regression needs actual lifts");
+        // Exercise real solver work across both signed and unsigned 32-bit limits.
+        for (std::uint64_t seed : {std::uint64_t(std::numeric_limits<int>::max()),
+                                   std::uint64_t(std::numeric_limits<std::uint32_t>::max())}) {
+            const auto actual = run(seed);
+            if (actual.lifts != seed+baseline.lifts || actual.attempts != seed+baseline.attempts) {
+                throw std::runtime_error("GPM work counters overflowed or changed solver work");
+            }
         }
     }
 
@@ -282,6 +317,7 @@ test_gpm_cache()
     game.ensure_sorted();
     for (auto kind : {MeasureKind::Small, MeasureKind::Succinct, MeasureKind::Ordered, MeasureKind::Strahler}) {
         GPMCacheProbe::check(game, kind);
+        GPMCacheProbe::checkCounters(kind);
         for (int invert : {0, 1}) {
             for (bool duplicates : {false, true}) {
                 for (bool shortcuts : {false, true}) {

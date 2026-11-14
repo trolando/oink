@@ -1803,7 +1803,7 @@ GPMSolver::run()
     bool c0 = true;
     bool c1 = true;
 
-    long iterations = 0;
+    std::uint64_t iterations = 0;
 
     while (true) {
         iterations++;

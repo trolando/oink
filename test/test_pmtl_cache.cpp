@@ -15,7 +15,7 @@
  */
 
 /**
- * Unit tests for PMTL: the blocking escapes of the shortcuts.
+ * Unit tests for PMTL: the blocking escapes of the shortcuts and the work counters.
  */
 
 #include <algorithm>
@@ -27,12 +27,46 @@
 
 #include "oink/oink.hpp"
 #include "solvers/pmtl.hpp"
+#include "verifier.hpp"
 
 namespace pg {
 
 class PMTLCacheProbe
 {
 public:
+    static void checkCounters(Game& input, MeasureKind kind, bool tangles)
+    {
+        struct Counts {
+            std::uint64_t lifts, iterations;
+            std::string by_player;
+        };
+        auto run = [&](std::uint64_t seed) {
+            Game game(input);
+            std::ostringstream log;
+            Oink controller(game, log, true);
+            PMTLSolver solver(controller, game, kind);
+            solver.use_tangles = tangles;
+            solver.lifts = solver.iterations = seed;
+            solver.run();
+            Verifier(game, controller.solution(), log).verify(true, true, true);
+            const auto text = log.str();
+            const auto start = text.find("number of lifts:");
+            if (start == std::string::npos) throw std::runtime_error("missing per-player lift counts");
+            return Counts{solver.lifts, solver.iterations, text.substr(start, text.find('\n', start)-start)};
+        };
+        const auto baseline = run(0);
+        if (baseline.lifts == 0) throw std::runtime_error("counter regression needs actual lifts");
+        // Exercise real solver work across both signed and unsigned 32-bit limits.
+        for (std::uint64_t seed : {std::uint64_t(std::numeric_limits<int>::max()),
+                                   std::uint64_t(std::numeric_limits<std::uint32_t>::max())}) {
+            const auto actual = run(seed);
+            if (actual.lifts != seed+baseline.lifts || actual.iterations != seed+baseline.iterations ||
+                actual.by_player != baseline.by_player) {
+                throw std::runtime_error("PMTL work counters overflowed or changed solver work");
+            }
+        }
+    }
+
     static void check(Game& game, MeasureKind kind, bool tangles)
     {
         std::ostringstream log;
@@ -116,6 +150,7 @@ test_pmtl_cache()
     for (auto kind : {MeasureKind::Small, MeasureKind::Succinct, MeasureKind::Ordered, MeasureKind::Strahler}) {
         for (bool tangles : {false, true}) {
             PMTLCacheProbe::check(game, kind, tangles);
+            PMTLCacheProbe::checkCounters(game, kind, tangles);
         }
     }
     std::cout << "PMTL escape cursors preserve tangle and vertex closures across calls, player changes and epoch wrap." << std::endl;

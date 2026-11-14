@@ -1272,8 +1272,8 @@ PMTLSolver::run()
     bool c0 = true;
     bool c1 = true;
 
-    long evenlifts = 0;
-    long oddlifts = 0;
+    std::uint64_t evenlifts = 0;
+    std::uint64_t oddlifts = 0;
 
     while (true) {
         if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "\033[m" << std::endl;
@@ -1281,7 +1281,7 @@ PMTLSolver::run()
 
         if (c0) {
             if (trace) logger << "\033[1;38;5;196mfor player Even\033[m" << std::endl;
-            evenlifts -= lifts;
+            const auto previous_lifts = lifts;
             if (go_up) {
                 if (use_tangles) {
                     c0 = update<true, true>(*pm0, *pm0b, 0);
@@ -1293,7 +1293,7 @@ PMTLSolver::run()
             } else {
                 c0 = update<false, false>(*pm0, *pm0b, 0);
             }
-            evenlifts += lifts;
+            evenlifts += lifts - previous_lifts;
             // All remaining vertices may have been solved by dominion attraction.
             if (G.none()) break;
             pm0->set(*pm0b);
@@ -1307,7 +1307,7 @@ PMTLSolver::run()
 
         if (c1) {
             if (trace) logger << "\033[1;38;5;196mfor player Odd\033[m" << std::endl;
-            oddlifts -= lifts;
+            const auto previous_lifts = lifts;
             if (go_up) {
                 if (use_tangles) {
                     c1 = update<true, true>(*pm1, *pm1b, 1);
@@ -1319,7 +1319,7 @@ PMTLSolver::run()
             } else {
                 c1 = update<false, false>(*pm1, *pm1b, 1);
             }
-            oddlifts += lifts;
+            oddlifts += lifts - previous_lifts;
             // All remaining vertices may have been solved by dominion attraction.
             if (G.none()) break;
             pm1->set(*pm1b);
