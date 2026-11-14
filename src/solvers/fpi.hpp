@@ -41,6 +41,8 @@ public:
     void run_par(lace_worker*);
 
 private:
+    template<bool ReuseWitness>
+    int updateBlockImpl(int i, int n);
     void initState(void);
 
     // v becomes a distraction: it is now won by the opponent of its parity

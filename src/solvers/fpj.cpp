@@ -43,6 +43,7 @@ FPJSolver::~FPJSolver()
  * - otherwise: only new distractions are justified immediately, and the other evaluated
  *   vertices of a block are justified when the block ends without new distractions.
  */
+template<bool ReuseWitness>
 void
 FPJSolver::solveSeq(bool greedy)
 {
@@ -124,16 +125,20 @@ FPJSolver::solveSeq(bool greedy)
                 // compute one step winner of <v> and update the strategy
                 const int pl = owner(v);
                 const uint64_t *good = won[pl].data();
-                int onestep_winner = 1 - pl, str = -1;
-                for (auto curedge = outs(v); *curedge != -1; curedge++) {
-                    const int to = *curedge;
-                    if ((good[to >> 6] >> (to & 63)) & 1) {
-                        onestep_winner = pl;
-                        str = to;
-                        break;
+                // Try the old move if its target still has the owner's value.
+                int str = ReuseWitness ? strategy[v] : -1;
+                if (str == -1 || !((good[str >> 6] >> (str & 63)) & 1)) {
+                    str = -1;
+                    for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                        const int to = *curedge;
+                        if ((good[to >> 6] >> (to & 63)) & 1) {
+                            str = to;
+                            break;
+                        }
                     }
+                    strategy[v] = str;
                 }
-                strategy[v] = str;
+                const int onestep_winner = str == -1 ? 1 - pl : pl;
 
                 if (cur_parity != onestep_winner) {
                     Q.push(v); // add to the Queue, because all justified predecessors are now invalid
@@ -240,13 +245,13 @@ FPJSolver::solveSeq(bool greedy)
 void
 FPJSolver::runSeqGreedy()
 {
-    solveSeq(true);
+    solveSeq<false>(true);
 }
 
 void
 FPJSolver::runSeq()
 {
-    solveSeq(false);
+    solveSeq<true>(false);
 }
 
 void

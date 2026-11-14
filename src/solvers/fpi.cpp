@@ -81,8 +81,9 @@ void freeze_thaw_reset_rec_CALL(lace_worker* lace, FPISolver* solver, int i, int
     }
 }
 
+template<bool ReuseWitness>
 int
-FPISolver::updateBlock(int i, int n)
+FPISolver::updateBlockImpl(int i, int n)
 {
     if (n <= 0) return 0;
 
@@ -107,12 +108,18 @@ FPISolver::updateBlock(int i, int n)
             const int pl = owner(v);
             const uint64_t *good = won[pl].data();
             int onestep_winner = 1 - pl;
-            for (auto curedge = outs(v); *curedge != -1; curedge++) {
-                const int to = *curedge;
-                if ((good[to >> 6] >> (to & 63)) & 1) {
-                    onestep_winner = pl;
-                    strategy[v] = to;
-                    break;
+            if constexpr (ReuseWitness) {
+                const int to = strategy[v];
+                if (to != -1 && ((good[to >> 6] >> (to & 63)) & 1)) onestep_winner = pl;
+            }
+            if (onestep_winner != pl) {
+                for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                    const int to = *curedge;
+                    if ((good[to >> 6] >> (to & 63)) & 1) {
+                        onestep_winner = pl;
+                        strategy[v] = to;
+                        break;
+                    }
                 }
             }
             if (parity[v] != onestep_winner) {
@@ -125,6 +132,12 @@ FPISolver::updateBlock(int i, int n)
         }
     }
     return res;
+}
+
+int
+FPISolver::updateBlock(int i, int n)
+{
+    return updateBlockImpl<false>(i, n);
 }
 
 /**
@@ -321,6 +334,7 @@ FPISolver::runSeq()
      */
     distraction.resize(nodecount());
     strategy = new int[nodecount()]; // the current strategy for winning the game
+    std::fill(strategy, strategy + nodecount(), -1);
     // records for every vertex at which level it is frozen (or 0 if not frozen), padded to a
     // multiple of 64 for freezeThawReset; initially no vertex is frozen (we don't freeze at level 0)
     const size_t frozen_size = (size_t(nodecount()) + 63) & ~size_t(63);
@@ -356,7 +370,7 @@ FPISolver::runSeq()
     iterations = 1;
     int p = 0;
     while (p <= d) {
-        if (p_len[p] == 0 or updateBlock(p_start[p], p_len[p]) == 0) {
+        if (p_len[p] == 0 or updateBlockImpl<true>(p_start[p], p_len[p]) == 0) {
             p++;
             continue;
         } 
