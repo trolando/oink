@@ -460,9 +460,9 @@ pearce_again:
 }
 
 
-template<bool GoUp, bool UseTangles>
+template<class Measure, bool GoUp, bool UseTangles>
 bool
-PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
+PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
 {
     // sort function to sort by value (desc) then priority (desc)
     auto max_pm_first = [&](int const & a, int const & b) {
@@ -1003,6 +1003,20 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
 
     Changed[player] |= Updated; // (the lifted vertices)
     return any_updated;
+}
+
+
+template<bool GoUp, bool UseTangles>
+bool
+PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
+{
+    switch (measure_kind) {
+        case MeasureKind::Small: return updateMeasure<Small, GoUp, UseTangles>(static_cast<Small&>(pm), static_cast<Small&>(target_pm), player);
+        case MeasureKind::Succinct: return updateMeasure<Succinct, GoUp, UseTangles>(static_cast<Succinct&>(pm), static_cast<Succinct&>(target_pm), player);
+        case MeasureKind::Ordered: return updateMeasure<Ordered, GoUp, UseTangles>(static_cast<Ordered&>(pm), static_cast<Ordered&>(target_pm), player);
+        case MeasureKind::Strahler: return updateMeasure<Strahler, GoUp, UseTangles>(static_cast<Strahler&>(pm), static_cast<Strahler&>(target_pm), player);
+    }
+    LOGIC_ERROR;
 }
 
 
