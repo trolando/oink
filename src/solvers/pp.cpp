@@ -48,12 +48,9 @@ PPSolver::attract(int prio, size_t first)
         // (this iteration is a hot spot...)
         for (auto curedge = ins(cur); *curedge != -1; curedge++) {
             int from = *curedge;
-            if (disabled[from] or region[from] > prio) {
+            if (disabled[from] or region[from] >= prio) {
                 // if not in the subgame of <prio>, skip
                 continue;
-            } else if (region[from] == prio) {
-                // if already in <prio>, check if escape without strategy
-                if (owner(from) == pl and strategy[from] == -1) strategy[from] = cur;
             } else if (owner(from) == pl) {
                 // if owned by same parity, attract to a-maximal region
                 rv.push_back(from);
@@ -88,6 +85,24 @@ PPSolver::attract(int prio, size_t first)
             }
         }
     }
+    // Only original heads can lack a strategy. The priority index avoids
+    // revisiting the old target members after a promotion.
+    for (int v = inverse[prio]; v >= 0 && priority(v) == prio; --v) {
+        if (disabled[v] || region[v] != prio || owner(v) != pl || strategy[v] != -1) continue;
+        for (auto edge = outs(v); *edge != -1; ++edge) {
+            if (!disabled[*edge] && region[*edge] == prio) {
+                strategy[v] = *edge;
+                break;
+            }
+        }
+    }
+#ifndef NDEBUG
+    for (const int v : rv) {
+        if (!disabled[v] && region[v] == prio && owner(v) == pl && priority(v) != prio) {
+            assert(strategy[v] != -1);
+        }
+    }
+#endif
 }
 
 /**
