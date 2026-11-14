@@ -720,7 +720,8 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
             }
         }
 
-        if (UseTangles) {
+        {
+            // Closed-region dominions do not require tangle learning.
             // As in TL: a closed region from which the opponent cannot escape in the game is a
             // dominion, without decomposing it into tangles. Its heads have our parity and a
             // higher priority than any of the opponent in it, and the attractor strategy either
@@ -764,7 +765,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
             }
             // otherwise learn tangles (could be duplicate!) if the region is closed, but only if
             // correct priority; with open heads, in the part of the region that does not depend on them
-            if (!dominion && !known_tangle && (priority(top)&1) == player) {
+            if (UseTangles && !dominion && !known_tangle && (priority(top)&1) == player) {
                 bool any_closed_head = false;
                 for (const int h : heads) if (!OpenHead[h]) { any_closed_head = true; break; }
                 if (any_closed_head) {
@@ -930,7 +931,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
      * (Any solved vertices are now in <S> and <dom_vector>.)
      */
 
-    if (UseTangles) {
+    {
         if (!dom_vector.empty()) {
             for (unsigned i = 0; i<dom_vector.size(); i+=2) {
                 int v = dom_vector[i];
@@ -945,7 +946,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
                 const int v = Q.pop();
                 Solver::solve(v, player, str[v]);
                 attractVertices(player, v, G, S, G, -1);
-                attractTangles(player, v, G, S, G, -1);
+                if (UseTangles) attractTangles(player, v, G, S, G, -1);
             }
 
             // the solved vertices leave G, which can take away the only escape of an opponent
@@ -1223,9 +1224,9 @@ PMTLSolver::run()
     }
     G = disabled;
     G.flip();
+    S.resize(nodecount());
     if (use_tangles) {
         tin = new std::vector<int>[nodecount()];
-        S.resize(nodecount());
         tangleto.resize(nodecount());
         escapes.resize(nodecount());
         pea_vS.resize(nodecount());

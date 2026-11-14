@@ -88,6 +88,11 @@ test_pma(const char* fixture)
         std::ifstream input(fixture);
         Game game = PGParser::parse_pgsolver(input, false);
         game.ensure_sorted();
+        // Two disjoint winning cycles can be certified as closed regions
+        // without SCC extraction, including when tangle learning is disabled.
+        std::istringstream cycles("parity 3;\n0 0 0 1;\n1 2 1 0;\n2 1 1 3;\n3 3 0 2;\n");
+        Game closed = PGParser::parse_pgsolver(cycles, false);
+        closed.ensure_sorted();
         bool exercised_learning = false;
         for (const std::string kind : {"small", "succinct", "ordered", "strahler"}) {
             const auto pma = "pma-"+kind;
@@ -101,6 +106,11 @@ test_pma(const char* fixture)
                     throw std::runtime_error(errors.str());
                 }
                 compare(game, pma, pmtl, options);
+                compare(closed, pma, pmtl, options);
+                const auto result = solve(closed, pma, options);
+                if (result.summary.find("found 0 dominions") != std::string::npos) {
+                    throw std::runtime_error(pma+" failed to recognize closed-region dominions");
+                }
             }
             const auto learning = solve(game, pmtl, "");
             exercised_learning |= learning.summary.find("and 0 tangles.") == std::string::npos;
