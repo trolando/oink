@@ -53,6 +53,10 @@ public:
      */
     void setSolver(std::string solver);
 
+    /** Selected solver after run(), including any sequential fallback. */
+    std::optional<std::string> effectiveSolver() const { return algorithm_executed_ ? solver : std::nullopt; }
+    const std::string& effectiveSolverOptions() const { return options; }
+
     /**
      * Instruct Oink to inflate as a preprocessing step.
      */
@@ -199,6 +203,7 @@ protected:
     std::optional<std::string> solver; // which solver to use
     int workers = -1;        // number of workers, 0 = autodetect, -1 = use non parallel
     bool forceParallel = false; // run parallel solvers in parallel also on small games
+    bool algorithm_executed_ = false;
     bool parallel_ = false;  // whether the solver runs in parallel (decided by run())
     int trace = 0;           // verbosity (0 for normal, 1 for trace, 2 for debug)
     bool inflate = false;    // inflate the game before solving

@@ -394,6 +394,7 @@ Oink::solveLoop()
                 logger << "error parsing options: " << options << std::endl;
                 throw std::runtime_error("invalid solver options: "+options);
             }
+            algorithm_executed_ = true;
             s->run();
 
             // Attract to the vertices solved in this round over the whole unsolved game. Any
@@ -419,6 +420,7 @@ Oink::solveLoop()
                 logger << "error parsing options: " << options << std::endl;
                 throw std::runtime_error("invalid solver options: "+options);
             }
+            algorithm_executed_ = true;
             s->run();
 
             if (fullSolver) {
@@ -439,6 +441,8 @@ Oink::solveLoop()
 void
 Oink::run()
 {
+    algorithm_executed_ = false;
+    parallel_ = false;
     using namespace std::chrono;
     auto time_before = high_resolution_clock::now();
 
