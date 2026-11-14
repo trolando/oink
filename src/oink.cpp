@@ -465,6 +465,8 @@ Oink::run()
      * TODO: test this code, or maybe disable partial solutions and only accept full solutions for verification??
      */
     if (solution_.solved().any()) {
+        // Preprocessors must also exclude the installed partial solution.
+        disabled = solution_.solved();
         for (int v=0; v<game->vertexcount(); v++) {
             if (solution_.is_solved(v)) todo.push(v);
         }

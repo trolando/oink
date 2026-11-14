@@ -19,8 +19,12 @@
  */
 
 #include <iostream>
+#include <sstream>
+#include <vector>
 
+#include "oink/oink.hpp"
 #include "oink/solution.hpp"
+#include "verifier.hpp"
 
 using namespace pg;
 
@@ -127,6 +131,38 @@ test_solution()
                 }
             }
         }
+    }
+
+    // A partial solution that is installed before Oink::run() must also be excluded
+    // from preprocessing. Vertex 0 has a winning self-loop and is already solved. If
+    // the self-loop preprocessor solves it again, its Odd predecessor 1 loses its edge
+    // to 0 a second time and is attracted to Even, although Odd wins it via 3.
+    for (bool scc : {false, true}) {
+        Game game(4);
+        const int priorities[] = {0, 1, 2, 3};
+        const int owners[] = {0, 1, 1, 0};
+        const std::vector<std::vector<int>> edges = {{0}, {0, 3}, {3}, {2}};
+        for (int v = 0; v < 4; v++) {
+            game.init_vertex(v, priorities[v], owners[v]);
+            game.e_start(v);
+            for (int to : edges[v]) game.e_add(v, to);
+            game.e_finish();
+        }
+        game.ensure_sorted();
+        std::ostringstream log;
+        Oink controller(game, log);
+        controller.setSolver("zlk");
+        controller.setBottomSCC(scc);
+        controller.solution().solve(0, 0, 0);
+        bool verified = true;
+        try {
+            controller.run();
+            Verifier(game, controller.solution(), log).verify(true, true, true);
+        } catch (const std::exception& e) {
+            std::cerr << "partial solution: " << e.what() << std::endl;
+            verified = false;
+        }
+        check("partial solution excluded from preprocessing", verified and controller.solution().winner(1) == 1);
     }
 
     if (failures) {
