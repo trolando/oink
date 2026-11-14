@@ -1622,6 +1622,11 @@ GPMSolver::shortcuts(const int player, Measures &pm0, Measures &pm1)
 
     L ^= G;
     for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
+        // Fixed-bound measures need notifications only for a new Top value.
+        if (measure_kind != MeasureKind::Small && To[v]) {
+            Qo[v] = false;
+            continue;
+        }
         // logger << "player " << (1-player) << " should win " << label_vertex(v) << std::endl;
         pm_o.copy_top(v);
         To[v] = true;

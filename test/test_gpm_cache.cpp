@@ -15,8 +15,8 @@
  */
 
 /**
- * Unit tests for GPM: the blocking escapes of the shortcuts and the active
- * subgame.
+ * Unit tests for GPM: the blocking escapes of the shortcuts, the active subgame
+ * and Top notifications.
  */
 
 #include <algorithm>
@@ -34,6 +34,64 @@ namespace pg {
 class GPMCacheProbe
 {
 public:
+    static void checkKnownTop(MeasureKind kind)
+    {
+        Game game(3);
+        game.init_vertex(0, 0, 0);
+        game.init_vertex(1, 1, 1);
+        game.init_vertex(2, 2, 0);
+        game.e_start(0);
+        game.e_add(0, 0);
+        game.e_finish();
+        game.e_start(1);
+        game.e_add(1, 1);
+        game.e_finish();
+        game.e_start(2);
+        game.e_add(2, 0);
+        game.e_add(2, 1);
+        game.e_finish();
+        game.ensure_sorted();
+        std::ostringstream log;
+        Oink controller(game, log, true);
+        GPMSolver solver(controller, game, kind);
+        solver.G.resize(3);
+        solver.G.flip();
+        solver.Q0 = solver.G;
+        solver.Q1.resize(3);
+        solver.QQ.resize(3);
+        solver.T0.resize(3);
+        solver.T1.resize(3);
+        solver.L0.resize(3);
+        solver.L1.resize(3);
+        solver.Queue.resize(3);
+        solver.escape_offset.resize(3);
+        solver.escape_stamp.resize(3);
+        std::unique_ptr<Measures> pm0(new_measure(kind, game, 0));
+        std::unique_ptr<Measures> pm1(new_measure(kind, game, 1));
+        // Normalize the opposing priority in Ordered, then retain the next wave.
+        solver.update(*pm0, 0);
+        solver.update(*pm0, 0);
+        const bitset source_wave = solver.L0;
+        solver.shortcuts(0, *pm0, *pm1);
+        if (!solver.T1[1] || !pm1->is_top(1) || !solver.Q1[2]) {
+            throw std::runtime_error("fresh Top did not notify its non-Top predecessor");
+        }
+        // Consume that genuine notification. The unchanged Top target cannot
+        // require another lift under fixed bounds.
+        solver.update(*pm1, 1);
+        if (solver.Q1.any() || solver.T1[2]) {
+            throw std::runtime_error("known-Top regression needs a finite, settled predecessor");
+        }
+        solver.L0 = source_wave;
+        solver.shortcuts(0, *pm0, *pm1);
+        if (solver.Q1.any()) {
+            throw std::runtime_error("unchanged Top scheduled redundant predecessor work");
+        }
+        if (solver.L0.count() != 1 || !solver.L0[1]) {
+            throw std::runtime_error("known-Top filtering changed the full stable complement");
+        }
+    }
+
     static void checkDisabled(MeasureKind kind, int player, int priority)
     {
         Game game(2);
@@ -121,10 +179,14 @@ public:
                 throw std::runtime_error("shortcut cache did not advance its epoch");
             }
             const auto& other_top = player == 0 ? solver.T1 : solver.T0;
+            const auto& other_queue = player == 0 ? solver.Q1 : solver.Q0;
             auto& source = player == 0 ? *pm0 : *pm1;
             auto& other = player == 0 ? *pm1 : *pm0;
             for (int v = 0; v < n; ++v) {
-                const bool excluded = v == 4 || (player == 0 && v == 2);
+                const bool excluded = player == 0 && (v == 2 || v == 4);
+                if (other_top[v] && other_queue[v]) {
+                    throw std::runtime_error("new Top vertex remained queued after sibling notifications");
+                }
                 if (bool(target[v]) != excluded || bool(other_top[v]) != excluded ||
                     other.is_top(v) != excluded || source.is_top(v)) {
                     throw std::runtime_error("shortcut cache changed the attraction closure");
@@ -148,8 +210,9 @@ test_gpm_cache()
     for (int v = 6; v >= 0; --v) game.init_vertex(v, 1, v == 2 ? 1 : 0);
     // Vertex 2 first blocks on 3, receives another callback with that blocker
     // live, then resumes past both edges to 3 after the 0<-5<-3 chain grows.
-    // Vertex 4 remains a blocker. Switching players changes the closure.
-    const std::vector<std::vector<int>> edges = {{0}, {1}, {0, 1, 3, 3, 4}, {5}, {4}, {0}, {5}};
+    // Vertex 4 remains a blocker for Even. Its edge to 2 also tests clearing
+    // a future Top sibling after an earlier new Top queues it. Odd attracts all.
+    const std::vector<std::vector<int>> edges = {{0}, {1}, {0, 1, 3, 3, 4}, {5}, {4, 2}, {0}, {5}};
     for (int v = 0; v < 7; ++v) {
         game.e_start(v);
         for (int to : edges[v]) game.e_add(v, to);
@@ -163,6 +226,9 @@ test_gpm_cache()
         for (int player : {0, 1}) {
             for (int priority : {0, 1, 2, 3}) GPMCacheProbe::checkDisabled(kind, player, priority);
         }
+    }
+    for (auto kind : {MeasureKind::Succinct, MeasureKind::Ordered, MeasureKind::Strahler}) {
+        GPMCacheProbe::checkKnownTop(kind);
     }
     std::cout << "GPM updates stay inside the active subgame; shortcut cursors preserve closure across repeated callbacks, player changes and epoch wrap." << std::endl;
     return 0;
