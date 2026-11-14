@@ -175,6 +175,7 @@ static MonoReport check_monotonicity(Measures* pm, int priorities,
 int main(int, char**)
 {
     bool print = false;
+    size_t violations = 0;
 
     // We need some game, just so the measures can be initialized
     int priorities = 7;
@@ -216,7 +217,7 @@ int main(int, char**)
             std::cout << "[P" << player << "] Reachable unique states from ⊥: "
                       << states.size() << "\n";
 
-            check_monotonicity(pm, priorities, states);
+            violations += check_monotonicity(pm, priorities, states).violations;
             delete pm;
         }
     }
@@ -262,5 +263,5 @@ int main(int, char**)
     }
     */
 
-    return 0;
+    return violations ? 1 : 0;
 }
