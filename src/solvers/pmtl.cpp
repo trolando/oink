@@ -530,6 +530,17 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         auto top = order[x];
         if (!R[top]) continue; // not in remainder
 
+        // Source measures and their bounds remain fixed during this update.
+        // Ordered::see uses -3 internally; -4 is reserved here for this cache.
+        int cached_priority = -1;
+        auto see_top = [&](int p) {
+            if (p != cached_priority) {
+                pm.copy(top, -4);
+                pm.see(-4, p);
+                cached_priority = p;
+            }
+        };
+
         // found a new top vertex
         bool known_tangle = false;
         if (UseTangles) {
@@ -611,13 +622,12 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
                     // An example of when this occurs is if player(v) != player, there is an edge from v to itself and priority(v) & 1
                     // != player, i.e. v has a winning self loop for !player.
                     if (pm.compare(top, v) <= 0) {
-                        pm.copy(top, -1);
-                        pm.see(-1, priority(v));
-                        if (pm.compare(-1, v) > 0) {
+                        see_top(priority(v));
+                        if (pm.compare(-4, v) > 0) {
                             Updated[v] = true;
                             any_updated = true;
-                            //pm.copy(-1, v);
-                            target_pm.copy_from(pm, -1, v);
+                            //pm.copy(-4, v);
+                            target_pm.copy_from(pm, -4, v);
 #ifndef NDEBUG
                             if (trace >= 2) {
                                 logger << "updating vertex " << label_vertex(v) << " to ";
@@ -692,13 +702,12 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
             if (OpenHead[v]) continue;
             if (Updated[v]) continue; // already updated to a higher pm
 
-            pm.copy(top, -1);
-            pm.see(-1, priority(v));
-            if (!pm.eq(-1, v)) {
+            see_top(priority(v));
+            if (!pm.eq(-4, v)) {
                 Updated[v] = true;
                 any_updated = true;
-                //pm.copy(-1, v);
-                target_pm.copy_from(pm, -1, v);
+                //pm.copy(-4, v);
+                target_pm.copy_from(pm, -4, v);
 #ifndef NDEBUG
                 if (trace >= 2) {
                     logger << "updating vertex " << label_vertex(v) << " to ";
@@ -812,13 +821,12 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
                     }
 
                     if (!Updated[v] && priority(v) >= max_pr) {
-                        pm.copy(top, -1);
-                        pm.see(-1, priority(v));
-                        if (pm.compare(-1, v) > 0) {
+                        see_top(priority(v));
+                        if (pm.compare(-4, v) > 0) {
                             Updated[v] = true;
                             any_updated = true;
-                            //pm.copy(-1, v);
-                            target_pm.copy_from(pm, -1, v);
+                            //pm.copy(-4, v);
+                            target_pm.copy_from(pm, -4, v);
 #ifndef NDEBUG
                             if (trace >= 2) {
                                 logger << "updating vertex " << label_vertex(v) << " to ";
@@ -846,13 +854,12 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
 #endif
                     if (owner(from) == player) {
                         if (!Updated[from]) {
-                            pm.copy(top, -1);
-                            pm.see(-1, priority(from));
-                            if (pm.compare(-1, from) > 0) {
+                            see_top(priority(from));
+                            if (pm.compare(-4, from) > 0) {
                                 Updated[from] = true;
                                 any_updated = true;
-                                // pm.copy(-1, from);
-                                target_pm.copy_from(pm, -1, from);
+                                // pm.copy(-4, from);
+                                target_pm.copy_from(pm, -4, from);
 #ifndef NDEBUG
                                 if (trace >= 2) {
                                     logger << "updating vertex " << label_vertex(from) << " to ";
@@ -878,13 +885,12 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
                             }
                         }
                         if (attracted &&!Updated[from]) {
-                            pm.copy(top, -1);
-                            pm.see(-1, priority(from));
-                            if (pm.compare(-1, from) > 0) {
+                            see_top(priority(from));
+                            if (pm.compare(-4, from) > 0) {
                                 Updated[from] = true;
                                 any_updated = true;
-                                // pm.copy(-1, from);
-                                target_pm.copy_from(pm, -1, from);
+                                // pm.copy(-4, from);
+                                target_pm.copy_from(pm, -4, from);
 #ifndef NDEBUG
                                 if (trace >= 2) {
                                     logger << "updating vertex " << label_vertex(from) << " to ";
