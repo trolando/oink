@@ -57,6 +57,18 @@ public:
         return instance().solvers[id].description;
     }
 
+    enum class Family {
+        TangleLearning, ProgressMeasures, FixpointIteration, PriorityPromotion,
+        StrategyImprovement, Zielonka, Other
+    };
+    static Family family(const std::string& id)
+    {
+        const auto it = instance().solvers.find(id);
+        return it == instance().solvers.end() ? Family::Other : it->second.family;
+    }
+    static std::string familyName(Family family);
+    static std::vector<std::string> getSolverIDsByFamily();
+
     /** Configuration syntax for this solver; empty when it accepts no options. */
     static std::string optionsHelp(const std::string& id)
     {
@@ -68,6 +80,13 @@ public:
     static bool validateOptions(const std::string& id, const std::string& options, std::ostream& errors);
 
     static bool hasOptions(const std::string& id) { return !optionsHelp(id).empty(); }
+
+    /** Experimental entries may be hidden by solver-selection interfaces. */
+    static bool isExperimental(const std::string& id)
+    {
+        const auto it = instance().solvers.find(id);
+        return it != instance().solvers.end() && it->second.experimental;
+    }
 
     /**
      * Get whether solver <id> can be run in parallel
@@ -121,7 +140,7 @@ public:
      * Add a solver to the set of solvers
      */
     static void add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor);
-    static void add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor, const std::string& optionsHelp);
+    static void add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor, const std::string& optionsHelp, bool experimental = false);
 
     static std::set<std::string> getSolverIDs()
     {
@@ -137,10 +156,13 @@ private:
         std::string description;
         bool isParallel;
         SolverConstructor constructor;
+        bool experimental = false;
         bool needsInEdges = true;
         long parallelMinVertices = 100000; // (only for parallel solvers)
         std::string sequentialFallback = "";
         std::string optionsHelp = "";
+        Family family = Family::Other;
+        int familyOrder = 0;
     };
 
     std::map<std::string, SolverInfo> solvers;
@@ -155,9 +177,9 @@ private:
     /**
      * Add a solver to the set of solvers
      */
-    void _add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor)
+    void _add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor, bool experimental = false)
     {
-        solvers[id] = {description, isParallel, constructor};
+        solvers[id] = {description, isParallel, constructor, experimental};
     }
 };
 

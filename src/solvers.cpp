@@ -15,6 +15,8 @@
  */
 
 #include "oink/solvers.hpp"
+#include <algorithm>
+#include <initializer_list>
 
 #include "solvers/zlk.hpp"
 #include "solvers/pp.hpp"
@@ -53,16 +55,16 @@ Solvers::Solvers()
 {
     _add("zlkq", "qpt Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKQSolver>(oink, game); });
     _add("zlk", "parallel Zielonka", 1, [] (Oink& oink, Game& game) { return std::make_unique<ZLKSolver>(oink, game); });
-    _add("uzlk", "unoptimized Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<UnoptimizedZLKSolver>(oink, game); });
-    _add("zlkpp-std", "Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKPPSolver>(oink, game, ZLK_STANDARD); });
-    _add("zlkpp-waw", "Warsaw quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKPPSolver>(oink, game, ZLK_WARSAW); });
-    _add("zlkpp-liv", "Liverpool quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKPPSolver>(oink, game, ZLK_LIVERPOOL); });
+    _add("uzlk", "unoptimized Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<UnoptimizedZLKSolver>(oink, game); }, true);
+    _add("zlkpp-std", "Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKPPSolver>(oink, game, ZLK_STANDARD); }, true);
+    _add("zlkpp-waw", "Warsaw quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKPPSolver>(oink, game, ZLK_WARSAW); }, true);
+    _add("zlkpp-liv", "Liverpool quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKPPSolver>(oink, game, ZLK_LIVERPOOL); }, true);
     _add("npp", "priority promotion NPP", 0, [] (Oink& oink, Game& game) { return std::make_unique<NPPSolver>(oink, game); });
     _add("pp", "priority promotion PP", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPSolver>(oink, game); });
-    _add("ppp", "priority promotion PP+", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPPSolver>(oink, game); });
-    _add("rr", "priority promotion RR", 0, [] (Oink& oink, Game& game) { return std::make_unique<RRSolver>(oink, game); });
-    _add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink& oink, Game& game) { return std::make_unique<DPSolver>(oink, game); });
-    _add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink& oink, Game& game) { return std::make_unique<RRDPSolver>(oink, game); });
+    _add("ppp", "priority promotion PP+", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPPSolver>(oink, game); }, true);
+    _add("rr", "priority promotion RR", 0, [] (Oink& oink, Game& game) { return std::make_unique<RRSolver>(oink, game); }, true);
+    _add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink& oink, Game& game) { return std::make_unique<DPSolver>(oink, game); }, true);
+    _add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink& oink, Game& game) { return std::make_unique<RRDPSolver>(oink, game); }, true);
     _add("ppq", "qpt Zielonka accelerated by priority promotion", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPQSolver>(oink, game); });
     _add("fpi", "fixpoint iteration", 1, [] (Oink& oink, Game& game) { return std::make_unique<FPISolver>(oink, game); });
     _add("fpim", "fixpoint iteration (multi-strategy)", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPIMSolver>(oink, game); });
@@ -70,34 +72,51 @@ Solvers::Solvers()
     _add("fpjm", "fixpoint iteration with justifications (multi-strategy)", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPJMSolver>(oink, game); });
     _add("fpjg", "greedy fixpoint iteration with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPJGSolver>(oink, game); });
     _add("psi", "parallel strategy improvement", 1, [] (Oink& oink, Game& game) { return std::make_unique<PSISolver>(oink, game); });
-    _add("ssi", "symmetric strategy improvement", 0, [] (Oink& oink, Game& game) { return std::make_unique<SSISolver>(oink, game); });
-    _add("spm", "accelerated small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<SPMSolver>(oink, game); });
-    _add("tspm", "traditional small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<TSPMSolver>(oink, game); });
-    _add("mspm", "small progress measures with both strategies from one measure (Gazda, Willemse)", 0, [] (Oink& oink, Game& game) { return std::make_unique<MSPMSolver>(oink, game); });
-    _add("sspm", "succinct small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<SSPMSolver>(oink, game); });
-    _add("bsspm", "bounded succinct small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<BoundedSSPMSolver>(oink, game); });
-    _add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<QPTSolver>(oink, game); });
-    _add("bqpt", "bounded quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<BoundedQPTSolver>(oink, game); });
-    _add("ptl", "progressive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PTLSolver>(oink, game); });
-    _add("spptl", "single-player progressive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<SPPTLSolver>(oink, game); });
-    _add("dtl", "distance tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<DTLSolver>(oink, game); });
-    _add("idtl", "interleaved distance tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<IDTLSolver>(oink, game); });
+    _add("ssi", "symmetric strategy improvement", 0, [] (Oink& oink, Game& game) { return std::make_unique<SSISolver>(oink, game); }, true);
+    _add("spm", "accelerated small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<SPMSolver>(oink, game); }, true);
+    _add("tspm", "traditional small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<TSPMSolver>(oink, game); }, true);
+    _add("mspm", "small progress measures with both strategies from one measure (Gazda, Willemse)", 0, [] (Oink& oink, Game& game) { return std::make_unique<MSPMSolver>(oink, game); }, true);
+    _add("sspm", "succinct small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<SSPMSolver>(oink, game); }, true);
+    _add("bsspm", "bounded succinct small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<BoundedSSPMSolver>(oink, game); }, true);
+    _add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<QPTSolver>(oink, game); }, true);
+    _add("bqpt", "bounded quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<BoundedQPTSolver>(oink, game); }, true);
+    _add("ptl", "progressive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PTLSolver>(oink, game); }, true);
+    _add("spptl", "single-player progressive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<SPPTLSolver>(oink, game); }, true);
+    _add("dtl", "distance tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<DTLSolver>(oink, game); }, true);
+    _add("idtl", "interleaved distance tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<IDTLSolver>(oink, game); }, true);
     _add("rtl", "recursive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<RTLSolver>(oink, game); });
-    _add("ortl", "one-sided recursive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<ORTLSolver>(oink, game); });
+    _add("ortl", "one-sided recursive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<ORTLSolver>(oink, game); }, true);
     _add("tl", "tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLSolver>(oink, game); });
     _add("tlpar", "parallel tangle learning", 1, [] (Oink& oink, Game& game) { return std::make_unique<TLParSolver>(oink, game); });
     _add("tlj", "tangle learning with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLJSolver>(oink, game); });
     _add("tlq", "qpt recursive with tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<TLQSolver>(oink, game); });
-    _add("pmtl", "progress measures and tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game); });
+    _add("pmtl", "progress measures and tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game); }, true);
     _add("pmtl-small", "progress measures and tangle learning, small measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Small); });
     _add("pmtl-succinct", "progress measures and tangle learning, succinct measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Succinct); });
     _add("pmtl-ordered", "progress measures and tangle learning, ordered measures (as pmtl)", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Ordered); });
     _add("pmtl-strahler", "progress measures and tangle learning, Strahler measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Strahler); });
-    _add("gpm", "generic progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game); });
+    _add("gpm", "generic progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game); }, true);
     _add("gpm-small", "generic progress measures, small measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Small); });
     _add("gpm-succinct", "generic progress measures, succinct measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Succinct); });
     _add("gpm-ordered", "generic progress measures, ordered measures (as gpm)", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Ordered); });
     _add("gpm-strahler", "generic progress measures, Strahler measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Strahler); });
+
+    auto group = [&](Family family, std::initializer_list<const char*> ids) {
+        int order = 0;
+        for (const auto* id : ids) {
+            auto& info = solvers.at(id);
+            info.family = family;
+            info.familyOrder = order++;
+        }
+    };
+    group(Family::TangleLearning, {"tl", "tlpar", "tlj", "tlq", "rtl", "ortl", "ptl", "spptl", "dtl", "idtl",
+          "pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler"});
+    group(Family::ProgressMeasures, {"spm", "tspm", "mspm", "sspm", "bsspm", "qpt", "bqpt",
+          "gpm", "gpm-small", "gpm-succinct", "gpm-ordered", "gpm-strahler"});
+    group(Family::FixpointIteration, {"fpi", "fpim", "fpj", "fpjg", "fpjm"});
+    group(Family::PriorityPromotion, {"npp", "pp", "ppp", "rr", "dp", "rrdp", "ppq"});
+    group(Family::StrategyImprovement, {"psi", "ssi"});
+    group(Family::Zielonka, {"zlk", "uzlk", "zlkq", "zlkpp-std", "zlkpp-waw", "zlkpp-liv"});
 
     solvers["mspm"].optionsHelp = "even | odd (default: smaller measure domain)";
     solvers["psi"].optionsHelp = "parmin=N,chunk=N (positive integers; defaults: 2048,256)";
@@ -117,6 +136,37 @@ Solvers::Solvers()
     solvers["psi"].parallelMinVertices = 100000;   // slower at 92k vertices, faster from 100k
     solvers["tlpar"].parallelMinVertices = 250000; // no gain below
     solvers["tlpar"].sequentialFallback = "tl";
+}
+
+std::string
+Solvers::familyName(Family family)
+{
+    switch (family) {
+        case Family::TangleLearning: return "Tangle learning";
+        case Family::ProgressMeasures: return "Progress measures";
+        case Family::FixpointIteration: return "Fixpoint iteration";
+        case Family::PriorityPromotion: return "Priority promotion";
+        case Family::StrategyImprovement: return "Strategy improvement";
+        case Family::Zielonka: return "Zielonka recursion";
+        case Family::Other: return "Other / external";
+    }
+    return "Other / external";
+}
+
+std::vector<std::string>
+Solvers::getSolverIDsByFamily()
+{
+    std::vector<std::string> ids;
+    for (const auto& entry : instance().solvers) ids.push_back(entry.first);
+    const auto& registry = instance().solvers;
+    std::sort(ids.begin(), ids.end(), [&](const std::string& a, const std::string& b) {
+        const auto& x = registry.at(a);
+        const auto& y = registry.at(b);
+        if (x.family != y.family) return x.family < y.family;
+        if (x.familyOrder != y.familyOrder) return x.familyOrder < y.familyOrder;
+        return a < b;
+    });
+    return ids;
 }
 
 void
@@ -167,9 +217,9 @@ Solvers::add(const std::string& id, const std::string& description, bool isParal
 }
 
 void
-Solvers::add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor, const std::string& optionsHelp)
+Solvers::add(const std::string& id, const std::string& description, bool isParallel, const SolverConstructor& constructor, const std::string& optionsHelp, bool experimental)
 {
-    instance().solvers[id] = {description, isParallel, constructor};
+    instance().solvers[id] = {description, isParallel, constructor, experimental};
     instance().solvers[id].optionsHelp = optionsHelp;
 }
 
