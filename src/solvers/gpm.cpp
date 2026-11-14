@@ -106,15 +106,18 @@ Small::set(const Measures &other)
 {
     auto src = dynamic_cast<const Small*>(&other);
 
-    delete[] data;
-    delete[] counts;
+    if (src == this) return;
+    if (n != src->n or d != src->d or l != src->l) {
+        delete[] data;
+        delete[] counts;
+        counts = new int[src->d+1];
+        data = new int[src->l * (src->n+4)];
+    }
 
     this->player = src->player;
     this->n = src->n;
     this->d = src->d;
     this->l = src->l;
-    this->counts = new int[d+1];
-    this->data = new int[l * (n+4)];
     std::copy(src->counts, src->counts+(d+1), this->counts);
     std::copy(src->data, src->data+(l*(n+4)), this->data);
     this->top = src->top;
@@ -347,11 +350,6 @@ Ordered::Ordered(const Game &game, const int player)
     //std::cout << "n=" << N << std::endl;
     //std::cout << "l=" << l << std::endl;
 
-    // count how many vertices of each priority there are
-    this->counts = new int[d+1];
-    for (int p=0; p<=d; p++) this->counts[p] = 0;
-    for (int v=0; v<n; v++) this->counts[game.priority(v)]++;
-
     // allocate and initialize the vertices
     data = new int[l * (n+4)];
     std::fill(data, data + (l*(n+4)), -1);
@@ -367,9 +365,7 @@ Ordered::Ordered(const Ordered &src)
     this->l = src.l;
     this->max_pr = src.max_pr;
     this->max_opp_pr = src.max_opp_pr;
-    this->counts = new int[d+1];
     this->data = new int[l * (n+4)];
-    std::copy(src.counts, src.counts+(d+1), this->counts);
     std::copy(src.data, src.data+(l*(n+4)), this->data);
     this->top = src.top;
     this->priorities = src.priorities;
@@ -378,7 +374,6 @@ Ordered::Ordered(const Ordered &src)
 Ordered::~Ordered()
 {
     delete[] data;
-    delete[] counts;
 }
 
 void
@@ -386,8 +381,11 @@ Ordered::set(const Measures &other)
 {
     auto src = dynamic_cast<const Ordered*>(&other);
 
-    delete[] data;
-    delete[] counts;
+    if (src == this) return;
+    if (n != src->n or d != src->d or l != src->l) {
+        delete[] data;
+        data = new int[src->l * (src->n+4)];
+    }
 
     this->player = src->player;
     this->n = src->n;
@@ -396,9 +394,6 @@ Ordered::set(const Measures &other)
     this->l = src->l;
     this->max_pr = src->max_pr;
     this->max_opp_pr = src->max_opp_pr;
-    this->counts = new int[d+1];
-    this->data = new int[l * (n+4)];
-    std::copy(src->counts, src->counts+(d+1), this->counts);
     std::copy(src->data, src->data+(l*(n+4)), this->data);
     this->top = src->top;
     this->priorities = src->priorities;
@@ -612,6 +607,7 @@ int Ordered::compare(int i, int j) const
     // Compare tuples, starting at the highest (last) value
     int *ip = data + (i+4)*l;
     int *jp = data + (j+4)*l;
+    if (std::memcmp(ip, jp, sizeof(int)*l) == 0) return 0;
     for (int x=l-1; x>=0; x--) {
         if (ip[x] == jp[x]) continue;
         // cases where i.x is _ or j.x is _
@@ -848,6 +844,7 @@ int Succinct::compare(int u, int v) const
     if (cv[0] == TOP) return -1;
 
     // Non-\Top case: only the first position where the codes differ matters
+    if (std::memcmp(cu, cv, sizeof(uint32_t)*l) == 0) return 0;
     int i = 0;
     while (i < l and cu[i] == cv[i]) i++;
     if (i == l) return 0;
@@ -1222,6 +1219,8 @@ void Strahler::see(int tgt, int priority)
 {
     if (is_top(tgt)) return;
     const int pindex = player == 0 ? (h-1)-(priority+1)/2-1 : (h-1)-priority/2-1;
+    // The minimum opposing priority truncates below every encoded level.
+    if ((priority&1) != player and pindex >= h-2) return;
     load_tmp(tgt);
     if ((priority&1) == player) prog_tmp(pindex);
     else trunc_tmp(pindex);
@@ -1246,6 +1245,7 @@ void Strahler::inc(int tgt)
 int Strahler::compare(int u, int v) const
 {
     const uint32_t *cu = &code[(size_t)stride*(u+4)], *cv = &code[(size_t)stride*(v+4)];
+    if (std::memcmp(cu, cv, sizeof(uint32_t)*stride) == 0) return 0;
     for (int i=0; i<stride; i++) {
         if (cu[i] != cv[i]) return cu[i] < cv[i] ? -1 : 1;
     }

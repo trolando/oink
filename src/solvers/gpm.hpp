@@ -123,7 +123,6 @@ public:
 
 private:
     int *data;
-    int *counts;
     int n;
     int d;
     int l;
