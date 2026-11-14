@@ -1199,7 +1199,20 @@ PMTLSolver::run()
     for (int pl=0; pl<2; pl++) {
         order[pl].clear();
         Changed[pl].resize(nodecount());
-        sorted[pl] = false;
+        // All measures start at bottom, so the priority order alone defines both orders.
+        // Shortcuts mark any changes before the other player's first update.
+        for (int v=nodecount()-1; v>=0; v--) {
+            if (G[v] and (priority(v)&1) == pl) order[pl].push_back(v);
+        }
+        for (int first=0; first<nodecount();) {
+            int last=first+1;
+            while (last<nodecount() and priority(last) == priority(first)) last++;
+            if ((priority(first)&1) != pl) {
+                for (int v=last-1; v>=first; v--) if (G[v]) order[pl].push_back(v);
+            }
+            first=last;
+        }
+        sorted[pl] = true;
     }
 
     Measures *pm0 = new_measure(measure_kind, game, 0);
