@@ -553,10 +553,14 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         int max_pr = priority(top);
         heads.clear();
         heads.push_back(top);
-        Z[top] = true; // add to <Z>
-        Zlist.push_back(top);
-        str[top] = -1; // don't care, but needed for correct trace reporting
-        Q.push(top);
+        // A known tangle already added the top to <Z> and <Q>, with its strategy. Adding it
+        // again would process it as the top of a higher region on its second visit.
+        if (!known_tangle) {
+            Z[top] = true; // add to <Z>
+            Zlist.push_back(top);
+            str[top] = -1; // don't care, but needed for correct trace reporting
+            Q.push(top);
+        }
         if (!Updated[top] and x >= scanned) {
             // (each run of tied vertices is scanned once: a vertex skipped here cannot become
             // a head later in this round, as it stays out of R, Updated, or was a head)
