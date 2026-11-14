@@ -121,7 +121,7 @@ expect_accept(const char* name, Game& g, const Solution& s)
 }
 
 int
-main()
+test_verifier()
 {
     /* ---------------------------------------------------------------------- *
      * Single-strategy failure modes

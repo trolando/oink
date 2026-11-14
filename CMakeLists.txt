@@ -332,44 +332,28 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         enable_testing()
         set(CTEST_TESTING_TIMEOUT 30)
 
-        # parser unit tests (malformed and valid input)
-        add_executable(test_parser)
-        target_sources(test_parser PRIVATE test/test_parser.cpp)
-        set_target_props(test_parser)
-        add_test(NAME TestParser COMMAND test_parser)
-
-        add_executable(test_io)
-        target_sources(test_io PRIVATE test/test_io.cpp)
-        set_target_props(test_io)
+        # One unit-test runner; CTest still reports each check separately.
+        add_executable(test_unit
+            test/test_main.cpp
+            test/test_parser.cpp
+            test/test_io.cpp
+            test/test_solution.cpp
+            test/test_builder.cpp
+            test/test_game.cpp
+            test/test_verifier.cpp
+        )
+        set_target_props(test_unit)
         if(BZIP2_FOUND)
-            target_link_libraries(test_io BZip2::BZip2)
-            target_compile_definitions(test_io PRIVATE OINK_HAVE_BZIP2=1)
+            target_link_libraries(test_unit BZip2::BZip2)
+            target_compile_definitions(test_unit PRIVATE OINK_HAVE_BZIP2=1)
         endif()
-        add_test(NAME TestIO COMMAND test_io)
 
-        # Solution class unit tests
-        add_executable(test_solution)
-        target_sources(test_solution PRIVATE test/test_solution.cpp)
-        set_target_props(test_solution)
-        add_test(NAME TestSolution COMMAND test_solution)
-
-        # GameBuilder unit tests
-        add_executable(test_builder)
-        target_sources(test_builder PRIVATE test/test_builder.cpp)
-        set_target_props(test_builder)
-        add_test(NAME TestBuilder COMMAND test_builder)
-
-        # Game unit tests (dynamic growth)
-        add_executable(test_game)
-        target_sources(test_game PRIVATE test/test_game.cpp)
-        set_target_props(test_game)
-        add_test(NAME TestGame COMMAND test_game)
-
-        # Verifier unit tests (must reject bad strategies)
-        add_executable(test_verifier)
-        target_sources(test_verifier PRIVATE test/test_verifier.cpp)
-        set_target_props(test_verifier)
-        add_test(NAME TestVerifier COMMAND test_verifier)
+        add_test(NAME TestParser COMMAND test_unit parser)
+        add_test(NAME TestIO COMMAND test_unit io)
+        add_test(NAME TestSolution COMMAND test_unit solution)
+        add_test(NAME TestBuilder COMMAND test_unit builder)
+        add_test(NAME TestGame COMMAND test_unit game)
+        add_test(NAME TestVerifier COMMAND test_unit verifier)
 
         if(OINK_BUILD_TOOLS) # the solver tests use test_solvers
             # test fixpoint algorithms

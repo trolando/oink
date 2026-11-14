@@ -38,7 +38,7 @@ check(const char* name, bool ok)
 }
 
 int
-main()
+test_game()
 {
     // Start from a single-vertex game and add more vertices. This grows the
     // vertex arrays via v_sizeup; with a 1-vertex start the growth step must

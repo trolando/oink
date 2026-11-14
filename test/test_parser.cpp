@@ -62,7 +62,7 @@ expect_accept(const std::string& name, const std::string& input)
 }
 
 int
-main()
+test_parser()
 {
     // Positive controls.
     expect_accept("valid game", "parity 2;\n0 0 0 0,1;\n1 1 1 1;\n");

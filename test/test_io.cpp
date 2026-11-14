@@ -156,7 +156,7 @@ test_bzip2()
 #endif
 
 int
-main()
+test_io()
 {
 #ifdef OINK_HAVE_BZIP2
     test_bzip2();

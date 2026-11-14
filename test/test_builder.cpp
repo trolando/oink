@@ -46,7 +46,7 @@ succ(const Game& g, int v)
 }
 
 int
-main()
+test_builder()
 {
     GameBuilder b(3);
     b.set_priority(0, 1); b.set_owner(0, Player::Even); b.set_label(0, "a");

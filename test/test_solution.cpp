@@ -36,7 +36,7 @@ check(const char* name, bool ok)
 }
 
 int
-main()
+test_solution()
 {
     // A fresh Solution has all vertices unsolved with no strategy.
     Solution s(3);
