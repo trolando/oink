@@ -23,6 +23,10 @@
 #include <sys/time.h>
 #include <cctype>
 #include <optional>
+#include <stdexcept>
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 
 #include <cstdio>
 #include <filesystem>
@@ -56,7 +60,8 @@ static fs::path unique_temp_path()
 }
 // Run a shell command and stream its combined stdout+stderr to `logger`.
 // Portable replacement for boost::process (popen / _popen on Windows).
-static void run_command_logged(const std::string& cmd, std::ostream& logger)
+// Returns the exit status of the command, or -1 if it could not be run.
+static int run_command_logged(const std::string& cmd, std::ostream& logger)
 {
     const std::string full = cmd + " 2>&1";
 #ifdef _WIN32
@@ -66,14 +71,17 @@ static void run_command_logged(const std::string& cmd, std::ostream& logger)
 #endif
     if (pipe == nullptr) {
         logger << "failed to run command: " << cmd << std::endl;
-        return;
+        return -1;
     }
     char buf[4096];
     while (std::fgets(buf, sizeof(buf), pipe) != nullptr) logger << buf;
 #ifdef _WIN32
-    _pclose(pipe);
+    return _pclose(pipe);
 #else
-    pclose(pipe);
+    const int status = pclose(pipe);
+    if (status < 0) return -1;
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    return WIFSIGNALED(status) ? 128+WTERMSIG(status) : status;
 #endif
 }
 
@@ -186,7 +194,12 @@ public:
         replaceAll(cmd, "%O", path2.string());
 
         // Run the external program (no timeout), logging its output
-        run_command_logged(cmd, logger);
+        const int status = run_command_logged(cmd, logger);
+        if (status != 0) {
+            fs::remove(path1);
+            fs::remove(path2);
+            throw std::runtime_error("external solver failed with exit status " + std::to_string(status));
+        }
 
         // Read solution from temporary file into the (Oink-owned) solution
         std::ifstream sol(path2);
