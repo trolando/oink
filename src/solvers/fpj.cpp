@@ -17,6 +17,7 @@
 #include <cassert>
 #include <cstring>
 #include <vector>
+#include <type_traits>
 
 #include "fpj.hpp"
 
@@ -96,6 +97,17 @@ FPJSolver::solveSeq(bool greedy)
 
     uintqueue Q(n);
 
+    // Activate dependency tracking only after substantial low-yield scanning.
+    std::uint64_t scan_work = 0, scan_changes = 0;
+    bool track_changes = false;
+    bitset dirty, dirty_words;
+    auto markDirty = [&](int v) {
+        if (!disabled[v] && !justified[v]) {
+            dirty.set(v);
+            dirty_words.set(v >> 6);
+        }
+    };
+
     const uint64_t *J = justified.data();
     const uint64_t *EN = enabled.data();
 
@@ -113,58 +125,94 @@ FPJSolver::solveSeq(bool greedy)
         /**
          * Evaluate the unjustified vertices in [i, end), in order, 64 at a time
          */
-        const int last_word = (end - 1) >> 6;
-        for (int w = i >> 6; w <= last_word; w++) {
-            uint64_t bits = EN[w] & ~J[w];
-            if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
-            if (w == last_word and (end & 63) != 0) bits &= (uint64_t(1) << (end & 63)) - 1;
+        auto evaluate = [&](auto tracked) __attribute__((always_inline)) {
+            constexpr bool TrackChanges = decltype(tracked)::value;
+            const int last_word = (end - 1) >> 6;
+            auto nextWord = [&](int word) {
+                if constexpr (TrackChanges) {
+                    if (word > last_word) return word;
+                    const auto next = dirty_words[word] ? size_t(word) : dirty_words.find_next(word);
+                    return next == bitset::npos ? last_word+1 : int(next);
+                } else return word;
+            };
+            for (int w = nextWord(i >> 6); w <= last_word; w = nextWord(w+1)) {
+                uint64_t bits = EN[w] & ~J[w];
+                if constexpr (TrackChanges) bits &= dirty.data()[w];
+                if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
+                if (w == last_word and (end & 63) != 0) bits &= (uint64_t(1) << (end & 63)) - 1;
 
-            while (bits) {
-                const int v = (w << 6) + intrinsics::countr_zero64(bits);
-                bits &= bits - 1;
+                while (bits) {
+                    const int v = (w << 6) + intrinsics::countr_zero64(bits);
+                    bits &= bits - 1;
+                    if constexpr (TrackChanges) dirty.reset(v);
+                    else if constexpr (ReuseWitness) ++scan_work;
 
-                if (greedy) justified.set(v);
+                    if (greedy) justified.set(v);
 
-                // compute one step winner of <v> and update the strategy
-                const int pl = owner(v);
-                const uint64_t *good = won[pl].data();
-                // Try the old move if its target still has the owner's value.
-                int str = ReuseWitness ? strategy[v] : -1;
-                if (str == -1 || !((good[str >> 6] >> (str & 63)) & 1)) {
-                    str = -1;
-                    for (auto curedge = outs(v); *curedge != -1; curedge++) {
-                        const int to = *curedge;
-                        if ((good[to >> 6] >> (to & 63)) & 1) {
-                            str = to;
-                            break;
+                    // compute one step winner of <v> and update the strategy
+                    const int pl = owner(v);
+                    const uint64_t *good = won[pl].data();
+                    // Try the old move if its target still has the owner's value.
+                    int str = ReuseWitness ? strategy[v] : -1;
+                    if (str == -1 || !((good[str >> 6] >> (str & 63)) & 1)) {
+                        str = -1;
+                        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                            const int to = *curedge;
+                            if ((good[to >> 6] >> (to & 63)) & 1) {
+                                str = to;
+                                break;
+                            }
                         }
+                        strategy[v] = str;
                     }
-                    strategy[v] = str;
-                }
-                const int onestep_winner = str == -1 ? 1 - pl : pl;
+                    const int onestep_winner = str == -1 ? 1 - pl : pl;
 
-                if (cur_parity != onestep_winner) {
-                    Q.push(v); // add to the Queue, because all justified predecessors are now invalid
-                    makeDistraction(v);
-                    if (!greedy) justified.set(v);
-                    blockchanged = true;
+                    if (cur_parity != onestep_winner) {
+                        Q.push(v); // add to the Queue, because all justified predecessors are now invalid
+                        makeDistraction(v);
+                        if (!greedy) justified.set(v);
+                        if constexpr (TrackChanges) {
+                            for (auto edge=ins(v); *edge!=-1; ++edge) {
+                                const int from=*edge;
+                                markDirty(from);
+                                if ((from >> 6)==w && from>v && from<end && !disabled[from] && !justified[from])
+                                    bits |= uint64_t(1) << (from&63);
+                            }
+                        } else if constexpr (ReuseWitness) ++scan_changes;
+                        blockchanged = true;
 #ifndef NDEBUG
-                    if (trace >= 2) {
-                        logger << "\033[38;5;165;1mjustified*\033[m " << label_vertex(v);
+                        if (trace >= 2) {
+                            logger << "\033[38;5;165;1mjustified*\033[m " << label_vertex(v);
+                            if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
+                            logger << std::endl;
+                        }
+#endif
+                    }
+#ifndef NDEBUG
+                    else if (greedy and trace >= 2) {
+                        logger << "\033[38;5;165;1mjustified\033[m " << label_vertex(v);
                         if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
                         logger << std::endl;
                     }
 #endif
                 }
-#ifndef NDEBUG
-                else if (greedy and trace >= 2) {
-                    logger << "\033[38;5;165;1mjustified\033[m " << label_vertex(v);
-                    if (strategy[v] != -1) logger << " => " << label_vertex(strategy[v]);
-                    logger << std::endl;
+                if constexpr (TrackChanges) {
+                    dirty.data()[w] &= EN[w] & ~J[w];
+                    if (!dirty.data()[w]) dirty_words.reset(w);
                 }
-#endif
             }
-        }
+        };
+        if constexpr (ReuseWitness) {
+            if (!track_changes && scan_work >= 16*std::uint64_t(n) && scan_changes*8 < scan_work) {
+                dirty = enabled - justified;
+                dirty_words.resize(enabled.block_count());
+                for (size_t word=0; word<dirty.block_count(); ++word)
+                    if (dirty.data()[word]) dirty_words.set(word);
+                track_changes = true;
+            }
+            if (track_changes) evaluate(std::true_type{});
+            else evaluate(std::false_type{});
+        } else evaluate(std::false_type{});
 
         /**
          * The block ended
@@ -177,9 +225,15 @@ FPJSolver::solveSeq(bool greedy)
              */
             while (!Q.empty()) {
                 const int v = Q.pop();
+                // New distractions notify during evaluation. A reset notifies
+                // here after restoring its default hypothesis.
+                const bool notify_predecessors = track_changes && !distraction[v];
                 for (auto curedge = ins(v); *curedge != -1; curedge++) {
                     const int from = *curedge;
                     if (disabled[from]) continue;
+                    if constexpr (ReuseWitness) {
+                        if (notify_predecessors) markDirty(from);
+                    }
                     if constexpr (PreserveBatch) {
                         // All assignments in this batch justify the same new
                         // winner. Delayed reset consolidation invalidates only
@@ -192,6 +246,9 @@ FPJSolver::solveSeq(bool greedy)
                             if (trace >= 2) logger << "\033[31;1mresetting\033[m " << label_vertex(from) << std::endl;
 #endif
                             justified.reset(from);
+                            if constexpr (ReuseWitness) {
+                                if (track_changes) markDirty(from);
+                            }
                             clearDistraction(from);
                             Q.push(from);
                             if (from < i) i = from; // afterwards, continue at lowest unjustified vertex
@@ -228,6 +285,12 @@ FPJSolver::solveSeq(bool greedy)
                 }
 #endif
                 JW[w] |= mask;
+                if constexpr (ReuseWitness) {
+                    if (track_changes) {
+                        dirty.data()[w] &= ~mask;
+                        if (!dirty.data()[w]) dirty_words.reset(w);
+                    }
+                }
             }
         }
 
