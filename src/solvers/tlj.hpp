@@ -24,24 +24,19 @@ namespace pg {
 /**
  * Tangle learning with justifications.
  *
- * Base tangle learning re-decomposes the whole game into regions on every pass.
- * This solver keeps the region decomposition persistent in region[] (the paper's
- * L) and only ever *grows* a region (monotone) or resets the justification closure
- * of vertices that lose their justification. The strategy str[] is the implicit
- * justification graph (as in the fpj solver): a vertex won by its owner is
- * justified by its single strategy edge; a "loser" (won by the opponent of its
- * owner) is justified by all its out-edges. When a vertex changes region/winner,
- * only the vertices whose justification reaches it are reset and re-examined.
+ * Regions persist in region[] together with their implicit justification graph.
+ * A vertex assigned to its owner is justified by its selected strategy edge;
+ * a vertex assigned to the opponent is justified by every residual successor.
+ * Changes that break these dependencies reset the backwards justification
+ * closure. Original heads group consecutive enabled priorities of one parity.
+ *
+ * Visits caused only by promoted tangles reuse the surviving closure and process
+ * newly attracted vertices. New targets and invalidated heads require complete
+ * region replay. Current TL also retains unaffected regions; persistence alone
+ * does not determine how much work the two solvers perform.
  *
  * Reference: Lapauw, Bruynooghe, Denecker, "Improving Parity Game Solvers with
  * Justifications", VMCAI 2020 (Algorithm 7).
- *
- * It is verified against tl on the test corpus and on random games. On the benchmark sets
- * it takes about 1.3x the time of tl on equivalence checking games, 2.2x on model checking
- * games and 1.2x on random games. Each improveRegion() step still re-attracts from all
- * vertices of the region. Like tl, it merges consecutive priorities of the same parity into
- * one region, but only statically (tl merges more regions on the fly); on counter_ortl it
- * is linear, like tl, but about 1.3x slower.
  */
 class TLJSolver : public Solver
 {
@@ -92,6 +87,12 @@ protected:
     bitset S; // dominion vertices found during extraction
 
     bitset dirty; // regions (by priority) that still need to be (re)examined
+    struct RegionWork {
+        int first = -1, last = -1; // promoted tangles targeting this region
+        bool replay = true; // old members must be replayed
+    };
+    std::vector<RegionWork> region_work;
+    std::vector<int> pending_next; // next promoted tangle at the same target region
     bitset extracted; // priorities whose (closed) region has been extracted at its current size
 
     std::vector<int> gdeg; // the number of successors in G of each vertex in G

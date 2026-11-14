@@ -177,6 +177,7 @@ pearce_again:
         tpr.push_back(pr);
         tcnt.push_back(-1);
         tcpos.push_back(0);
+        pending_next.push_back(-1);
 
         tangles++;
         tangle.clear();
@@ -231,6 +232,7 @@ TLJSolver::invalidate(const int m)
 {
     const int r = region[m];
     dirty[rprio[m]] = true;
+    region_work[rprio[m]].replay = true;
     if (rprio[m] == r) {
         if (owner(m) == (r&1)) str[m] = -1;
         extracted[r] = false; // (its tangles change: each contains a head)
@@ -451,11 +453,13 @@ TLJSolver::setMembers(const int p)
 
 /**
  * Grow region <p> (player pl=p&1): re-attract from the current region-p vertices
- * and any unassigned vertices of the priorities of region p, pulling in vertices from
- * lower regions and attracting applicable tangles. The existing region p is never reset
- * (growth is monotone). After growth, reset the justification closure of any
- * wrong-parity vertices that were pulled up, then solve the region if it is a dominion,
- * or else extract its tangles (and dominions) if it is closed.
+ * and any unassigned heads when targets or head justifications changed. Otherwise
+ * reuse the surviving closure, start from newly promoted tangles and process newly
+ * attracted vertices. Pull in lower regions and attract applicable tangles. The
+ * existing region p is never reset (growth is monotone). After growth, reset the
+ * justification closure of any wrong-parity vertices that were pulled up, then solve
+ * the region if it is a dominion, or else extract its tangles (and dominions) if it
+ * is closed.
  */
 void
 TLJSolver::improveRegion(int p)
@@ -500,12 +504,31 @@ TLJSolver::improveRegion(int p)
         return; // nothing at this priority
     }
 
+    // A promotion can reuse the surviving justification closure. A move to a
+    // higher region of the same parity preserves a valid target. Other removals
+    // invalidate every justification that reaches them. New targets and
+    // invalidated heads force a complete replay.
+    auto& work = region_work[p];
+    const bool incremental = !work.replay && !new_head;
+    work.replay = false;
+    const unsigned first_new = incremental ? zlist.size() : 0;
+    const int first_pending = work.first;
+    work.first = work.last = -1;
+    if (incremental) {
+        for (int t = first_pending; t != -1; t = pending_next[t]) {
+            attractTangleInto(t, first_new, p, pl);
+        }
+    }
+
     // without a region of <pl> above p, the escapes of a vertex of the opponent are all its
     // successors in G that are not in region p (and every vertex in region p is popped once)
     const bool pl_above = nonempty[pl].find_next(p) != bitset::npos;
+    // With a partial queue, find an actual escape instead of subtracting one edge
+    // for every old member. Its witness advances as newly pulled vertices arrive.
+    const bool use_witness = pl_above || incremental;
 
     // grow region p (<zlist> is the queue)
-    for (unsigned qi = 0; qi < zlist.size(); qi++) {
+    for (unsigned qi = first_new; qi < zlist.size(); qi++) {
         const int v = zlist[qi];
         for (auto curedge = ins(v); *curedge != -1; curedge++) {
             const int from = *curedge;
@@ -522,14 +545,14 @@ TLJSolver::improveRegion(int p)
                 // that is not an escape remains one)
                 if (cnt[from] < 0) {
                     touched.push(from);
-                    if (pl_above) {
+                    if (use_witness) {
                         const int e = findEscape(from, 0, p, pl);
                         cnt[from] = e < 0 ? 0 : 1;
                         cpos[from] = (unsigned)e;
                     } else {
                         cnt[from] = gdeg[from]-1; // (<v> is one)
                     }
-                } else if (!pl_above) {
+                } else if (!use_witness) {
                     cnt[from]--;
                 } else if (region[outs(from)[cpos[from]]] == p) {
                     const int e = findEscape(from, cpos[from]+1, p, pl);
@@ -565,7 +588,10 @@ TLJSolver::improveRegion(int p)
     if (pull_lo < sweep_lo) {
         const int hi = sweep_lo < p ? sweep_lo : p;
         auto q = pull_lo == 0 ? anyregion.find_first() : anyregion.find_next(pull_lo-1);
-        for (; q != bitset::npos && (int)q < hi; q = anyregion.find_next(q)) dirty[q] = true;
+        for (; q != bitset::npos && (int)q < hi; q = anyregion.find_next(q)) {
+            dirty[q] = true;
+            region_work[q].replay = true;
+        }
         sweep_lo = pull_lo;
     }
 
@@ -598,12 +624,14 @@ TLJSolver::improveRegion(int p)
         // it is a dominion (as in tl, for the highest region of a player). It is closed
         // under attraction in G unless there are higher regions (of the opponent).
         dominions++;
-        const bool any_above = nonempty[1-pl].find_next(p) != bitset::npos;
-        if (any_above) {
+        // A partial queue used witnesses and omitted the old boundary. Rebuild
+        // exact residual degrees while attracting this dominion.
+        const bool attract = incremental || nonempty[1-pl].find_next(p) != bitset::npos;
+        if (attract) {
             for (unsigned i = 0; i < touched.size(); i++) cnt[touched[i]] = -1;
             touched.clear();
         }
-        solveDominion(Z, pl, any_above);
+        solveDominion(Z, pl, attract);
         Z.reset();
         mlen[p] = 0;
         restart = true;
@@ -668,7 +696,13 @@ TLJSolver::promote()
             if (r == -1 || (r&1) != tpl) good = false;
             else if (r < minreg) minreg = r;
         }
-        if (good && minreg != INT_MAX && minreg >= tpr[t]) dirty[minreg] = true;
+        if (good && minreg != INT_MAX && minreg >= tpr[t]) {
+            dirty[minreg] = true;
+            auto& work = region_work[minreg];
+            if (work.last == -1) work.first = int(t);
+            else pending_next[work.last] = int(t);
+            work.last = int(t);
+        }
     }
     promoted = tpr.size();
 }
@@ -710,6 +744,7 @@ TLJSolver::run()
 
     const int max_prio = G.any() ? priority(G.find_last()) : -1;
     dirty.resize(max_prio+1);
+    region_work.resize(max_prio+1);
     extracted.resize(max_prio+1);
     rcount.assign(max_prio+1, 0);
     nonempty[0].resize(max_prio+1);
@@ -776,6 +811,9 @@ TLJSolver::run()
                 // nonempty regions are re-examined (the regions that are empty only gain
                 // vertices that were reset, and are marked dirty for those)
                 dirty |= anyregion;
+                for (auto q = anyregion.find_first(); q != bitset::npos; q = anyregion.find_next(q)) {
+                    region_work[q].replay = true;
+                }
                 // a new sweep (from the highest region) can use the new tangles
                 promote();
                 restart = false;
