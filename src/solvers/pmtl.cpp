@@ -327,7 +327,12 @@ pearce_again:
             }
         }
 
-        escapes.reset();
+        if (tangle.size()+tangleto.size() < escapes.size()/64) {
+            for (const int v : tangle) escapes[v] = false;
+            for (unsigned i=0; i<tangleto.size(); i++) escapes[tangleto[i]] = false;
+        } else {
+            escapes.reset();
+        }
 
         /**
          * If there are no outgoing edges, then we have found a dominion.
