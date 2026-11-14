@@ -40,9 +40,8 @@ protected:
     int *region;
     int *strategy;
     bitset Z;
-    uintqueue Q;
 
-    void attract(int prio);
+    void attract(int prio, size_t first = 0);
     void promote(int from, int to);
     void resetRegion(int priority);
     bool setupRegion(int index, int priority, bool mustReset);

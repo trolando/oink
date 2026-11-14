@@ -25,7 +25,7 @@
 
 namespace pg {
 
-PPSolver::PPSolver(Oink& oink, Game& game) : Solver(oink, game), Z(game.nodecount()), Q(game.nodecount())
+PPSolver::PPSolver(Oink& oink, Game& game) : Solver(oink, game), Z(game.nodecount())
 {
 }
 
@@ -34,18 +34,15 @@ PPSolver::~PPSolver()
 }
 
 void
-PPSolver::attract(int prio)
+PPSolver::attract(int prio, size_t first)
 {
     const int pl = prio & 1;
     auto &rv = regions[prio];
 
-    // if queue is empty, then add all nodes in region[prio] to the queue
-    if (Q.empty()) for (int i : rv) Q.push(i);
-
-    // for every node in the queue, try to attract its predecessors
-    while (Q.nonempty()) {
-        // for every node in the queue...
-        int cur = Q.pop();
+    // The region members also form the FIFO. After a promotion, start at
+    // the newly appended members because the earlier ones were processed.
+    for (size_t i = first; i < rv.size(); ++i) {
+        const int cur = rv[i];
 
         // (this iteration is a hot spot...)
         for (auto curedge = ins(cur); *curedge != -1; curedge++) {
@@ -61,7 +58,6 @@ PPSolver::attract(int prio)
                 rv.push_back(from);
                 region[from] = prio;
                 strategy[from] = cur;
-                Q.push(from);
 #ifndef NDEBUG
                 if (trace >= 3) logger << "\033[1;37mattracted \033[36m" << label_vertex(from) << " \033[37mto \033[36m" << prio << "\033[m (via " << label_vertex(cur) << ")" << std::endl;
 #endif
@@ -81,7 +77,6 @@ PPSolver::attract(int prio)
                 rv.push_back(from);
                 region[from] = prio;
                 strategy[from] = -1;
-                Q.push(from);
 #ifndef NDEBUG
                 if (trace >= 3) logger << "\033[1;37mforced \033[36m" << label_vertex(from)<< " \033[37mto \033[36m" << prio << "\033[m" << std::endl;
 #endif
@@ -111,17 +106,15 @@ PPSolver::promote(int from, int to)
         logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m" << std::endl;
     }
 
-    // promote all nodes of region <from> to region <to>, add them all to the queue (for attraction)
-    for (int i : regions[from]) {
-        region[i] = to;
-        Q.push(i);
-    }
+    // Promote and append the new attraction seeds to the target region.
+    const size_t first = regions[to].size();
+    for (int i : regions[from]) region[i] = to;
 
     regions[to].insert(regions[to].end(), regions[from].begin(), regions[from].end());
     regions[from].clear();
 
     // attract from the newly promoted nodes
-    attract(to);
+    attract(to, first);
 
     promotions++;
 }
