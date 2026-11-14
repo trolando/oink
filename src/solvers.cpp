@@ -20,6 +20,7 @@
 
 #include "solvers/zlk.hpp"
 #include "solvers/pp.hpp"
+#include "solvers/ppj.hpp"
 #include "solvers/ppp.hpp"
 #include "solvers/rr.hpp"
 #include "solvers/dp.hpp"
@@ -61,6 +62,7 @@ Solvers::Solvers()
     _add("zlkpp-liv", "Liverpool quasipolynomial Zielonka (implementation by Paweł Parys)", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKPPSolver>(oink, game, ZLK_LIVERPOOL); }, true);
     _add("npp", "priority promotion NPP", 0, [] (Oink& oink, Game& game) { return std::make_unique<NPPSolver>(oink, game); });
     _add("pp", "priority promotion PP", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPSolver>(oink, game); });
+    _add("ppj", "priority promotion with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPJSolver>(oink, game); });
     _add("ppp", "priority promotion PP+", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPPSolver>(oink, game); }, true);
     _add("rr", "priority promotion RR", 0, [] (Oink& oink, Game& game) { return std::make_unique<RRSolver>(oink, game); }, true);
     _add("dp", "priority promotion PP+ with DP strategy", 0, [] (Oink& oink, Game& game) { return std::make_unique<DPSolver>(oink, game); }, true);
@@ -114,7 +116,7 @@ Solvers::Solvers()
     group(Family::ProgressMeasures, {"spm", "tspm", "mspm", "sspm", "bsspm", "qpt", "bqpt",
           "gpm", "gpm-small", "gpm-succinct", "gpm-ordered", "gpm-strahler"});
     group(Family::FixpointIteration, {"fpi", "fpim", "fpj", "fpjg", "fpjm"});
-    group(Family::PriorityPromotion, {"npp", "pp", "ppp", "rr", "dp", "rrdp", "ppq"});
+    group(Family::PriorityPromotion, {"npp", "pp", "ppj", "ppp", "rr", "dp", "rrdp", "ppq"});
     group(Family::StrategyImprovement, {"psi", "ssi"});
     group(Family::Zielonka, {"zlk", "uzlk", "zlkq", "zlkpp-std", "zlkpp-waw", "zlkpp-liv"});
 

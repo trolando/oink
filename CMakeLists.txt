@@ -203,6 +203,7 @@ target_sources(oink
     src/solvers/zlk.cpp
     src/solvers/zlkq.cpp
     src/solvers/npp.cpp
+    src/solvers/ppj.cpp
     src/solvers/pp.cpp
     src/solvers/ppp.cpp
     src/solvers/rr.cpp
@@ -338,6 +339,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_parser.cpp
             test/test_io.cpp
             test/test_solution.cpp
+            test/test_ppj.cpp
             test/test_fpj_batch.cpp
             test/test_fpi_frontier.cpp
             test/test_in_edge_map.cpp
@@ -355,6 +357,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestIO COMMAND test_unit io)
         add_test(NAME TestSolution COMMAND test_unit solution)
         add_test(NAME TestFPJBatch COMMAND test_unit fpj-batch)
+        add_test(NAME TestPPJ COMMAND test_unit ppj)
         add_test(NAME TestFPIFrontier COMMAND test_unit fpi-frontier)
         add_test(NAME TestInEdgeMap COMMAND test_unit in-edge-map)
         add_test(NAME TestBuilder COMMAND test_unit builder)
@@ -384,6 +387,8 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             # test PP and variations
             add_test(NAME TestSolverNPP COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --npp)
             add_test(NAME TestSolverPP COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp)
+            add_test(NAME TestSolverPPJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ppj)
+            add_test(NAME TestSolverPPJscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ppj --scc)
             add_test(NAME TestSolverPPP COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ppp)
             add_test(NAME TestSolverRR COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --rr)
             add_test(NAME TestSolverDP COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --dp)

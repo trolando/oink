@@ -25,6 +25,7 @@
 int test_parser();
 int test_io();
 int test_solution();
+int test_ppj();
 int test_fpj_batch();
 int test_fpi_frontier();
 int test_in_edge_map();
@@ -43,6 +44,7 @@ const Test tests[] = {
     {"parser", test_parser},
     {"io", test_io},
     {"solution", test_solution},
+    {"ppj", test_ppj},
     {"fpj-batch", test_fpj_batch},
     {"fpi-frontier", test_fpi_frontier},
     {"in-edge-map", test_in_edge_map},
