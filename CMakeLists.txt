@@ -422,6 +422,11 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverGPMsuccinct COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --gpm-succinct)
             add_test(NAME TestSolverGPMordered COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --gpm-ordered)
             add_test(NAME TestSolverPMTLsmall COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-small)
+            add_test(NAME TestSolverPMTLsmallRegression
+                COMMAND ${CMAKE_COMMAND}
+                    -DTEST_SOLVERS=$<TARGET_FILE:test_solvers>
+                    -DGAME=${CMAKE_CURRENT_BINARY_DIR}/pmtl-small-regression.pg
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/test/test_pmtl_regression.cmake)
             add_test(NAME TestSolverPMTLsuccinct COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-succinct)
             add_test(NAME TestSolverPMTLordered COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pmtl-ordered)
             add_test(NAME TestSolverGPMstrahler COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --gpm-strahler)

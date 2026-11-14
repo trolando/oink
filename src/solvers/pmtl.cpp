@@ -944,6 +944,52 @@ PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
         }
     }
 
+    if (UseTangles and !GoUp) {
+        // A tangle head can follow its strategy until the opponent escapes, or win inside
+        // the tangle. Its priority dominates every opponent priority on such a path, so
+        // seeing the head priority at the least escape measure is a lower bound for its
+        // lift. Aura only expands ordinary predecessors; without this tangle lift, a head
+        // can keep counting through internal cycles instead of reaching the escape measure.
+        for (int t = 0; t < (int)tpr.size(); t++) {
+            if (tpr[t] == -1 or (tpr[t]&1) != player) continue;
+            bool active = true;
+            for (int *ptr = tv[t]; *ptr != -1; ptr += 2) {
+                if (!G[*ptr]) {
+                    active = false;
+                    break;
+                }
+            }
+            if (!active) {
+                tpr[t] = -1;
+                continue;
+            }
+            pm.copy_top(-2);
+            for (int *ptr = tout[t]; *ptr != -1; ptr++) {
+                if (G[*ptr] and pm.compare(*ptr, -2) < 0) pm.copy(*ptr, -2);
+            }
+            for (int *ptr = tv[t]; *ptr != -1; ptr += 2) {
+                const int v = *ptr;
+                if (priority(v) < tpr[t] or (priority(v)&1) != player) continue;
+                pm.copy(-2, -1);
+                pm.see(-1, priority(v));
+                target_pm.copy_from(pm, -1, -1);
+                if (target_pm.compare(-1, v) > 0) {
+                    target_pm.copy_from(pm, -1, v);
+                    Updated[v] = true;
+                    any_updated = true;
+#ifndef NDEBUG
+                    if (trace >= 2) {
+                        logger << "updating tangle " << t << " head " << label_vertex(v) << " to ";
+                        target_pm.stream(logger, v);
+                        logger << std::endl;
+                    }
+#endif
+                    lifts++;
+                }
+            }
+        }
+    }
+
     Changed[player] |= Updated; // (the lifted vertices)
     return any_updated;
 }
