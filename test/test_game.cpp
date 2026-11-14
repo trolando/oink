@@ -114,6 +114,28 @@ test_game()
         check("strategyTargets loser empty", t2.empty());
     }
 
+    // Sorting by priority keeps the order of vertices with the same priority, so that every
+    // platform solves the same game (std::sort alone leaves their order unspecified).
+    {
+        const int n = 300;
+        Game h(n);
+        for (int v = 0; v < n; v++) {
+            h.init_vertex(v, (v * 7) % 3, v & 1);
+            h.e_start(v);
+            h.e_add(v, v);
+            h.e_finish();
+        }
+        std::vector<int> mapping(n);
+        h.sort(mapping.data());
+        bool sorted = true, stable = true;
+        for (int i = 1; i < n; i++) {
+            if (h.priority(i-1) > h.priority(i)) sorted = false;
+            else if (h.priority(i-1) == h.priority(i) and mapping[i-1] > mapping[i]) stable = false;
+        }
+        check("sort orders by priority", sorted);
+        check("sort keeps the order of equal priorities", stable);
+    }
+
     if (failures) {
         std::cerr << failures << " game test(s) failed" << std::endl;
         return 1;

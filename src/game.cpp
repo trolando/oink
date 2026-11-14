@@ -376,8 +376,12 @@ Game::sort(int *mapping)
         // initialize mapping
         for (int i=0; i<n_vertices; i++) mapping[i] = i;
 
-        // sort the mapping
-        std::sort(mapping, mapping+n_vertices, [&](const int &a, const int &b) { return (unsigned int)priority(a)<(unsigned int)priority(b); });
+        // sort the mapping by priority; vertices with the same priority keep their order, so
+        // every platform sees the same game (std::sort alone leaves their order unspecified)
+        std::sort(mapping, mapping+n_vertices, [&](const int &a, const int &b) {
+            const unsigned int pa = priority(a), pb = priority(b);
+            return pa < pb || (pa == pb && a < b);
+        });
 
         // now mapping stores the reorder, all we need to do now is reorder in-place
         int *inverse = new int[n_vertices];
