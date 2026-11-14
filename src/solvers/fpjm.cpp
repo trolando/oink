@@ -118,21 +118,35 @@ FPJMSolver::runSeq()
                 // compute one step winner of <v> and update the strategy. Unlike FPJ, we
                 // do not stop at the first winning move: we record *every* outgoing edge
                 // to a co-winning vertex (the maximal set of moves valid at this point).
-                clearStrategyEdges(v); // drop any edges recorded on a previous pass
                 const int o = owner(v);
-                const uint64_t *good = won[o].data();
-                int onestep_winner = 1 - o; // default: owner cannot reach a vertex good for itself
+                const uint64_t* good = won[o].data();
+                const int* edges = outs(v);
+                const int degree = game.outcount(v);
                 int cnt = 0;
-                int k = 0;
-                for (auto curedge = outs(v); *curedge != -1; curedge++, k++) {
-                    const int to = *curedge;
-                    if ((good[to >> 6] >> (to & 63)) & 1) {
-                        onestep_winner = o;
-                        addStrategyEdge(v, k);
-                        cnt++;
+                auto winningBits = [&](int offset, unsigned count) {
+                    uint64_t bits = 0;
+                    for (unsigned i = 0; i < count; ++i) {
+                        const int to = edges[offset + i];
+                        bits |= ((good[to >> 6] >> (to & 63)) & 1) << i;
+                    }
+                    return bits;
+                };
+                // Most vertices fit in one mask; avoid the outer chunk loop.
+                if (degree <= 64) {
+                    const uint64_t bits = winningBits(0, degree);
+                    replaceStrategyBits(v, 0, degree, bits);
+                    cnt = intrinsics::popcount64(bits);
+                } else {
+                    for (int offset = 0; offset < degree;) {
+                        const unsigned count = std::min(64, degree - offset);
+                        const uint64_t bits = winningBits(offset, count);
+                        replaceStrategyBits(v, offset, count, bits);
+                        cnt += intrinsics::popcount64(bits);
+                        offset += count;
                     }
                 }
                 nstrat[v] = cnt;
+                const int onestep_winner = cnt ? o : 1 - o;
 
                 // evaluation stays the same
                 if (cur_parity != onestep_winner) {

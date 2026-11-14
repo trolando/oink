@@ -102,6 +102,10 @@ protected:
     void initMultiStrategy() { oink.solution().init_multi(game.edgeArraySize()); }
     void addStrategyEdge(int v, int k) { oink.solution().add_edge_index((std::size_t)game.firstout(v) + k); }
     void clearStrategyEdges(int v) { oink.solution().clear_edge_range(game.firstout(v), game.outcount(v)); }
+    void replaceStrategyBits(int v, int offset, unsigned count, uint64_t bits)
+    {
+        oink.solution().replace_edge_bits(std::size_t(game.firstout(v)) + offset, count, bits);
+    }
     [[nodiscard]] bool isStrategyEdgeIndex(int idx) const { return oink.solution().has_edge_index(idx); }
     void removeStrategyEdgeIndex(int idx) { oink.solution().remove_edge_index(idx); }
 

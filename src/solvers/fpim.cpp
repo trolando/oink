@@ -56,22 +56,35 @@ FPIMSolver::updateBlock(int i, int n)
             const int v = (w << 6) + intrinsics::countr_zero64(bits);
             bits &= bits - 1;
 
-            // recomputing <v>: drop any strategy edges recorded on a previous pass
-            clearStrategyEdges(v);
-
-            // update whether vertex <v> is a distraction by computing the one step winner
+            // Recompute the winning-edge mask while evaluating <v>.
             const int o = owner(v);
-            const uint64_t *good = won[o].data();
-            int onestep_winner = 1 - o; // default: owner cannot reach a vertex good for itself
-            int k = 0;
-            for (auto curedge = outs(v); *curedge != -1; curedge++, k++) {
-                const int to = *curedge;
-                if ((good[to >> 6] >> (to & 63)) & 1) {
-                    // good for the owner: record every such move in the multi-strategy
-                    onestep_winner = o;
-                    addStrategyEdge(v, k);
+            const uint64_t* good = won[o].data();
+            const int* edges = outs(v);
+            const int degree = game.outcount(v);
+            bool any_winning = false;
+            auto winningBits = [&](int offset, unsigned count) {
+                uint64_t bits = 0;
+                for (unsigned i = 0; i < count; ++i) {
+                    const int to = edges[offset + i];
+                    bits |= ((good[to >> 6] >> (to & 63)) & 1) << i;
+                }
+                return bits;
+            };
+            // Most vertices fit in one mask; avoid the outer chunk loop.
+            if (degree <= 64) {
+                const uint64_t bits = winningBits(0, degree);
+                replaceStrategyBits(v, 0, degree, bits);
+                any_winning = bits != 0;
+            } else {
+                for (int offset = 0; offset < degree;) {
+                    const unsigned count = std::min(64, degree - offset);
+                    const uint64_t bits = winningBits(offset, count);
+                    replaceStrategyBits(v, offset, count, bits);
+                    any_winning |= bits != 0;
+                    offset += count;
                 }
             }
+            const int onestep_winner = any_winning ? o : 1 - o;
 
             if (parity[v] != onestep_winner) {
                 makeDistraction(v);

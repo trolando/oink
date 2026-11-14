@@ -18,7 +18,9 @@
 #define SOLUTION_HPP
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include <oink/bitset.hpp>
@@ -188,6 +190,22 @@ public:
     void clear_edge_range(std::size_t start, std::size_t count)
     {
         for (std::size_t i = 0; i < count; i++) edges_.reset(start + i);
+    }
+
+    /** Replace up to 64 consecutive strategy bits, preserving adjacent edges. */
+    void replace_edge_bits(std::size_t start, unsigned count, uint64_t bits)
+    {
+        assert(count <= 64 && start <= edges_.size() && count <= edges_.size() - start);
+        if (count == 0) return;
+        const uint64_t mask = count == 64 ? ~uint64_t(0) : (uint64_t(1) << count) - 1;
+        const unsigned shift = start & 63;
+        auto* word = edges_.data() + (start >> 6);
+        bits &= mask;
+        word[0] = (word[0] & ~(mask << shift)) | (bits << shift);
+        if (count > 64 - shift) {
+            const unsigned split = 64 - shift;
+            word[1] = (word[1] & ~(mask >> split)) | (bits >> split);
+        }
     }
 
 private:

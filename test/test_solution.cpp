@@ -108,6 +108,27 @@ test_solution()
         check("reset clears multi", !m.has_multi() and !m.has_edge_index(7));
     }
 
+    // A packed update can cross a storage word and must preserve neighboring edges.
+    {
+        constexpr std::size_t size = 193;
+        constexpr uint64_t mask = 0xA965A965A965A965ULL;
+        for (const std::size_t start : {0, 1, 31, 63, 64, 65, 127, 128, 129, 192, 193}) {
+            for (const unsigned count : {0, 1, 2, 31, 63, 64}) {
+                if (start + count > size) continue;
+                Solution m;
+                m.init_multi(size);
+                for (std::size_t edge = 0; edge < size; edge += 2) m.add_edge_index(edge);
+                m.replace_edge_bits(start, count, mask);
+                for (std::size_t edge = 0; edge < size; ++edge) {
+                    const bool expected = edge >= start && edge < start + count
+                        ? (mask >> (edge - start)) & 1
+                        : edge % 2 == 0;
+                    check("replace_edge_bits preserves exact edge set", m.has_edge_index(edge) == expected);
+                }
+            }
+        }
+    }
+
     if (failures) {
         std::cerr << failures << " solution test(s) failed" << std::endl;
         return 1;
