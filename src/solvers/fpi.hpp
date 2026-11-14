@@ -41,9 +41,16 @@ public:
     void run_par(lace_worker*);
 
 private:
-    template<bool ReuseWitness>
+    template<bool ReuseWitness, bool TrackChanges = false>
     int updateBlockImpl(int i, int n);
     void initState(void);
+    inline void markDirty(int v)
+    {
+        if (candidate[v]) {
+            dirty.set(v);
+            dirty_words.set(v >> 6);
+        }
+    }
 
     // v becomes a distraction: it is now won by the opponent of its parity
     inline void makeDistraction(int v)
@@ -71,6 +78,11 @@ private:
     bitset distraction;
     // derived state, kept consistent with parity/distraction/frozen/disabled:
     bitset won[2];    // won[pl][v]: v is enabled and currently won by player pl
+    uint64_t scan_work = 0;
+    uint64_t scan_changes = 0;
+    bitset dirty_words; // words with affected candidates
+    bitset dirty;     // sequential candidates whose one-step winner may have changed
+    bool track_changes = false; // parallel iteration retains full block scans
     bitset candidate; // v is enabled, not frozen and not a distraction
 };
 

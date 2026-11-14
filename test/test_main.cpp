@@ -25,6 +25,7 @@
 int test_parser();
 int test_io();
 int test_solution();
+int test_fpi_frontier();
 int test_in_edge_map();
 int test_builder();
 int test_game();
@@ -41,6 +42,7 @@ const Test tests[] = {
     {"parser", test_parser},
     {"io", test_io},
     {"solution", test_solution},
+    {"fpi-frontier", test_fpi_frontier},
     {"in-edge-map", test_in_edge_map},
     {"builder", test_builder},
     {"game", test_game},

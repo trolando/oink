@@ -126,7 +126,7 @@ Solvers::Solvers()
     for (const char* id : {"pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler"})
         solvers[id].optionsHelp = "small, succinct, ordered, strahler, up/noup, tangles/notangles, no-shortcuts (comma separated)";
 
-    // solvers that never use the in-edges, so Oink need not build them
+    // No incoming edges required up front; sequential FPI may build them lazily.
     for (const char* id : {"fpi", "fpim", "psi"}) solvers[id].needsInEdges = false;
 
     // parallel solvers: below these sizes (measured with 8 workers, against Lace's start and

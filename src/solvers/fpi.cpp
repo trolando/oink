@@ -81,7 +81,7 @@ void freeze_thaw_reset_rec_CALL(lace_worker* lace, FPISolver* solver, int i, int
     }
 }
 
-template<bool ReuseWitness>
+template<bool ReuseWitness, bool TrackChanges>
 int
 FPISolver::updateBlockImpl(int i, int n)
 {
@@ -92,16 +92,31 @@ FPISolver::updateBlockImpl(int i, int n)
     const int last_word = (end - 1) >> 6;
     const uint64_t *cand = candidate.data();
 
+    auto next_word = [&](int word) {
+        if constexpr (TrackChanges) {
+            if (word > last_word) return word;
+            const auto next = dirty_words[word] ? size_t(word) : dirty_words.find_next(word);
+            return next == bitset::npos ? last_word + 1 : int(next);
+        } else {
+            return word;
+        }
+    };
+
     // visit only the candidates (enabled, not frozen, not a distraction) in [i, end),
     // 64 vertices at a time
-    for (int w = i >> 6; w <= last_word; w++) {
+    for (int w = next_word(i >> 6); w <= last_word; w = next_word(w + 1)) {
         uint64_t bits = cand[w];
+        if constexpr (TrackChanges) bits &= dirty.data()[w];
         if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
         if (w == last_word and (end & 63) != 0) bits &= (uint64_t(1) << (end & 63)) - 1;
 
+        if constexpr (ReuseWitness && !TrackChanges) {
+            if (bits) scan_work += intrinsics::popcount64(bits);
+        }
         while (bits) {
             const int v = (w << 6) + intrinsics::countr_zero64(bits);
             bits &= bits - 1;
+            if constexpr (TrackChanges) dirty.reset(v);
 
             // update whether vertex <v> is a distraction by computing the one step winner:
             // can the owner go to a vertex currently won by the owner?
@@ -124,13 +139,30 @@ FPISolver::updateBlockImpl(int i, int n)
             }
             if (parity[v] != onestep_winner) {
                 makeDistraction(v);
+                if constexpr (TrackChanges) {
+                    // Only predecessors can change their one-step winner. Visit
+                    // newly affected later lanes in this word in the usual order.
+                    for (auto edge = ins(v); *edge != -1; ++edge) {
+                        const int from = *edge;
+                        markDirty(from);
+                        if ((from >> 6) == w && from > v && from < end && candidate[from])
+                            bits |= uint64_t(1) << (from & 63);
+                    }
+                }
                 res++;
 #ifndef NDEBUG
                 if (trace >= 2) logger << "vertex " << label_vertex(v) << " is now a distraction (won by " << onestep_winner << ")" << std::endl;
 #endif
             }
         }
+        if constexpr (TrackChanges) {
+            // Ineligible vertices are dirtied again if thaw/reset reactivates
+            // them. Retain candidates outside this priority block in the word.
+            dirty.data()[w] &= cand[w];
+            if (!dirty.data()[w]) dirty_words.reset(w);
+        }
     }
+    if constexpr (ReuseWitness && !TrackChanges) scan_changes += res;
     return res;
 }
 
@@ -203,6 +235,18 @@ FPISolver::freezeThawReset(int i, int n, int p)
         WON1[w] = (WON1[w] & ~clear) | (clear & P);
         WON0[w] = (WON0[w] & ~clear) | (clear & ~P);
         CAND[w] = (CAND[w] | clear) & ~freeze_c;
+        if (track_changes) {
+            // Thawed and reset vertices must be evaluated again even when none
+            // of their successors changed. Only actual winner flips invalidate
+            // the one-step winner of their predecessors.
+            dirty.data()[w] = (dirty.data()[w] | clear) & CAND[w];
+            if (dirty.data()[w]) dirty_words.set(w);
+            else dirty_words.reset(w);
+            for (uint64_t changed = D & clear; changed; changed &= changed - 1) {
+                const int v = (w << 6) + intrinsics::countr_zero64(changed);
+                for (auto edge = ins(v); *edge != -1; ++edge) markDirty(*edge);
+            }
+        }
 
         if (setp | thaw) {
             for (int j = 0; j < 64; j++) {
@@ -363,6 +407,8 @@ FPISolver::runSeq()
         }
     }
     initState();
+    scan_work = scan_changes = 0;
+    track_changes = false;
 
     /**
      * The main loop
@@ -370,7 +416,21 @@ FPISolver::runSeq()
     iterations = 1;
     int p = 0;
     while (p <= d) {
-        if (p_len[p] == 0 or updateBlockImpl<true>(p_start[p], p_len[p]) == 0) {
+        // Reverse-edge notifications pay off only after substantial scanning
+        // with few winner changes. Keep short or busy iterations on the plain path.
+        if (!track_changes && scan_work >= 16 * uint64_t(nodecount()) && scan_changes * 8 < scan_work) {
+            game.build_in_array(false);
+            dirty = candidate;
+            dirty_words.resize(candidate.block_count());
+            dirty_words.reset();
+            for (size_t word = 0; word < candidate.block_count(); ++word)
+                if (candidate.data()[word]) dirty_words.set(word);
+            track_changes = true;
+        }
+        const int changed = p_len[p] == 0 ? 0 : (track_changes
+            ? updateBlockImpl<true, true>(p_start[p], p_len[p])
+            : updateBlockImpl<true, false>(p_start[p], p_len[p]));
+        if (changed == 0) {
             p++;
             continue;
         } 

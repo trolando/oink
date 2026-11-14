@@ -118,7 +118,8 @@ public:
     }
 
     /**
-     * Get whether solver <id> uses the game's in-edges (Game::ins()); true if unknown
+     * Get whether solver <id> requires in-edges before solving; true if unknown.
+     * A solver that builds them lazily may return false.
      */
     static bool needsInEdges(const std::string& id)
     {
