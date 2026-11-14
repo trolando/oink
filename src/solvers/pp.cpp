@@ -25,7 +25,8 @@
 
 namespace pg {
 
-PPSolver::PPSolver(Oink& oink, Game& game) : Solver(oink, game), Z(game.nodecount())
+PPSolver::PPSolver(Oink& oink, Game& game)
+    : Solver(oink, game), Z(game.nodecount()), escape_witness(game.nodecount(), -1)
 {
 }
 
@@ -62,12 +63,16 @@ PPSolver::attract(int prio, size_t first)
                 if (trace >= 3) logger << "\033[1;37mattracted \033[36m" << label_vertex(from) << " \033[37mto \033[36m" << prio << "\033[m (via " << label_vertex(cur) << ")" << std::endl;
 #endif
             } else {
+                // Regions and disabled vertices can change between attractions.
+                const int witness = escape_witness[from];
+                if (witness != -1 && !disabled[witness] && region[witness] < prio) continue;
                 // if owned by other parity, check all outgoing edges
                 bool can_escape = false;
                 for (auto curedge = outs(from); *curedge != -1; curedge++) {
                     int to = *curedge;
                     // if there is an escape, then it is not attracted
                     if (!disabled[to] and region[to] < prio) {
+                        escape_witness[from] = to;
                         can_escape = true;
                         break;
                     }

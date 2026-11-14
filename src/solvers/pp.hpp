@@ -18,6 +18,7 @@
 #define PP_HPP
 
 #include <queue>
+#include <vector>
 
 #include "oink/solver.hpp"
 
@@ -40,6 +41,7 @@ protected:
     int *region;
     int *strategy;
     bitset Z;
+    std::vector<int> escape_witness;
 
     void attract(int prio, size_t first = 0);
     void promote(int from, int to);
