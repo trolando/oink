@@ -336,6 +336,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         # One unit-test runner; CTest still reports each check separately.
         add_executable(test_unit
             test/test_main.cpp
+            test/test_measure_ops.cpp
             test/test_parser.cpp
             test/test_io.cpp
             test/test_solution.cpp
@@ -355,6 +356,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             target_compile_definitions(test_unit PRIVATE OINK_HAVE_BZIP2=1)
         endif()
 
+        add_test(NAME TestMeasureOps COMMAND test_unit measure-ops)
         add_test(NAME TestParser COMMAND test_unit parser)
         add_test(NAME TestIO COMMAND test_unit io)
         add_test(NAME TestSolution COMMAND test_unit solution)

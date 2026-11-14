@@ -69,7 +69,7 @@ Small::Small(const Game &game, const int player) : game(game)
     this->player = player;
     this->n = game.nodecount();                  // n := number of vertices
     this->d = game.priority(game.nodecount()-1); // d := highest priority
-    this->l = (d+2)/2;                           // l := length of the tuples
+    this->l = (d+2-player)/2;                    // count priorities of this player only
 
     // count how many vertices of each priority there are
     this->counts = new int[d+1];

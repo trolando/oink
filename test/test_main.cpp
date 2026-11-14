@@ -22,6 +22,7 @@
 #include <iostream>
 #include <string>
 
+int test_measure_ops();
 int test_parser();
 int test_io();
 int test_solution();
@@ -43,6 +44,7 @@ struct Test {
 };
 
 const Test tests[] = {
+    {"measure-ops", test_measure_ops},
     {"parser", test_parser},
     {"io", test_io},
     {"solution", test_solution},
