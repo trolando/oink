@@ -15,13 +15,14 @@
  */
 
 /**
- * Unit tests for sequential FPI after it starts to track the affected vertices.
+ * Unit tests for sequential FPI and FPIM after they start to track the affected vertices.
  */
 
 #include <iostream>
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "oink/oink.hpp"
@@ -29,7 +30,7 @@
 #include "verifier.hpp"
 
 static void
-check(int invert, bool duplicates)
+check(const char* solver, int invert, bool duplicates)
 {
     constexpr int n = 256;
     std::vector<int> order(n), successor(n+1);
@@ -60,13 +61,13 @@ check(int invert, bool duplicates)
     controller.setRemoveWCWC(false);
     controller.setSolveSingle(false);
     controller.setWorkers(-1);
-    controller.setSolver("fpi");
+    controller.setSolver(solver);
     controller.run();
     pg::Verifier(game, controller.solution(), log).verify(true, true, true);
     for (int v = 0; v < game.nodecount(); ++v) {
         const int expected = v <= n ? invert : (1^invert);
         if (controller.solution().winner(v) != expected) {
-            throw std::runtime_error("incorrect chain/reset winner");
+            throw std::runtime_error(std::string(solver) + ": incorrect chain/reset winner");
         }
     }
 }
@@ -75,8 +76,10 @@ int
 test_fpi_frontier()
 {
     try {
-        for (int invert : {0, 1}) {
-            for (bool duplicates : {false, true}) check(invert, duplicates);
+        for (const char* solver : {"fpi", "fpim"}) {
+            for (int invert : {0, 1}) {
+                for (bool duplicates : {false, true}) check(solver, invert, duplicates);
+            }
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;

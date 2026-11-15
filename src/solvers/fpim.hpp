@@ -41,7 +41,18 @@ public:
     void runSeq(void);
 
 private:
+    template<bool TrackChanges>
+    int updateBlockImpl(int i, int n, uint64_t &evaluated);
+    template<bool TrackChanges>
+    bool iterate(int &p, int d, const int *p_start, const int *p_len);
     void initState(void);
+    inline void markDirty(int v)
+    {
+        if (candidate[v]) {
+            dirty.set(v);
+            dirty_words.set(v >> 6);
+        }
+    }
 
     // v becomes a distraction: it is now won by the opponent of its parity
     inline void makeDistraction(int v)
@@ -69,6 +80,9 @@ private:
     // derived state, kept consistent with parity/distraction/frozen/disabled:
     bitset won[2];    // won[pl][v]: v is enabled and currently won by player pl
     bitset candidate; // v is enabled, not frozen and not a distraction
+    bitset dirty_words; // words with affected candidates
+    bitset dirty;     // candidates whose winning moves may have changed
+    bool track_changes = false;
 };
 
 }

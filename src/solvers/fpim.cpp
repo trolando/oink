@@ -32,11 +32,13 @@ FPIMSolver::~FPIMSolver()
 /**
  * Update the block [i, i+n). For each undecided vertex, compute its one-step
  * winner. Unlike FPI, we do not stop at the first winning move: we record
- * *every* outgoing edge to a co-winning vertex in the solution's multi-strategy,
- * and remember the first one as the representative single strategy.
+ * *every* outgoing edge to a co-winning vertex in the solution's multi-strategy.
+ * With <TrackChanges>, only the affected candidates are evaluated: the winning
+ * moves of the others are unchanged, as none of their successors changed winner.
  */
+template<bool TrackChanges>
 int
-FPIMSolver::updateBlock(int i, int n)
+FPIMSolver::updateBlockImpl(int i, int n, uint64_t &evaluated)
 {
     if (n <= 0) return 0;
 
@@ -45,16 +47,29 @@ FPIMSolver::updateBlock(int i, int n)
     const int last_word = (end - 1) >> 6;
     const uint64_t *cand = candidate.data();
 
+    auto next_word = [&](int word) {
+        if constexpr (TrackChanges) {
+            if (word > last_word) return word;
+            const auto next = dirty_words[word] ? size_t(word) : dirty_words.find_next(word);
+            return next == bitset::npos ? last_word + 1 : int(next);
+        } else {
+            return word;
+        }
+    };
+
     // visit only the candidates (enabled, not frozen, not a distraction) in [i, end),
     // 64 vertices at a time
-    for (int w = i >> 6; w <= last_word; w++) {
+    for (int w = next_word(i >> 6); w <= last_word; w = next_word(w + 1)) {
         uint64_t bits = cand[w];
+        if constexpr (TrackChanges) bits &= dirty.data()[w];
         if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
         if (w == last_word and (end & 63) != 0) bits &= (uint64_t(1) << (end & 63)) - 1;
 
         while (bits) {
             const int v = (w << 6) + intrinsics::countr_zero64(bits);
             bits &= bits - 1;
+            if constexpr (TrackChanges) dirty.reset(v);
+            evaluated++;
 
             // Recompute the winning-edge mask while evaluating <v>.
             const int o = owner(v);
@@ -88,14 +103,37 @@ FPIMSolver::updateBlock(int i, int n)
 
             if (parity[v] != onestep_winner) {
                 makeDistraction(v);
+                if constexpr (TrackChanges) {
+                    // Only predecessors can get other winning moves. Visit newly
+                    // affected later lanes in this word in the usual order.
+                    for (auto edge = ins(v); *edge != -1; ++edge) {
+                        const int from = *edge;
+                        markDirty(from);
+                        if ((from >> 6) == w && from > v && from < end && candidate[from])
+                            bits |= uint64_t(1) << (from & 63);
+                    }
+                }
                 res++;
 #ifndef NDEBUG
                 if (trace >= 2) logger << "vertex " << label_vertex(v) << " is now a distraction (won by " << onestep_winner << ")" << std::endl;
 #endif
             }
         }
+        if constexpr (TrackChanges) {
+            // Ineligible vertices are dirtied again if thaw/reset reactivates
+            // them. Retain candidates outside this priority block in the word.
+            dirty.data()[w] &= cand[w];
+            if (!dirty.data()[w]) dirty_words.reset(w);
+        }
     }
     return res;
+}
+
+int
+FPIMSolver::updateBlock(int i, int n)
+{
+    uint64_t evaluated = 0;
+    return updateBlockImpl<false>(i, n, evaluated);
 }
 
 /**
@@ -161,6 +199,18 @@ FPIMSolver::freezeThawReset(int i, int n, int p)
         WON1[w] = (WON1[w] & ~clear) | (clear & P);
         WON0[w] = (WON0[w] & ~clear) | (clear & ~P);
         CAND[w] = (CAND[w] | clear) & ~freeze_c;
+        if (track_changes) {
+            // Thawed and reset vertices must be evaluated again even when none
+            // of their successors changed. Only actual winner flips change the
+            // winning moves of their predecessors.
+            dirty.data()[w] = (dirty.data()[w] | clear) & CAND[w];
+            if (dirty.data()[w]) dirty_words.set(w);
+            else dirty_words.reset(w);
+            for (uint64_t changed = D & clear; changed; changed &= changed - 1) {
+                const int v = (w << 6) + intrinsics::countr_zero64(changed);
+                for (auto edge = ins(v); *edge != -1; ++edge) markDirty(*edge);
+            }
+        }
 
         if (setp | thaw) {
             for (int j = 0; j < 64; j++) {
@@ -191,6 +241,43 @@ FPIMSolver::initState()
     won[0] = ~parity;
     won[0] -= disabled;
     candidate = ~disabled;
+}
+
+/**
+ * Run the main loop from priority <p> until the fixpoint is reached. Without
+ * <TrackChanges>, stop and return true at a restart once change tracking is
+ * expected to pay off. (Checking this for every block costs too much when the
+ * blocks are small.)
+ */
+template<bool TrackChanges>
+bool
+FPIMSolver::iterate(int &p, const int d, const int *p_start, const int *p_len)
+{
+    const uint64_t track_work = 16 * uint64_t(nodecount());
+    uint64_t evaluated = 0, changes = 0;
+    while (p <= d) {
+        const int res = p_len[p] == 0 ? 0 : updateBlockImpl<TrackChanges>(p_start[p], p_len[p], evaluated);
+        if (res == 0) {
+            p++;
+            continue;
+        }
+        changes += res;
+
+        if (p != 0) {
+            // actually we don't freeze at priority 0 :-)
+            freezeThawReset(0, p_start[p] /* +p_len[p] */, p);
+            p = 0;
+        }
+
+        iterations++;
+#ifndef NDEBUG
+        if (trace >= 2) logger << "restarting after finding distractions" << std::endl;
+#endif
+        if constexpr (!TrackChanges) {
+            if (evaluated >= track_work && changes * 8 < evaluated) return true;
+        }
+    }
+    return false;
 }
 
 void
@@ -232,28 +319,23 @@ FPIMSolver::runSeq()
         }
     }
     initState();
+    track_changes = false;
 
     /**
-     * The main loop
+     * The main loop. As in FPI: once FPIM has evaluated many vertices with few
+     * changes, it evaluates only the affected vertices, which needs the in-edges.
      */
     iterations = 1;
     int p = 0;
-    while (p <= d) {
-        if (p_len[p] == 0 or updateBlock(p_start[p], p_len[p]) == 0) {
-            p++;
-            continue;
-        }
-
-        if (p != 0) {
-            // actually we don't freeze at priority 0 :-)
-            freezeThawReset(0, p_start[p] /* +p_len[p] */, p);
-            p = 0;
-        }
-
-        iterations++;
-#ifndef NDEBUG
-        if (trace >= 2) logger << "restarting after finding distractions" << std::endl;
-#endif
+    if (iterate<false>(p, d, p_start, p_len)) {
+        game.build_in_array(false);
+        dirty = candidate;
+        dirty_words.resize(candidate.block_count());
+        dirty_words.reset();
+        for (size_t word = 0; word < candidate.block_count(); ++word)
+            if (candidate.data()[word]) dirty_words.set(word);
+        track_changes = true;
+        iterate<true>(p, d, p_start, p_len);
     }
 
     /**
