@@ -274,10 +274,12 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_library(oink_bench STATIC
             test/bench/core.cpp
             test/bench/display.cpp
+            test/bench/live.cpp
             test/bench/options.cpp
             test/bench/report.cpp
             test/bench/runner.cpp
             test/bench/summary.cpp
+            test/bench/table.cpp
             test/bench/trial.cpp
             test/bench/worker.cpp
         )
@@ -387,6 +389,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_terminal.cpp
             test/test_chooser.cpp
             test/test_bench.cpp
+            test/test_table.cpp
         )
         target_include_directories(test_unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
         target_link_libraries(test_unit oink_bench oink_testtools)
@@ -416,6 +419,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestTerminal COMMAND test_unit terminal)
         add_test(NAME TestChooser COMMAND test_unit chooser)
         add_test(NAME TestBench COMMAND test_unit bench)
+        add_test(NAME TestTable COMMAND test_unit table)
 
         if(OINK_BUILD_TOOLS) # the solver tests use test_solvers
             # test fixpoint algorithms
@@ -496,9 +500,17 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverZLKscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk --scc)
             add_test(NAME TestSolverPPscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp --scc)
             # short headless runs of bench_solvers (see test/bench/smoke.cmake)
-            set(BENCH_MODES basic calibrated reference random errors preprocess)
+            set(BENCH_MODES basic calibrated reference random errors preprocess live)
             if(NOT WIN32)
                 list(APPEND BENCH_MODES timeout) # worker processes
+            endif()
+            if(NOT WIN32)
+                # the interactive screens on a pseudo terminal
+                add_executable(test_pty test/bench/test_pty.cpp)
+                target_include_directories(test_pty PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+                target_link_libraries(test_pty oink_testtools)
+                set_target_props(test_pty)
+                add_test(NAME TestBenchTerminal COMMAND test_pty $<TARGET_FILE:bench_solvers> ${CMAKE_CURRENT_SOURCE_DIR}/tests ${CMAKE_CURRENT_BINARY_DIR}/bench-smoke/terminal)
             endif()
             foreach(mode ${BENCH_MODES})
                 add_test(NAME TestBench_${mode}

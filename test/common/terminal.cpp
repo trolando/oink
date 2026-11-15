@@ -375,10 +375,10 @@ Terminal::read(int timeout_ms)
 }
 
 bool
-Terminal::pending()
+Terminal::pending(int timeout_ms)
 {
     if (decoder.waiting()) return true;
-    return fill(0);
+    return fill(timeout_ms);
 }
 
 void
@@ -459,7 +459,7 @@ Terminal::read(int)
 }
 
 bool
-Terminal::pending()
+Terminal::pending(int)
 {
     return false;
 }

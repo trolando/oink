@@ -46,6 +46,17 @@ summary (sum of medians, VBS wins/ties and, with --reference, the geometric
 mean speedup and W/T/L) to stdout. --jsonl writes every trial, --csv the
 statistics per game and solver.
 
+With --live, the table of medians updates as the trials finish: the selected
+game is marked with a cyan >, the fastest complete median of a row is green,
+failures are red, and h (or --heatmap) colours every timing by its rank in the
+row. The keys work between trials: up/down (k/j) select a game, left/right
+([ ]) page the solver columns, e extracts the selected game; browsing pauses
+the measurements and Space resumes them; q or Ctrl-C stops the benchmark and
+keeps the results so far. With --review the table stays open at the end: click
+a solver header (or press 1-9) to sort the games by it, again to reverse; g
+sorts by name and o restores the order. Without a terminal, or with --plain,
+TERM=dumb or NO_COLOR, the output is plain.
+
 Exit status: 0 on success, 1 if any trial failed, 130 when interrupted, 3 for
 an invalid command line.
 )";
@@ -78,6 +89,13 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("reference", "Compare the solvers with this one: a selected name, its id, or first (default: none)", cxxopts::value<std::string>())
         ("sort", "Benchmark the files in sorted order instead of shuffled")
         ("recursive", "Search input directories recursively")
+        ;
+    opts.add_options("Display")
+        ("live", "Show the live table on the terminal (plain output without one)")
+        ("review", "Keep the live table open after the benchmark, to sort, browse and extract")
+        ("heatmap", "Colour all timings of the live table by their rank in the game (h toggles)")
+        ("plain", "Plain output without escape sequences")
+        ("exports", "Directory for the games extracted from the live table (e)", cxxopts::value<std::string>()->default_value("benchmark-extracts"))
         ;
     opts.add_options("Reports")
         ("jsonl", "Write the metadata and every trial as JSON Lines", cxxopts::value<std::string>())
@@ -122,7 +140,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
 
     const auto result = opts.parse(argc, argv);
     if (given(result, "help")) {
-        out << opts.help({"", "Benchmark", "Reports", "Preprocessing", "Random games", "Solving", "Solvers"}) << GUIDE << std::endl;
+        out << opts.help({"", "Benchmark", "Display", "Reports", "Preprocessing", "Random games", "Solving", "Solvers"}) << GUIDE << std::endl;
         return false;
     }
 
@@ -161,6 +179,14 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
     if (given(result, "reference")) o.reference = result["reference"].as<std::string>();
     o.sort = given(result, "sort");
     o.recursive = given(result, "recursive");
+
+    // display
+    o.live = given(result, "live");
+    o.review = given(result, "review");
+    o.heatmap = given(result, "heatmap");
+    o.plain = given(result, "plain");
+    o.exports = result["exports"].as<std::string>();
+    if (o.review && !o.live) throw std::runtime_error("--review needs the live table (--live)");
 
     // reports
     if (given(result, "jsonl")) o.jsonl = result["jsonl"].as<std::string>();

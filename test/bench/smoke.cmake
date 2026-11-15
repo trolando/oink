@@ -180,6 +180,14 @@ elseif(MODE STREQUAL "preprocess")
     bench(3 --no-preprocess --single --tl ${GAMES})
     expect("preprocessing is off" "${err}" "contradicting options")
 
+elseif(MODE STREQUAL "live")
+    # without a terminal the live table falls back to plain output
+    bench(0 --live --tl --quick ${GAMES})
+    reject("${ESC}" "${out}${err}" "plain output without a terminal")
+    expect("game\ttl" "${err}" "plain per-game lines")
+    bench(3 --review --tl ${GAMES})
+    expect("--review needs" "${err}" "review without the live table")
+
 elseif(MODE STREQUAL "timeout")
     # POSIX: an external solver that hangs is stopped by the timeout, and a
     # crash of the worker is caught; the other solvers continue.

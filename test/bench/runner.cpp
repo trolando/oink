@@ -34,6 +34,7 @@
 #include "display.hpp"
 #include "json.hpp"
 #include "lace.h"
+#include "live.hpp"
 #include "oink/game.hpp"
 #include "oink/io.hpp"
 #include "oink/pgparser.hpp"
@@ -185,13 +186,22 @@ private:
     size_t done = 0;            // finished slots
     size_t position = 0;        // schedule position of the next sample
     bool failures = false;      // any failure, reflected in the exit status
+    size_t current = 0;         // the game being measured
+    pg::Game* current_game = nullptr; // and its graph, while it is in memory
+    size_t extractions = 0;
+    size_t pauses = 0;
+    double paused_seconds = 0;
 
     /** Slots of a cell: one with calibration, else one per repetition. */
     size_t per_cell() const { return o.calibrated() ? 1 : (size_t)o.repeats; }
 
+    Progress progress(const std::string& activity) const { return Progress{games, plan.size(), done, slots, activity}; }
     std::unique_ptr<pg::Game> load(Case& game, const PlannedGame& planned);
     void measure(Case& game, pg::Game& original, const Prepared& prepared);
     bool service(const std::string& activity, bool force);
+    void handle_extract();
+    void extract(size_t index);
+    std::string extract_game(size_t index);
     std::string save_failure(const Case& game, size_t solver, pg::Game& original, const Trial& trial);
     void skip_game(Case& game);
     void report_preparation(const Case& game);
@@ -236,8 +246,133 @@ Runner::load(Case& game, const PlannedGame& planned)
 bool
 Runner::service(const std::string& activity, bool force)
 {
-    display->update(Progress{games, plan.size(), done, slots, activity}, force);
+    display->update(progress(activity), force);
+    handle_extract();
+    if (!display->paused() || quit) return !quit;
+
+    // paused by browsing: no trials until Space resumes; the pause is reported
+    pauses++;
+    Json json;
+    json.add("event", "ui_pause");
+    json.add("at_utc", utc_now());
+    json.add("after_schedule_position", position);
+    json.add("game_index", current);
+    report->event(json.str());
+    const auto start = Clock::now();
+    while (display->paused() && !quit) {
+        display->update(progress("Measurements paused. Browse or extract, then Space resumes."), true);
+        handle_extract();
+        if (display->paused() && !quit) display->wait();
+    }
+    const double seconds = seconds_since(start);
+    paused_seconds += seconds;
+    Json end;
+    end.add("event", "ui_pause_end");
+    end.add("at_utc", utc_now());
+    end.add("duration_seconds", seconds);
+    end.add("resumed", quit == 0);
+    end.add("after_schedule_position", position);
+    report->event(end.str());
+    if (!quit) display->update(progress(activity), true);
     return !quit;
+}
+
+void
+Runner::handle_extract()
+{
+    const auto index = display->take_extract();
+    if (index) extract(*index);
+}
+
+/** Extract game <index>, and tell the user and the report where it went. */
+void
+Runner::extract(size_t index)
+{
+    try {
+        const std::string path = extract_game(index);
+        display->notice("Saved " + path);
+        Json json;
+        json.add("event", "extract");
+        json.add("game_index", index);
+        json.add("path", path);
+        report->event(json.str());
+    } catch (const std::exception& error) {
+        display->notice(std::string("Extraction failed: ") + error.what());
+    }
+}
+
+/**
+ * Write game <index> to the extraction directory, with a JSON Lines sidecar
+ * that has the metadata, the game, its results and the measured times so far.
+ * With preprocessing, the residual game, the partial solution and the vertex
+ * map are saved too. A game that is no longer in memory is read (or
+ * generated) again and must still have its fingerprint. Returns the path.
+ */
+std::string
+Runner::extract_game(size_t index)
+{
+    const Case& game = games.at(index);
+    if (game.input_failed) throw std::runtime_error("this input could not be read; there is no game to extract");
+    std::unique_ptr<pg::Game> loaded;
+    pg::Game* graph = index == current ? current_game : nullptr;
+    if (graph == nullptr) {
+        Case copy;
+        copy.index = game.index;
+        loaded = load(copy, plan[index]);
+        if (copy.hash != game.hash) throw std::runtime_error("the game changed since it was benchmarked: " + game.path);
+        graph = loaded.get();
+    }
+
+    const fs::path dir = fs::path(o.exports) / run_id;
+    fs::create_directories(dir);
+    extractions++;
+    const std::string stem = (dir / ("game-" + std::to_string(index + 1) + "-" + game.hash + "-" + std::to_string(extractions))).string();
+    {
+        std::ofstream out(stem + ".pg");
+        graph->write_pgsolver(out);
+        if (!out) throw std::runtime_error("cannot write " + stem + ".pg");
+    }
+
+    Options sidecar = o;
+    sidecar.jsonl = stem + ".jsonl";
+    sidecar.csv.clear();
+    sidecar.overwrite = false;
+    Report record(sidecar, solvers);
+    record.metadata(1, executable);
+    record.game(game);
+    if (o.preprocess) {
+        // the measured input: what preprocessing leaves of the game
+        std::ostringstream log;
+        auto prepared = prepare(*graph, o, log);
+        {
+            std::ofstream out(stem + "-partial.sol");
+            pg::write_solution(*graph, prepared->partial, out);
+        }
+        if (prepared->owned) {
+            std::ofstream out(stem + "-residual.pg");
+            prepared->owned->write_pgsolver(out);
+            std::ofstream map(stem + "-residual-vertices.txt");
+            for (int v : prepared->vertices) map << v << '\n';
+        }
+    }
+    record.results(game);
+    std::vector<std::string> times;
+    for (size_t s = 0; s < solvers.size(); s++) {
+        std::vector<std::string> values;
+        for (double v : game.cells[s].values) values.push_back(json_number(v));
+        Json entry;
+        entry.add("solver", solvers[s].name);
+        entry.raw("seconds", json_array(values));
+        times.push_back(entry.str());
+    }
+    Json json;
+    json.add("event", "extraction");
+    json.add("extracted_utc", utc_now());
+    json.add("graph_file", stem + ".pg");
+    json.add("source_report", o.jsonl);
+    json.raw("recorded_solve_seconds", json_array(times));
+    record.event(json.str());
+    return stem + ".pg";
 }
 
 /** Save the game and the log of a failed trial; returns the path of the game. */
@@ -398,7 +533,14 @@ Runner::run()
     slots = plan.size() * solvers.size() * per_cell();
     report = std::make_unique<Report>(o, solvers);
     report->metadata(plan.size(), executable);
-    display = std::make_unique<PlainDisplay>(o, solvers);
+    LiveDisplay* live = nullptr;
+    if (o.live && !o.plain && ui::Terminal::available()) {
+        auto table = std::make_unique<LiveDisplay>(o, solvers, &quit);
+        live = table.get();
+        display = std::move(table);
+    } else {
+        display = std::make_unique<PlainDisplay>(o, solvers);
+    }
     // with isolation, Lace runs in the workers; the benchmark itself never forks with threads
     std::unique_ptr<LaceRunning> lace;
     if (!o.isolate) lace = std::make_unique<LaceRunning>(o.workers);
@@ -448,7 +590,10 @@ Runner::run()
             continue;
         }
 
+        current = index;
+        current_game = original.get();
         measure(game, *original, *prepared);
+        current_game = nullptr;
         report->results(game);
         if (!quit) display->completed(game, plan.size());
         service(game.name + " complete", true);
@@ -456,7 +601,20 @@ Runner::run()
 
     const bool interrupted = quit != 0;
     display->stop_timer();
+    handle_extract();
+    if (live != nullptr && o.review && !interrupted) {
+        live->review(progress("Finished. Browse with the arrows; click the headers to sort. e extracts, q exits."), [&](size_t index) {
+            extract(index);
+        });
+        quit = 0; // leaving the review is a normal end
+    }
     display->close();
+    Json interaction;
+    interaction.add("event", "interaction_summary");
+    interaction.add("pause_count", pauses);
+    interaction.add("paused_seconds", paused_seconds);
+    interaction.add("extractions", extractions);
+    report->event(interaction.str());
 
     const auto totals = compute_totals(games, plan.size(), solvers.size(), o.repeats, reference_index(o.reference, solvers));
     report->summary(totals, interrupted, games.size());
@@ -471,6 +629,8 @@ Runner::run()
     if (failures && !o.artifacts.empty() && fs::exists(fs::path(o.artifacts) / run_id)) {
         std::cout << "Failed trials: " << (fs::path(o.artifacts) / run_id).string() << '\n';
     }
+    if (pauses) std::cout << "Browsing paused the measurements " << pauses << " times (" << duration(paused_seconds) << "). Use a headless run for measurements to publish.\n";
+    if (extractions) std::cout << "Extracted games: " << (fs::path(o.exports) / run_id).string() << '\n';
     std::cout << std::flush;
     if (interrupted) return 130;
     return failures ? 1 : 0;

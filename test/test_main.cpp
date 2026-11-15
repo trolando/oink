@@ -41,6 +41,7 @@ int test_verifier();
 int test_terminal();
 int test_chooser();
 int test_bench();
+int test_table();
 
 namespace {
 
@@ -69,6 +70,7 @@ const Test tests[] = {
     {"terminal", test_terminal},
     {"chooser", test_chooser},
     {"bench", test_bench},
+    {"table", test_table},
 };
 
 int

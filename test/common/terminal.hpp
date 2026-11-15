@@ -161,8 +161,11 @@ public:
     /** Wait at most <timeout_ms> milliseconds for a key; None after the timeout. */
     Key read(int timeout_ms);
 
-    /** Whether a key can be read without waiting. */
-    bool pending();
+    /**
+     * Whether a key can be read, waiting at most <timeout_ms> milliseconds for
+     * input; nothing is consumed.
+     */
+    bool pending(int timeout_ms = 0);
 
     /**
      * Draw the screen: one entry per row, each already fitted to the width.
