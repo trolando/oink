@@ -260,12 +260,13 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     option(OINK_BUILD_EXAMPLES "Build the library usage examples" ON)
     option(OINK_BUILD_TESTS "Build tests" ON)
 
-    # Support code shared by the test tools and their unit tests: the terminal
-    # and the interactive solver chooser.
+    # Support code shared by the test tools and their unit tests: the terminal,
+    # the interactive solver chooser and external solvers.
     if(OINK_BUILD_TOOLS OR OINK_BUILD_TESTS)
         add_library(oink_testtools STATIC
             test/common/terminal.cpp
             test/common/chooser.cpp
+            test/common/external_solver.cpp
         )
         set_target_props(oink_testtools)
     endif()
