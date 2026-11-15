@@ -154,7 +154,7 @@ make_run_id()
     const std::time_t now = std::time(nullptr);
     std::tm value{};
 #ifdef _WIN32
-    gmtime_s(&value, &now);
+    value = *std::gmtime(&now); // the benchmark is single-threaded here
 #else
     gmtime_r(&now, &value);
 #endif
@@ -594,7 +594,7 @@ Runner::run()
     run_id = make_run_id();
     slots = plan.size() * solvers.size() * per_cell();
     report = std::make_unique<Report>(o, solvers);
-    report->metadata(plan.size(), executable);
+    report->metadata(plan.size(), executable, experiment != nullptr ? std::to_string(experiment->session()) : "");
     LiveDisplay* live = nullptr;
     if (experiment != nullptr) {
         display = std::make_unique<ExperimentDisplay>(o, experiment->directory(), experiment->session(), executable);

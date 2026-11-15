@@ -150,6 +150,18 @@ decode_case(const std::string& line, Case& g)
     return (bool)in && word == "end";
 }
 
+/** Replace <to> by <from>; atomically where the system can. */
+static void
+replace_file(const fs::path& from, const fs::path& to)
+{
+#ifdef _WIN32
+    // rename may refuse to replace a file here
+    std::error_code ignored;
+    fs::remove(to, ignored);
+#endif
+    fs::rename(from, to);
+}
+
 /** Write <text> to <path> through a temporary file, so the file is never half written. */
 static void
 write_file(const fs::path& path, const std::string& text)
@@ -161,7 +173,7 @@ write_file(const fs::path& path, const std::string& text)
         out.flush();
         if (!out) throw std::runtime_error("cannot write " + temporary.string());
     }
-    fs::rename(temporary, path);
+    replace_file(temporary, path);
 }
 
 static std::string
@@ -329,6 +341,7 @@ Experiment::resume(const std::string& directory, Options& options, std::vector<S
 
     // the saved settings; the options of this command line are ignored, except --plain
     const bool plain = options.plain;
+    const auto command_line = options.argv;
     std::vector<const char*> argv;
     for (const auto& arg : args) argv.push_back(arg.c_str());
     std::vector<SolverRun> ignored;
@@ -336,6 +349,7 @@ Experiment::resume(const std::string& directory, Options& options, std::vector<S
     Options saved;
     parse_command_line((int)argv.size(), argv.data(), saved, ignored, help);
     saved.plain = plain;
+    saved.argv = command_line;
     saved.experiment = experiment->root;
     saved.resume = true;
     options = saved;
@@ -413,7 +427,7 @@ Experiment::publish(const Options& options, const std::vector<SolverRun>& solver
     aggregate.overwrite = true;
     {
         Report report(aggregate, solvers);
-        report.metadata(games.size(), executable);
+        report.metadata(games.size(), executable, std::to_string(session_));
         for (const auto& game : finished_games) {
             std::istringstream events(read_file(root_path / "games" / (std::to_string(game.index) + ".jsonl")));
             std::string line;
@@ -424,7 +438,7 @@ Experiment::publish(const Options& options, const std::vector<SolverRun>& solver
         const auto totals = compute_totals(finished_games, games.size(), solvers.size(), options.repeats, reference_index(options.reference, solvers));
         report.summary(totals, !complete, finished_games.size());
     }
-    fs::rename(aggregate.jsonl, root_path / "results.jsonl");
+    replace_file(aggregate.jsonl, root_path / "results.jsonl");
 
     std::string csv = csv_header();
     for (const auto& game : finished_games) csv += csv_rows(game, solvers, options.repeats);

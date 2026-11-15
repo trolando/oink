@@ -57,8 +57,11 @@ public:
      */
     Report(const Options& options, const std::vector<SolverRun>& solvers);
 
-    /** Write the metadata event of a run of <planned> games. */
-    void metadata(size_t planned, const std::string& executable, const std::string& extra = "");
+    /**
+     * Write the metadata event of a run of <planned> games; <session> is the
+     * session of a named experiment, if any.
+     */
+    void metadata(size_t planned, const std::string& executable, const std::string& session = "");
 
     /** Write one event, an object built with Json. */
     void event(const std::string& json);

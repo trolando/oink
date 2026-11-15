@@ -41,9 +41,11 @@
 #endif
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
+#include <sys/types.h>
 #include <sys/sysctl.h>
 #endif
 #ifdef __FreeBSD__
+#include <sys/types.h>
 #include <sys/sysctl.h>
 #endif
 #ifdef __linux__
@@ -64,7 +66,7 @@ utc_now()
     const std::time_t now = std::time(nullptr);
     std::tm value{};
 #ifdef _WIN32
-    gmtime_s(&value, &now);
+    value = *std::gmtime(&now); // the benchmark is single-threaded here
 #else
     gmtime_r(&now, &value);
 #endif
@@ -274,7 +276,7 @@ Report::event(const std::string& json)
 }
 
 void
-Report::metadata(size_t planned, const std::string& executable, const std::string& extra)
+Report::metadata(size_t planned, const std::string& executable, const std::string& session)
 {
     const Options& o = options;
     Json json;
@@ -285,14 +287,15 @@ Report::metadata(size_t planned, const std::string& executable, const std::strin
     json.add("oink_version", pg::version());
     json.add("label", o.label);
     json.add("experiment", o.experiment);
-    if (!extra.empty()) json.raw("experiment_session", extra);
+    if (!session.empty()) json.raw("experiment_session", session);
     const auto ref = reference_index(o.reference, solvers);
     if (ref) json.add("reference", solvers[*ref].name);
     else json.null("reference");
     json.raw("build", build_json());
     json.raw("clock_probe", clock_probe_json());
     json.add("binary", executable);
-    json.add("binary_fnv1a64", file_fingerprint(executable) ? hex64(*file_fingerprint(executable)) : std::string("unavailable"));
+    const auto binary = file_fingerprint(executable);
+    json.add("binary_fnv1a64", binary ? hex64(*binary) : std::string("unavailable"));
     json.add("metric", "wall seconds of Oink::run on a fresh copy of the residual game; SCC solving and lazy in-edges included; reading, preparation, copying, Oink construction with in-edges and verification excluded");
     json.add("clock", "steady_clock");
     json.add("clock_period_seconds", (double)std::chrono::steady_clock::period::num / std::chrono::steady_clock::period::den);
