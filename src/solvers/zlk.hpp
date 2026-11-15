@@ -52,8 +52,6 @@ public:
     bool to_inversion = true;
     bool only_recompute_when_attracted = true;
 
-    uintqueue Q;
-
     // Per-worker scratch buffer collecting the vertices a worker attracts during one
     // parallel attractor pass. One entry per Lace worker; cache-line aligned so that
     // concurrent push_back from different workers does not false-share the headers.

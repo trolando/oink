@@ -32,7 +32,7 @@ static const int BOT = 0x80000001; // bottom state for vertex
 
 #define KC "\033[36;1m"
 
-ZLKSolver::ZLKSolver(Oink& oink, Game& game) : Solver(oink, game), Q(game.nodecount())
+ZLKSolver::ZLKSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
 
@@ -229,9 +229,12 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
      * attracting them one by one: a head that would be attracted by an earlier head needs no
      * escape count. The result is the same region. A vertex of the other parity that the heads
      * attract does not end the run of heads (Maks Verver optimization).
+     * Vertices are attracted in FIFO order, with <R> as the queue.
      */
 
     while (true) {
+        size_t next = R->size();
+
         for (; i>=0; i--) {
             const int ri = region[i].load(memory_order_relaxed);
             if (ri == DIS or ri >= 0) continue; // cannot be attracted
@@ -244,7 +247,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
             winning[i] = pl;
             strategy[i] = -1; // head nodes do not have a strategy yet!
             H->push_back(i);
-            Q.push(i);
+            R->push_back(i);
 
 #ifndef NDEBUG
             if (trace >= 2) logger << KC"head\033[m " << label_vertex(i) << std::endl;
@@ -252,11 +255,10 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
         }
 
         // no new heads: <i> is -1 or a vertex that is not attracted and ends the run
-        if (Q.empty()) break;
+        if (next == R->size()) break;
 
-        while (!Q.empty()) {
-            int cur = Q.pop();
-            R->push_back(cur);
+        while (next < R->size()) {
+            const int cur = (*R)[next++];
 
             // attract to <cur>
             for (auto curedge = ins(cur); *curedge != -1; curedge++) {
@@ -270,7 +272,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
                     region[from].store(r, memory_order_relaxed);
                     winning[from] = pl;
                     strategy[from] = cur;
-                    Q.push(from);
+                    R->push_back(from);
 #ifndef NDEBUG
                     if (trace >= 2) logger << KC"attracted\033[m " << label_vertex(from) << std::endl;
 #endif
@@ -294,7 +296,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
                         region[from].store(r, memory_order_relaxed);
                         winning[from] = pl;
                         strategy[from] = -1;
-                        Q.push(from);
+                        R->push_back(from);
 #ifndef NDEBUG
                         if (trace >= 2) logger << KC"forced\033[m " << label_vertex(from) << std::endl;
 #endif
@@ -340,12 +342,12 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *H, std::vec
         return false;
     };
 
-    // move <v> to the opponent with strategy <str> and queue it
+    // move <v> to the opponent with strategy <str> and add it to <R> (the FIFO queue)
     auto lose = [&](int v, int str) {
         region[v].store(r, memory_order_relaxed);
         winning[v] = 1-pl;
         strategy[v] = str;
-        Q.push(v);
+        R->push_back(v);
     };
 
     // attract the predecessors of <cur> (won by the opponent) that are won by <pl>
@@ -413,10 +415,8 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *H, std::vec
      * Now attract anything in this region/subregions of <pl> to 1-<pl>
      */
 
-    while (!Q.empty()) {
-        const int cur = Q.pop();
-        R->push_back(cur);
-        attract_to(cur);
+    for (size_t k = initial; k < R->size(); k++) {
+        attract_to((*R)[k]);
     }
 
     return R->size() - initial;
