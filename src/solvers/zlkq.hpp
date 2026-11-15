@@ -60,7 +60,6 @@ protected:
     std::deque<Level> levels;
     int depth = 0;
 
-    std::vector<int> runstart; // the lowest vertex of the run of vertices of v's parity that ends at v
     std::vector<int> esc; // per vertex, where to continue the search for an escape (see attractVertices)
     std::vector<int> searched; // the vertices with a nonzero <esc>, or with a search started
 

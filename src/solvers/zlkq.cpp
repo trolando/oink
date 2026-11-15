@@ -260,24 +260,27 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
 
     /**
      * Compute H := Attr(vertices of <pr> in <R>)
-     * With on-the-fly compression: the heads are the vertices of <R> in the run of vertices (by
-     * index) of parity <pl> that ends at <vtop>, attracted together. There are none if <vtop>
-     * now has the other parity.
+     * With on-the-fly compression of the priorities of <R>: the heads are the vertices of <R>
+     * from <vtop> down to the first vertex of <R> of the other parity, attracted together.
+     * There are none if <vtop> now has the other parity.
      */
 
     for (size_t k=0; k<std::max(nw, L.Hdirty); k++) h[k] = 0;
     L.Hdirty = nw;
 
     if ((priority(vtop)&1) == pl) {
-        const int lo = runstart[vtop];
-        for (long k=vtop/64; k>=lo/64; k--) {
+        bool inversion = false;
+        for (long k=vtop/64; k>=0 and !inversion; k--) {
             uint64_t m = r[k];
             if (k == vtop/64) m &= ~uint64_t(0) >> (63 - vtop%64);
-            if (k == lo/64) m &= ~uint64_t(0) << (lo%64);
             while (m) {
                 const int b = bsr(m);
                 m &= ~(uint64_t(1) << b);
                 const int v = (int)(k*64 + b);
+                if ((priority(v)&1) != pl) {
+                    inversion = true;
+                    break;
+                }
                 H[v] = true;
                 str[v] = -1;
                 Q.push(v);
@@ -424,10 +427,6 @@ ZLKQSolver::run()
     W0.resize(nodecount());
     W1.resize(nodecount());
 
-    runstart.resize(nodecount());
-    for (int v=0; v<nodecount(); v++) {
-        runstart[v] = (v > 0 and ((priority(v)^priority(v-1))&1) == 0) ? runstart[v-1] : v;
-    }
     esc.assign(nodecount(), 0);
 
     bitset G(nodecount());
