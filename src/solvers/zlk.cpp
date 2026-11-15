@@ -434,8 +434,26 @@ ZLKSolver::run()
 
     std::vector<int> history;
     std::vector<int> W0, W1;
+    // The region and the heads (see attractLosing) of each level of the stack. The vectors
+    // of finished levels are kept for the next level at the same depth, to avoid allocating
+    // two vectors per iteration; only large ones are freed.
     std::vector<std::vector<int>> levels;
-    std::vector<std::vector<int>> heads; // the heads of each level (see attractLosing)
+    std::vector<std::vector<int>> heads;
+    size_t depth = 0;
+    auto push_level = [&]() {
+        if (depth == levels.size()) {
+            levels.emplace_back();
+            heads.emplace_back();
+        }
+        depth++;
+    };
+    auto pop_level = [&]() {
+        depth--;
+        for (auto *v : {&levels[depth], &heads[depth]}) {
+            if (v->capacity() > 65536) std::vector<int>().swap(*v);
+            else v->clear();
+        }
+    };
 
     // initialize arrays
     memset(winning.get(), -1, nodecount());
@@ -479,8 +497,7 @@ ZLKSolver::run()
     }
 
     // initialize first level (i, r=0, phase=0)
-    levels.push_back(std::vector<int>());
-    heads.push_back(std::vector<int>());
+    push_level();
     history.push_back(i);
     history.push_back(next_r++);
     history.push_back(0);
@@ -490,8 +507,8 @@ ZLKSolver::run()
         const int hsize = history.size();
         if (hsize == 0) break; // no frame on the stack
 
-        std::vector<int> *A = &(*levels.rbegin());
-        std::vector<int> *H = &(*heads.rbegin());
+        std::vector<int> *A = &levels[depth-1];
+        std::vector<int> *H = &heads[depth-1];
         const int i = history[hsize-3];
         const int r = history[hsize-2];
         const int phase = history[hsize-1];
@@ -500,7 +517,7 @@ ZLKSolver::run()
         const int h = hsize / 3;
         if (i < 0) LOGIC_ERROR; // just a sanity check
         if (region[i].load(std::memory_order_relaxed) == DIS) LOGIC_ERROR; // just a sanity check
-        if (h*3 != hsize or (int)levels.size() != h) LOGIC_ERROR; // just a sanity check
+        if (h*3 != hsize or (int)depth != h) LOGIC_ERROR; // just a sanity check
 #endif
 
         /**
@@ -540,8 +557,7 @@ ZLKSolver::run()
 
             if (j != -1) {
                 // go recursive (subgame not empty)
-                levels.push_back(std::vector<int>());
-                heads.push_back(std::vector<int>());
+                push_level();
                 history.push_back(j);
                 history.push_back(next_r++);
                 history.push_back(0);
@@ -622,8 +638,7 @@ ZLKSolver::run()
                  * The strategy has been updated. Nodes are now in W0/W1.
                  * Finally, pop the stack and go up...
                  */
-                levels.pop_back();
-                heads.pop_back();
+                pop_level();
                 history.pop_back();
                 history.pop_back();
                 history.pop_back();
@@ -655,8 +670,7 @@ ZLKSolver::run()
                     /**
                      * And pop the stack to go up
                      */
-                    levels.pop_back();
-                    heads.pop_back();
+                    pop_level();
                     history.pop_back();
                     history.pop_back();
                     history.pop_back();
@@ -673,8 +687,7 @@ ZLKSolver::run()
                      * And push the stack to go down
                      */
                     history.back() = 2; // set current phase to 2
-                    levels.push_back(std::vector<int>());
-                    heads.push_back(std::vector<int>());
+                    push_level();
                     history.push_back(new_i);
                     history.push_back(next_r++);
                     history.push_back(0);
@@ -707,8 +720,7 @@ ZLKSolver::run()
              * The strategy has been updated. Nodes are now in W0/W1.
              * Finally, pop the stack to go up...
              */
-            levels.pop_back();
-            heads.pop_back();
+            pop_level();
             history.pop_back();
             history.pop_back();
             history.pop_back();
