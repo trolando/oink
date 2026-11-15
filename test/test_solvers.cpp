@@ -33,6 +33,8 @@
 #include <random>
 
 #include "tools/cxxopts.hpp"
+#include "common/chooser.hpp"
+#include "common/solver_run.hpp"
 #include "oink/oink.hpp"
 #include "oink/solvers.hpp"
 #include "oink/solver.hpp"
@@ -97,15 +99,6 @@ bool opt_show_log = false;
 int opt_workers = -1; // sequential unless -w is given (matches the --help default)
 bool opt_force_parallel = false; // parallel also on games below the solver's threshold
 int opt_trace = -1;
-/**
- * A solver to test: its id, its configuration (see Solver::parseOptions; empty for the
- * defaults), and the name it is reported under.
- */
-struct SolverRun {
-    std::string id;
-    std::string config;
-    std::string name;
-};
 
 static double
 wctime()
@@ -301,6 +294,7 @@ main(int argc, char **argv)
         ;
     opts.add_options("Solvers")
         ("all", "Run all solvers")
+        ("i,interactive", "Choose the solvers (and their configurations) in an interactive screen, then test them")
         ;
     // every solver option takes an optional configuration: --tlpar=parmin=1,chunk=4
     for (const auto& id : Solvers::getSolverIDs()) {
@@ -357,14 +351,11 @@ main(int argc, char **argv)
     opt_show_log = options.count("show-log") != 0;
     opt_progress = options.count("progress") != 0;
 
-    std::cout << "Selected solvers:";
-
     std::vector<SolverRun> solvers;
     auto add_run = [&](const std::string& id, const std::string& config) {
-        const std::string name = config.empty() ? id : id + "[" + config + "]";
-        for (const auto& r : solvers) if (r.name == name) return; // given twice
-        solvers.push_back({id, config, name});
-        std::cout << " " << name;
+        const SolverRun run(id, config);
+        for (const auto& r : solvers) if (r.name == run.name) return; // given twice
+        solvers.push_back(run);
     };
 
     // the solvers in the order given (with --all, all solvers first)
@@ -387,6 +378,34 @@ main(int argc, char **argv)
             add_run(name, "");
         }
     }
+    if (options.count("configure") && !solvers.empty()) {
+        if (solvers.size() > 1) {
+            std::cout << "Solver configuration options (--configure, -c) cannot be used with multiple solvers at the same time; use --<solver>=<options>" << std::endl;
+            return 0;
+        }
+        if (!solvers[0].config.empty()) {
+            std::cout << "Solver configuration given both with --" << solvers[0].id << "= and with --configure" << std::endl;
+            return 0;
+        }
+        solvers[0] = SolverRun(solvers[0].id, options["configure"].as<std::string>());
+    }
+
+    if (options.count("interactive")) {
+        // start from the solvers given on the command line
+        ui::Chooser chooser(solvers, ui::ChooserConfig{"TEST SOLVERS", {}, false});
+        volatile std::sig_atomic_t cancelled = 0;
+        try {
+            if (!ui::choose(chooser, &cancelled)) return cancelled ? 130 : 0;
+        } catch (const std::exception& err) {
+            std::cerr << "test_solvers: " << err.what() << std::endl;
+            return 3;
+        }
+        solvers = chooser.selected();
+    }
+
+    std::cout << "Selected solvers:";
+    for (const auto& run : solvers) std::cout << " " << run.name;
+
     if (solvers.size() == 0) {
         std::cout << " (none)" << std::endl << std::endl;
         std::cout << "Use --help for program options." << std::endl << std::endl;
@@ -397,18 +416,6 @@ main(int argc, char **argv)
         return 0;
     } else {
         std::cout << std::endl;
-    }
-
-    if (options.count("configure")) {
-        if (solvers.size() > 1) {
-            std::cout << std::endl << "Solver configuration options (--configure, -c) cannot be used with multiple solvers at the same time; use --<solver>=<options>" << std::endl;
-            return 0;
-        }
-        if (!solvers[0].config.empty()) {
-            std::cout << std::endl << "Solver configuration given both with --" << solvers[0].id << "= and with --configure" << std::endl;
-            return 0;
-        }
-        solvers[0].config = options["configure"].as<std::string>();
     }
 
     setsighandlers();
