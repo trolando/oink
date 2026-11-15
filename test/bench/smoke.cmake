@@ -159,6 +159,27 @@ elseif(MODE STREQUAL "errors")
     bench(1 --tl --zlk --quick --sort "${WORK}/broken.pg" "${DATA}/vb001")
     expect("input_error" "${err}" "unreadable game")
 
+elseif(MODE STREQUAL "preprocess")
+    # once-per-game preprocessing; a single-parity game needs no solver at all
+    file(WRITE "${WORK}/even.pg" "parity 2;\n0 2 0 1;\n1 4 1 0,2;\n2 0 1 2;\n")
+    # vb003, vb004 and vb006 keep a residual; vb001 and vb002 are solved by preprocessing
+    bench(0 --preprocess --tl --fpjm --quick --sort --jsonl=run.jsonl --csv=run.csv "${DATA}/vb003" "${DATA}/vb004" "${DATA}/vb006" "${WORK}/even.pg")
+    expect("Preprocessing: ON" "${out}" "summary")
+    expect("Fully solved by preprocessing: 1/4" "${out}" "summary")
+    expect("preprocessed" "${err}" "per-game line")
+    file(READ "${WORK}/run.jsonl" jsonl)
+    count(preparations "\"event\":\"preparation\",\"game_index\":[0-9]+,\"enabled\":true,\"status\":\"ok\"" "${jsonl}")
+    if(NOT preparations EQUAL 4)
+        message(FATAL_ERROR "expected 4 preparations, found ${preparations}")
+    endif()
+    count(preprocessed "\"status\":\"preprocessed\"" "${jsonl}")
+    if(NOT preprocessed EQUAL 2)
+        message(FATAL_ERROR "expected the results of 2 solvers to be preprocessed, found ${preprocessed}")
+    endif()
+    reject("\"status\":\"invalid_solution\"" "${jsonl}" "lifted solutions verify")
+    bench(3 --no-preprocess --single --tl ${GAMES})
+    expect("preprocessing is off" "${err}" "contradicting options")
+
 elseif(MODE STREQUAL "timeout")
     # POSIX: an external solver that hangs is stopped by the timeout, and a
     # crash of the worker is caught; the other solvers continue.

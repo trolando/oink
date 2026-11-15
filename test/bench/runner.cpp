@@ -32,6 +32,7 @@
 
 #include "common/terminal.hpp"
 #include "display.hpp"
+#include "json.hpp"
 #include "lace.h"
 #include "oink/game.hpp"
 #include "oink/io.hpp"
@@ -193,6 +194,7 @@ private:
     bool service(const std::string& activity, bool force);
     std::string save_failure(const Case& game, size_t solver, pg::Game& original, const Trial& trial);
     void skip_game(Case& game);
+    void report_preparation(const Case& game);
 };
 
 /** Read or generate a game, parse and sort it, and fill in what we know of it. */
@@ -256,6 +258,33 @@ Runner::save_failure(const Case& game, size_t solver, pg::Game& original, const 
     } catch (const std::exception&) {
         return "";
     }
+}
+
+/** The once-per-game preparation: what it solved and what is left. */
+void
+Runner::report_preparation(const Case& game)
+{
+    Json json;
+    json.add("event", "preparation");
+    json.add("game_index", game.index);
+    json.add("enabled", o.preprocess);
+    json.add("status", game.prep_failed ? "preparation_error" : "ok");
+    if (game.prep_failed) {
+        json.null("residual_vertices");
+        json.null("residual_edges");
+        json.null("solved_vertices");
+        json.null("preprocessing_seconds");
+        json.null("residual_hash");
+    } else {
+        json.add("residual_vertices", game.prep.residual_vertices);
+        json.add("residual_edges", game.prep.residual_edges);
+        json.add("solved_vertices", game.prep.solved_vertices);
+        json.add("preprocessing_seconds", game.prep.seconds);
+        json.add("residual_hash", game.prep.residual_hash);
+    }
+    json.add("original_hash", game.hash);
+    json.add("message", game.error);
+    report->event(json.str());
 }
 
 /** A game without trials (unreadable, failed preparation, or fully preprocessed). */
@@ -407,6 +436,9 @@ Runner::run()
         } catch (const std::exception& error) {
             game.prep_failed = true;
             game.error = error.what();
+        }
+        report_preparation(game);
+        if (game.prep_failed) {
             skip_game(game);
             continue;
         }

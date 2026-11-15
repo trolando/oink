@@ -56,10 +56,22 @@ struct Prepared
 
 /**
  * Prepare the trials of game <original>, which must be sorted. With
- * preprocessing off, the residual is <original> itself. The preprocessing
- * log goes to <log>. Throws if the preparation fails.
+ * preprocessing off, the residual is <original> itself. With preprocessing on,
+ * Oink preprocesses a copy once (renumber, inflate or compress, and the
+ * single-parity, self-loop and winner-controlled winning cycle reductions of
+ * the recipe); its partial solution is verified, and the unsolved part is
+ * extracted with the maps of its vertices and edges to the original. The
+ * preprocessing log goes to <log>. Throws if the preparation fails.
  */
 std::unique_ptr<Prepared> prepare(const pg::Game& original, const Options& options, std::ostream& log);
+
+/**
+ * Map the solution <solution> of the trial game <trial> (a copy of the
+ * residual game) back to the original game, with all moves of a
+ * multi-strategy. Throws if the solver changed the game or did not solve all
+ * of it.
+ */
+pg::Solution lift(const Prepared& prepared, const pg::Game& trial, const pg::Solution& solution);
 
 /**
  * Run solver <run> on a fresh copy of the residual game, with solver seed

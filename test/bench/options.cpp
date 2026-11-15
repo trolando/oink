@@ -35,7 +35,9 @@ static const char* const GUIDE = R"(
 Benchmark the selected solvers (default: tl, tlj, tlq, npp, fpi, fpj, zlk) on
 the given parity game files and directories, or on random games without them.
 Every trial solves a fresh copy of the game and its solution is verified; the
-metric is the wall time of Oink::run. The trials of a game are interleaved in a
+metric is the wall time of Oink::run. Preprocessing is off unless --preprocess:
+then it runs once per game, outside the timing, and the solvers solve what it
+leaves; their solutions are mapped back and verified against the whole game. The trials of a game are interleaved in a
 shuffled order per round: warm-up rounds, three pilot trials that choose the
 sample count for --min-solve-time, then the measured rounds.
 
@@ -84,6 +86,15 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("label", "A label for the run, shown and reported", cxxopts::value<std::string>())
         ("artifacts", "Directory for the games and logs of failed trials", cxxopts::value<std::string>()->default_value("benchmark-artifacts"))
         ;
+    opts.add_options("Preprocessing")
+        ("preprocess", "Preprocess every game once before its trials, outside the timing: single-parity games, self-loops and winner-controlled winning cycles (default: off)", cxxopts::value<bool>()->implicit_value("true"))
+        ("no-preprocess", "Do not preprocess (the default)")
+        ("single", "Preprocessing recipe: solve single-parity games (implies --preprocess)")
+        ("loops", "Preprocessing recipe: solve self-loops (implies --preprocess)")
+        ("wcwc", "Preprocessing recipe: solve winner-controlled winning cycles (implies --preprocess)")
+        ("inflate", "Preprocessing recipe: inflate the priorities instead of renumbering them")
+        ("compress", "Preprocessing recipe: compress the priorities instead of renumbering them")
+        ;
     opts.add_options("Random games")
         ("count", "Number of random games", cxxopts::value<int>()->default_value("100"))
         ("seed", "Seed of the series of random games (default: derived from the schedule seed)", cxxopts::value<uint32_t>())
@@ -111,7 +122,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
 
     const auto result = opts.parse(argc, argv);
     if (given(result, "help")) {
-        out << opts.help({"", "Benchmark", "Reports", "Random games", "Solving", "Solvers"}) << GUIDE << std::endl;
+        out << opts.help({"", "Benchmark", "Reports", "Preprocessing", "Random games", "Solving", "Solvers"}) << GUIDE << std::endl;
         return false;
     }
 
@@ -157,6 +168,22 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
     o.overwrite = given(result, "overwrite");
     if (given(result, "label")) o.label = result["label"].as<std::string>();
     o.artifacts = result["artifacts"].as<std::string>();
+
+    // preprocessing: --preprocess gives the default recipe; recipe flags choose their own
+    const bool recipe = given(result, "single") || given(result, "loops") || given(result, "wcwc") || given(result, "inflate") || given(result, "compress");
+    o.preprocess = given(result, "preprocess") ? result["preprocess"].as<bool>() : recipe;
+    if (given(result, "no-preprocess")) {
+        if (given(result, "preprocess") && o.preprocess) throw std::runtime_error("choose --preprocess or --no-preprocess");
+        o.preprocess = false;
+    }
+    if (recipe) {
+        if (!o.preprocess) throw std::runtime_error("preprocessing is off, but preprocessing steps were given");
+        o.single = given(result, "single");
+        o.loops = given(result, "loops");
+        o.wcwc = given(result, "wcwc");
+        o.inflate = given(result, "inflate");
+        o.compress = given(result, "compress");
+    }
 
     // random games
     o.count = result["count"].as<int>();

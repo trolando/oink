@@ -496,7 +496,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverZLKscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk --scc)
             add_test(NAME TestSolverPPscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp --scc)
             # short headless runs of bench_solvers (see test/bench/smoke.cmake)
-            set(BENCH_MODES basic calibrated reference random errors)
+            set(BENCH_MODES basic calibrated reference random errors preprocess)
             if(NOT WIN32)
                 list(APPEND BENCH_MODES timeout) # worker processes
             endif()

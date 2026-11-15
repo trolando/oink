@@ -396,6 +396,77 @@ test_trials()
 #endif
 }
 
+/**
+ * A game for preprocessing: two vertices with self-loops that preprocessing
+ * solves, and a residual of mixed parity with a parallel edge (13 edges, 8 in
+ * the residual).
+ */
+static pg::Game
+preprocessing_game()
+{
+    pg::GameBuilder b(6);
+    const int priority[] = {1, 2, 3, 4, 5, 6};
+    const pg::Player owner[] = {pg::Player::Odd, pg::Player::Even, pg::Player::Odd, pg::Player::Even, pg::Player::Odd, pg::Player::Even};
+    for (int v = 0; v < 6; v++) {
+        b.set_priority(v, priority[v]);
+        b.set_owner(v, owner[v]);
+    }
+    b.add_edge(0, 0); // odd self-loop, won by odd
+    b.add_edge(0, 1);
+    b.add_edge(1, 1); // even self-loop, won by even
+    b.add_edge(2, 1); // odd avoids the even self-loop
+    b.add_edge(2, 3);
+    b.add_edge(3, 4);
+    b.add_edge(3, 4); // a parallel edge
+    b.add_edge(3, 5);
+    b.add_edge(4, 3);
+    b.add_edge(4, 5);
+    b.add_edge(5, 2);
+    b.add_edge(5, 3);
+    b.add_edge(5, 0); // even avoids the odd self-loop
+    pg::Game game = b.build();
+    game.ensure_sorted();
+    return game;
+}
+
+static void
+test_preprocessing()
+{
+    const pg::Game game = preprocessing_game();
+    Options o;
+    o.preprocess = true;
+    o.single = true;
+    o.loops = true;
+    o.wcwc = false; // keep a residual: the cycles 3-5 and 4-5 are winner-controlled
+    std::ostringstream log;
+    const auto prepared = prepare(game, o, log);
+    check("residual after preprocessing", prepared->residual != nullptr && !prepared->identity());
+    check("self-loops solved", prepared->info.solved_vertices == 2 && prepared->info.residual_vertices == 4);
+    check("parallel edge kept", prepared->info.residual_edges == 8);
+    bool distinct = true;
+    for (size_t i = 0; i < prepared->edges.size(); i++) {
+        for (size_t j = 0; j < i; j++) {
+            if (prepared->edges[i] != std::numeric_limits<size_t>::max() && prepared->edges[i] == prepared->edges[j]) distinct = false;
+        }
+    }
+    check("edges map to distinct original edges", distinct);
+    for (const char* id : {"tl", "zlk", "fpjm", "fpim", "npp"}) {
+        const Trial trial = execute(*prepared, SolverRun(id, ""), o, 1);
+        if (trial.status != Status::Ok) std::cerr << id << ": " << trial.message << std::endl;
+        check("residual solution verified on the original", trial.status == Status::Ok);
+    }
+
+    // with every reduction, preprocessing solves this game completely
+    o.wcwc = true;
+    const auto solved = prepare(game, o, log);
+    check("fully preprocessed", solved->residual == nullptr && solved->info.solved_vertices == 6);
+
+    // without preprocessing the residual is the original
+    o.preprocess = false;
+    const auto off = prepare(game, o, log);
+    check("preprocessing off", off->identity() && off->info.solved_vertices == 0);
+}
+
 int
 test_bench()
 {
@@ -407,6 +478,7 @@ test_bench()
     test_command_line();
     test_schedule();
     test_trials();
+    test_preprocessing();
     if (failures) std::cerr << failures << " bench test(s) failed" << std::endl;
     return failures ? 1 : 0;
 }
