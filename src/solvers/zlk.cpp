@@ -335,8 +335,8 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *H, std::vec
     auto can_escape = [&](int v) {
         auto curedge = outs(v);
         for (int to = *curedge; to != -1; to = *++curedge) {
-            if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
             if (winning[to] != pl) continue; // not an escape
+            if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
             return true;
         }
         return false;
@@ -354,8 +354,8 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *H, std::vec
     auto attract_to = [&](int cur) {
         auto curedge = ins(cur);
         for (int from = *curedge; from != -1; from = *++curedge) {
-            if (region[from].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
             if (winning[from] != pl) continue; // already lost
+            if (region[from].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
 
             if (owner(from) != pl) {
                 // owned by other
@@ -429,7 +429,7 @@ ZLKSolver::run()
 
     // allocate and initialize data structures
     region = std::make_unique<std::atomic<int>[]>(nodecount());
-    winning = std::make_unique<int[]>(nodecount());
+    winning = std::make_unique<int8_t[]>(nodecount());
     strategy = std::make_unique<int[]>(nodecount());
 
     std::vector<int> history;
@@ -438,7 +438,7 @@ ZLKSolver::run()
     std::vector<std::vector<int>> heads; // the heads of each level (see attractLosing)
 
     // initialize arrays
-    memset(winning.get(), -1, sizeof(int[nodecount()]));
+    memset(winning.get(), -1, nodecount());
     memset(strategy.get(), -1, sizeof(int[nodecount()]));
 
     // get number of nodes and create and initialize inverse array

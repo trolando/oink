@@ -18,6 +18,7 @@
 #define ZLK_HPP
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <queue>
 #include <vector>
@@ -46,7 +47,8 @@ public:
     // Winner and strategy per vertex. Each vertex is claimed (in region[]) by exactly
     // one worker, which is then the sole writer here; reads happen only in the
     // sequential phases after the Lace tasks have fully joined, so these stay plain.
-    std::unique_ptr<int[]> winning;
+    // The winner is a byte (-1, 0 or 1) to keep the array small for the cache.
+    std::unique_ptr<int8_t[]> winning;
     std::unique_ptr<int[]> strategy;
 
     bool to_inversion = true;
