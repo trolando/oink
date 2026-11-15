@@ -35,11 +35,12 @@ check(const char* solver, int invert, bool duplicates)
     constexpr int n = 256;
     std::vector<int> order(n), successor(n+1);
     std::iota(order.begin(), order.end(), 1);
-    // Most changes propagate to an earlier vertex, requiring repeated scans.
-    // Swapped neighbors exercise newly affected later lanes and later words.
+    // Most changes propagate to a later vertex, which the descending scan of a block
+    // only reaches in the next pass. Swapped neighbors exercise newly affected lower
+    // lanes and lower words.
     for (int i = 8; i+1 < n; i += 16) std::swap(order[i], order[i+1]);
     for (int i = 62; i+1 < n; i += 64) std::swap(order[i], order[i+1]);
-    for (int i = 0; i < n; ++i) successor[order[i]] = i+1 < n ? order[i+1] : 0;
+    for (int i = 0; i < n; ++i) successor[order[i]] = i > 0 ? order[i-1] : 0;
     std::ostringstream text;
     text << "parity " << n+2 << ";\n";
     text << "0 " << invert << ' ' << invert << " 0;\n";

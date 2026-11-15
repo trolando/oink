@@ -92,19 +92,22 @@ FPISolver::updateBlockImpl(int i, int n)
     const int last_word = (end - 1) >> 6;
     const uint64_t *cand = candidate.data();
 
-    auto next_word = [&](int word) {
+    const int first_word = i >> 6;
+    auto prev_word = [&](int word) {
         if constexpr (TrackChanges) {
-            if (word > last_word) return word;
-            const auto next = dirty_words[word] ? size_t(word) : dirty_words.find_next(word);
-            return next == bitset::npos ? last_word + 1 : int(next);
+            if (word < first_word) return word;
+            const auto prev = dirty_words[word] ? size_t(word) : dirty_words.find_prev(word);
+            return prev == bitset::npos || int(prev) < first_word ? first_word - 1 : int(prev);
         } else {
             return word;
         }
     };
 
     // visit only the candidates (enabled, not frozen, not a distraction) in [i, end),
-    // 64 vertices at a time
-    for (int w = next_word(i >> 6); w <= last_word; w = next_word(w + 1)) {
+    // 64 vertices at a time, from the last to the first: in the file order of generated
+    // games (states in the order of exploration) a vertex mostly comes before its
+    // successors, so a change then reaches its predecessors in the same pass
+    for (int w = prev_word(last_word); w >= first_word; w = prev_word(w - 1)) {
         uint64_t bits = cand[w];
         if constexpr (TrackChanges) bits &= dirty.data()[w];
         if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
@@ -114,8 +117,8 @@ FPISolver::updateBlockImpl(int i, int n)
             if (bits) scan_work += intrinsics::popcount64(bits);
         }
         while (bits) {
-            const int v = (w << 6) + intrinsics::countr_zero64(bits);
-            bits &= bits - 1;
+            const int v = (w << 6) + 63 - intrinsics::countl_zero64(bits);
+            bits &= ~(uint64_t(1) << (v & 63));
             if constexpr (TrackChanges) dirty.reset(v);
 
             // update whether vertex <v> is a distraction by computing the one step winner:
@@ -141,11 +144,11 @@ FPISolver::updateBlockImpl(int i, int n)
                 makeDistraction(v);
                 if constexpr (TrackChanges) {
                     // Only predecessors can change their one-step winner. Visit
-                    // newly affected later lanes in this word in the usual order.
+                    // newly affected lower lanes in this word in the usual order.
                     for (auto edge = ins(v); *edge != -1; ++edge) {
                         const int from = *edge;
                         markDirty(from);
-                        if ((from >> 6) == w && from > v && from < end && candidate[from])
+                        if ((from >> 6) == w && from < v && from >= i && candidate[from])
                             bits |= uint64_t(1) << (from & 63);
                     }
                 }

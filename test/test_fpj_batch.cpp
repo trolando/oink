@@ -40,7 +40,8 @@ check_batch()
         for (int v = 0; v < 3; ++v) {
             game.init_vertex(v, priorities[v]+invert, invert);
             game.e_start(v);
-            game.e_add(v, v ? v-1 : 0);
+            // 1 -> 2 -> 0: the descending scan evaluates 2 before 1, as one batch
+            game.e_add(v, v == 1 ? 2 : 0);
             game.e_finish();
         }
         game.ensure_sorted();
@@ -54,7 +55,8 @@ check_batch()
 }
 
 /**
- * A backwards chain exercises repeated evaluation and activates the frontier
+ * A forwards chain (changes propagate to later vertices, against the descending scan of
+ * a block) exercises repeated evaluation and activates the frontier
  * when sparse evaluation is enabled. The initially attractive higher-priority
  * parameter later changes winner; its dependents must be reconsidered,
  * including across word boundaries.
@@ -67,7 +69,7 @@ check_restarts(int invert, bool duplicates)
     std::iota(order.begin(), order.end(), 1);
     for (int i = 8; i+1 < n; i += 16) std::swap(order[i], order[i+1]);
     for (int i = 62; i+1 < n; i += 64) std::swap(order[i], order[i+1]);
-    for (int i = 0; i < n; ++i) successor[order[i]] = i+1 < n ? order[i+1] : 0;
+    for (int i = 0; i < n; ++i) successor[order[i]] = i > 0 ? order[i-1] : 0;
     std::ostringstream text;
     text << "parity " << n+2 << ";\n0 " << invert << ' ' << invert << " 0;\n";
     for (int v = 1; v <= n; ++v) {

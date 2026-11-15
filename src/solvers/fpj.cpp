@@ -123,27 +123,30 @@ FPJSolver::solveSeq(bool greedy)
         const int end = blockend[i];
 
         /**
-         * Evaluate the unjustified vertices in [i, end), in order, 64 at a time
+         * Evaluate the unjustified vertices in [i, end), 64 at a time, from the last to the
+         * first: in the file order of generated games a vertex mostly comes before its
+         * successors, so a change then reaches its predecessors in the same pass
          */
         auto evaluate = [&](auto tracked) __attribute__((always_inline)) {
             constexpr bool TrackChanges = decltype(tracked)::value;
             const int last_word = (end - 1) >> 6;
-            auto nextWord = [&](int word) {
+            const int first_word = i >> 6;
+            auto prevWord = [&](int word) {
                 if constexpr (TrackChanges) {
-                    if (word > last_word) return word;
-                    const auto next = dirty_words[word] ? size_t(word) : dirty_words.find_next(word);
-                    return next == bitset::npos ? last_word+1 : int(next);
+                    if (word < first_word) return word;
+                    const auto prev = dirty_words[word] ? size_t(word) : dirty_words.find_prev(word);
+                    return prev == bitset::npos || int(prev) < first_word ? first_word-1 : int(prev);
                 } else return word;
             };
-            for (int w = nextWord(i >> 6); w <= last_word; w = nextWord(w+1)) {
+            for (int w = prevWord(last_word); w >= first_word; w = prevWord(w-1)) {
                 uint64_t bits = EN[w] & ~J[w];
                 if constexpr (TrackChanges) bits &= dirty.data()[w];
                 if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
                 if (w == last_word and (end & 63) != 0) bits &= (uint64_t(1) << (end & 63)) - 1;
 
                 while (bits) {
-                    const int v = (w << 6) + intrinsics::countr_zero64(bits);
-                    bits &= bits - 1;
+                    const int v = (w << 6) + 63 - intrinsics::countl_zero64(bits);
+                    bits &= ~(uint64_t(1) << (v & 63));
                     if constexpr (TrackChanges) dirty.reset(v);
                     else if constexpr (ReuseWitness) ++scan_work;
 
@@ -175,7 +178,7 @@ FPJSolver::solveSeq(bool greedy)
                             for (auto edge=ins(v); *edge!=-1; ++edge) {
                                 const int from=*edge;
                                 markDirty(from);
-                                if ((from >> 6)==w && from>v && from<end && !disabled[from] && !justified[from])
+                                if ((from >> 6)==w && from<v && from>=i && !disabled[from] && !justified[from])
                                     bits |= uint64_t(1) << (from&63);
                             }
                         } else if constexpr (ReuseWitness) ++scan_changes;
