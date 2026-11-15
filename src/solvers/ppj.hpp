@@ -40,12 +40,30 @@ public:
 
 private:
     static constexpr int SOLVED = INT_MAX;
+
+    // A stack of vertices in a buffer of the workspace (at most every vertex once).
+    struct Stack {
+        int *data = nullptr;
+        unsigned top = 0;
+        void push(int v) { data[top++] = v; }
+        int pop() { return data[--top]; }
+        int operator[](unsigned i) const { return data[i]; }
+        unsigned size() const { return top; }
+        bool empty() const { return top == 0; }
+        bool nonempty() const { return top != 0; }
+        void clear() { top = 0; }
+    };
+
     bitset G, dirty, nonempty[2];
+    // One allocation holds all arrays of a vertex or a priority and the stacks: on small games,
+    // separate allocations cost about as much as the solving.
     std::unique_ptr<int[]> workspace;
     int *region, *str, *native, *degree, *cnt, *witness;
-    std::vector<int> count, headfirst, headend, members;
-    std::vector<unsigned> begin, length;
-    uintqueue work, invalid, flipped, touched;
+    int *count, *headfirst, *headend;
+    unsigned *begin, *length, priorities = 0;
+    std::vector<int> members;
+    // <flipped> is also the queue of invalidated vertices: it is empty after every closure.
+    Stack work, flipped, touched;
     uint64_t iterations = 0, promotions = 0, dominions = 0, resets = 0;
 
     void move(int v, int p);

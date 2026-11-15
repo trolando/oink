@@ -36,7 +36,7 @@ PPJSolver::storeMembers(int p)
     if (members.size()+work.size() > members.capacity()) {
         std::vector<int> fresh;
         fresh.reserve(std::max(members.capacity(), size_t(nodecount())*2+work.size()));
-        for (unsigned q = 0; q < length.size(); ++q) {
+        for (unsigned q = 0; q < priorities; ++q) {
             const unsigned b = fresh.size();
             for (unsigned i = begin[q], end = i+length[q]; i < end; ++i) {
                 const int v = members[i];
@@ -64,15 +64,15 @@ PPJSolver::invalidate(int v)
     str[v] = -1;
     if (p == native[v]) return; // the head becomes a parameter of the same winner
     move(v, -1);
-    invalid.push(v);
+    flipped.push(v);
     resets++;
 }
 
 void
 PPJSolver::invalidateClosure(int p, int pl)
 {
-    while (invalid.nonempty()) {
-        const int v = invalid.pop();
+    while (flipped.nonempty()) {
+        const int v = flipped.pop();
         for (const int *e = ins(v); *e != -1; ++e) {
             const int u = *e, r = region[u];
             if (r < 0 || r >= p || (pl >= 0 && (r&1) == pl)) continue;
@@ -145,7 +145,6 @@ PPJSolver::grow(int p)
     }
     // Only changes of winner break a lower justification. Delay these resets
     // until the attractor is complete, so already captured vertices survive.
-    for (unsigned i = 0; i < flipped.size(); ++i) invalid.push(flipped[i]);
     invalidateClosure(p, pl);
 
     // Changes of level make new targets available in intervening regions.
@@ -296,25 +295,26 @@ PPJSolver::run()
     dirty.resize(maxp+1);
     nonempty[0].resize(maxp+1);
     nonempty[1].resize(maxp+1);
-    count.assign(maxp+1, 0);
-    begin.assign(maxp+1, 0);
-    length.assign(maxp+1, 0);
     members.reserve(size_t(n)*2);
-    headfirst.assign(maxp+1, 0);
-    headend.assign(maxp+1, 0);
-    // These arrays are initialized on first use. A shared allocation avoids
-    // clearing vertex-sized buffers whose entries are immediately overwritten.
-    workspace.reset(new int[size_t(n)*6]);
+    // The vertex arrays are initialized on first use, the priority arrays now. A shared
+    // allocation avoids clearing vertex-sized buffers whose entries are immediately overwritten.
+    priorities = maxp+1;
+    workspace.reset(new int[size_t(n)*9+size_t(priorities)*5]);
     region = workspace.get();
     str = region+n;
     native = str+n;
     degree = native+n;
     cnt = degree+n;
     witness = cnt+n;
-    work.resize(n);
-    invalid.resize(n);
-    flipped.resize(n);
-    touched.resize(n);
+    work.data = witness+n;
+    flipped.data = work.data+n;
+    touched.data = flipped.data+n;
+    count = touched.data+n;
+    begin = reinterpret_cast<unsigned*>(count+priorities);
+    length = begin+priorities;
+    headfirst = reinterpret_cast<int*>(length+priorities);
+    headend = headfirst+priorities;
+    std::fill(count, headend+priorities, 0);
     const bool all = disabled.none();
     int top = -1;
     for (int v = n-1; v >= 0; --v) {
