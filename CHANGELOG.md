@@ -24,6 +24,10 @@ All notable changes to Oink will be documented in this file.
 - PMA and PMTL could leave vertices unsolved: the attractor shortcut
   (optimisation 2) ignored the regions whose lifts were postponed to the
   next round. This bug dates from the first PMTL.
+- SPM could give a vertex to both players or end with a losing strategy:
+  its analysis of measures beyond the counts made two unsound
+  conclusions. It now keeps every measure at or below the least fixed
+  point.
 
 ## [1.1.1] - 2026-11-14
 

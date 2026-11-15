@@ -280,6 +280,64 @@ SPMSolver::lift(int node, int target)
     }
 }
 
+/**
+ * Replace a measure beyond the counts for player <pl> by the least measure within the counts
+ * that is above it, or by Top if there is none (the carry of Prog in TSPM).
+ */
+void
+SPMSolver::pm_carry(int *a, int pl)
+{
+    if (a[pl] == -1) return;
+    const int top = ((k-1)&1) == pl ? k-1 : k-2; // the highest index for <pl>
+    for (int c = pm_cycles(a, pl); c != -1; c = pm_cycles(a, pl)) {
+        if (c+2 > top) {
+            a[pl] = -1;
+            return;
+        }
+        for (int i=pl; i<=c; i+=2) a[i] = 0;
+        a[c+2]++;
+    }
+}
+
+/**
+ * Returns true if every cycle among the nodes of <set> marked in <cm> has a highest priority
+ * of player <pl>, i.e., no node with a priority p of the opponent is on a cycle of nodes with
+ * priority at most p.
+ */
+bool
+SPMSolver::cycles_won(int pl, const std::vector<int> &set, int *cm)
+{
+    std::vector<int> stack;
+    for (int n : set) {
+        if (!cm[n]) continue;
+        const int p = priority(n);
+        if ((p&1) == pl) continue;
+        // search for <n> from <n>, within the marked nodes of priority <= p (marked 2 if seen)
+        stack.push_back(n);
+        bool found = false;
+        while (!stack.empty() and !found) {
+            const int v = stack.back();
+            stack.pop_back();
+            for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                const int m = *curedge;
+                if (disabled[m] or !cm[m] or priority(m) > p) continue;
+                if (m == n) {
+                    found = true;
+                    break;
+                }
+                if (cm[m] == 1) {
+                    cm[m] = 2;
+                    stack.push_back(m);
+                }
+            }
+        }
+        stack.clear();
+        for (int m : set) if (cm[m] == 2) cm[m] = 1;
+        if (found) return false;
+    }
+    return true;
+}
+
 void
 SPMSolver::update(int pl)
 {
@@ -441,15 +499,13 @@ SPMSolver::run()
          */
 
         for (int pl=0; pl<2; pl++) {
-            /**
-             * Put all nodes with cycle measures in "cycles"
-             * Also find the best (lowest) exit for the loser
-             */
-            int best_from = -1, best_to = -1;
-            for (int i=0; i<k; i++) best[i] = 0;
-
             int max = pl == 0 ? max0 : max1;
+            bool won = false;
 
+            /**
+             * Put all nodes with cycle measures in "cycles".
+             * A cycle measure at the highest priority of <pl> carries to Top, as in TSPM.
+             */
             for (int n=0; n<nodecount(); n++) {
                 if (disabled[n]) continue;
                 int *pm = pms + k*n;
@@ -467,6 +523,7 @@ SPMSolver::run()
                 if (c == max) {
                     pms[n*k + pl] = -1;
                     todo_push(n);
+                    won = true;
 
                     const int d = priority(n);
                     if ((d&1) == pl) counts[d]--;
@@ -481,123 +538,110 @@ SPMSolver::run()
                 }
 
                 cycles.push_back(n);
-                if (owner(n) != pl) {
-                    const int d = priority(n);
+            }
+
+            /**
+             * Remove the nodes that the loser can leave (to a node not won by <pl>), and
+             * those where <pl> cannot stay.
+             */
+            for (int n : cycles) cm[n] = 1; // mark everything in 'cycles'
+
+            for (int n : cycles) {
+                bool escapes;
+                if (owner(n) == pl) {
+                    // check if it can stay in cm
+                    escapes = true;
                     for (auto curedge = outs(n); *curedge != -1; curedge++) {
-                        int to = *curedge;
-                        if (disabled[to]) continue;
-                        int *pm_to = pms + k*to;
-                        if (pm_to[pl] == -1) continue; // already won
-                        Prog(tmp, pm_to, d, pl);
-                        if (!pm_less(pms + k*n, tmp, d, pl)) continue; // candidate must increase measure
-                        if (best_to == -1 or pm_less(tmp, best, 0, pl))  {
-                            for (int i=pl; i<k; i+=2) best[i] = tmp[i];
-                            best_from = n;
-                            best_to = to;
+                        int m = *curedge;
+                        if (disabled[m] == 0 and cm[m]) {
+                            escapes = false;
+                            break;
+                        }
+                    }
+                } else {
+                    // check if it can move out of cm
+                    escapes = false;
+                    for (auto curedge = outs(n); *curedge != -1; curedge++) {
+                        int m = *curedge;
+                        if (disabled[m] == 0 and pms[k*m+pl] != -1 and cm[m] == 0) {
+                            escapes = true;
+                            break;
                         }
                     }
                 }
+                if (escapes) {
+                    cm[n] = 0;
+                    cm_queue.push(n);
+                }
             }
 
-            if (best_to != -1) {
-                /**
-                 * OK we found the best exit from <best_from> to <best_to>.
-                 */
-                strategy[best_from] = best_to;
-                pm_copy(pms + best_from*k, best, pl);
-                todo_push(best_from);
-
-                if (trace) {
-                    logger << "\033[1;36mupdated node " << best_from << "/" << priority(best_from) << (owner(best_from)?" (odd)":" (even)") << "\033[m to";
-                    pm_stream(logger, pms + best_from*k);
-                    logger << std::endl;
-                }
-
-                cycles.clear();
-            } else {
-                /**
-                 * No exit found, everything that remains a cycle after removing escaping nodes is now won.
-                 */
-                for (int n : cycles) cm[n] = 1; // mark everything in 'cycles'
-
-                for (int n : cycles) {
-                    bool escapes;
-                    if (owner(n) == pl) {
-                        // check if it can stay in cm
-                        escapes = true;
-                        for (auto curedge = outs(n); *curedge != -1; curedge++) {
-                            int m = *curedge;
-                            if (disabled[m] == 0 and cm[m]) {
-                                escapes = false;
-                                break;
-                            }
-                        }
-                    } else {
-                        // check if it can move out of cm
-                        escapes = false;
-                        for (auto curedge = outs(n); *curedge != -1; curedge++) {
-                            int m = *curedge;
-                            if (disabled[m] == 0 and pms[k*m+pl] != -1 and cm[m] == 0) {
+            while (!cm_queue.empty()) {
+                int n = cm_queue.front();
+                cm_queue.pop();
+                for (auto curedge = ins(n); *curedge != -1; curedge++) {
+                    int m = *curedge;
+                    if (disabled[m] != 0 or cm[m] == 0) continue;
+                    if (owner(m) == pl) {
+                        bool escapes = false;
+                        for (auto curedge = outs(m); *curedge != -1; curedge++) {
+                            int to = *curedge;
+                            if (disabled[to] == 0 and cm[to]) {
                                 escapes = true;
                                 break;
                             }
                         }
+                        if (escapes) continue;
                     }
-                    if (escapes) {
-                        cm[n] = 0;
-                        cm_queue.push(n);
-                    }
+                    cm[m] = 0;
+                    cm_queue.push(m);
                 }
+            }
 
-                /**
-                 * Run backwards search to remove nodes that can escape to non-CM
-                 */
-
-                while (!cm_queue.empty()) {
-                    int n = cm_queue.front();
-                    cm_queue.pop();
-                    for (auto curedge = ins(n); *curedge != -1; curedge++) {
-                        int m = *curedge;
-                        if (disabled[m] != 0 or cm[m] == 0) continue;
-                        if (owner(m) == pl) {
-                            bool escapes = false;
-                            for (auto curedge = outs(m); *curedge != -1; curedge++) {
-                                int to = *curedge;
-                                if (disabled[to] == 0 and cm[to]) {
-                                    escapes = true;
-                                    break;
-                                }
-                            }
-                            if (escapes) continue;
-                        }
-                        cm[m] = 0;
-                        cm_queue.push(m);
-                    }
-                }
-
-                /**
-                 * Finally, mark remaining nodes as won
-                 */
-
+            /**
+             * The remaining nodes are won by <pl> if every cycle among them has a highest
+             * priority of <pl>: a measure beyond the counts is also kept by a cycle of lower
+             * priorities that does not visit the priority that put it beyond the counts.
+             */
+            if (cycles_won(pl, cycles, cm)) {
                 for (int n : cycles) {
-                    if (cm[n]) {
-                        cm[n] = 0;
-                        pms[n*k + pl] = -1;
-                        todo_push(n);
+                    if (!cm[n]) continue;
+                    pms[n*k + pl] = -1;
+                    todo_push(n);
+                    won = true;
 
+                    const int d = priority(n);
+                    if ((d&1) == pl) counts[d]--;
+
+                    if (trace) {
+                        logger << "\033[1;36mupdated node " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m to";
+                        pm_stream(logger, pms + n*k);
+                        logger << std::endl;
+                    }
+                }
+            }
+            for (int n : cycles) cm[n] = 0;
+
+            /**
+             * Otherwise, carry the cycle measures as TSPM does when a value goes beyond the
+             * counts: to the least measure within the counts above it, or Top.
+             */
+            if (!won) {
+                for (int n : cycles) {
+                    int *pm = pms + k*n;
+                    pm_carry(pm, pl);
+                    todo_push(n);
+                    if (pm[pl] == -1) {
                         const int d = priority(n);
                         if ((d&1) == pl) counts[d]--;
-
-                        if (trace) {
-                            logger << "\033[1;36mupdated node " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m to";
-                            pm_stream(logger, pms + n*k);
-                            logger << std::endl;
-                        }
+                    }
+                    if (trace) {
+                        logger << "\033[1;36mupdated node " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m to";
+                        pm_stream(logger, pms + n*k);
+                        logger << std::endl;
                     }
                 }
-
-                cycles.clear();
             }
+            cycles.clear();
 
             if (max >= 0 and counts[max] == 0) {
                 if (trace >= 2) logger << "\033[1mlowering max\033[m for player " << (pl == 0 ? "even" : "odd") << std::endl;

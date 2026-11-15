@@ -18,6 +18,7 @@
 #define SPM_HPP
 
 #include <queue>
+#include <vector>
 
 #include "oink/solver.hpp"
 
@@ -53,6 +54,8 @@ protected:
     void pm_stream(std::ostream &out, int *pm);
     void Prog(int *dst, int *src, int d, int pl);
     void update(int pl);
+    void pm_carry(int *a, int pl);
+    bool cycles_won(int pl, const std::vector<int> &set, int *cm);
 
     void todo_push(int node) {
         if (dirty[node]) return;
