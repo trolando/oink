@@ -274,6 +274,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_library(oink_bench STATIC
             test/bench/core.cpp
             test/bench/display.cpp
+            test/bench/experiment.cpp
             test/bench/live.cpp
             test/bench/options.cpp
             test/bench/report.cpp
@@ -501,7 +502,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverZLKscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk --scc)
             add_test(NAME TestSolverPPscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp --scc)
             # short headless runs of bench_solvers (see test/bench/smoke.cmake)
-            set(BENCH_MODES basic calibrated reference random errors preprocess live)
+            set(BENCH_MODES basic calibrated reference random errors preprocess live experiment)
             if(NOT WIN32)
                 list(APPEND BENCH_MODES timeout) # worker processes
             endif()
@@ -511,7 +512,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
                 target_include_directories(test_pty PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
                 target_link_libraries(test_pty oink_testtools)
                 set_target_props(test_pty)
-                add_test(NAME TestBenchTerminal COMMAND test_pty $<TARGET_FILE:bench_solvers> ${CMAKE_CURRENT_SOURCE_DIR}/tests ${CMAKE_CURRENT_BINARY_DIR}/bench-smoke/terminal)
+                add_test(NAME TestBenchTerminal COMMAND test_pty $<TARGET_FILE:bench_solvers> $<TARGET_FILE:solve> ${CMAKE_CURRENT_SOURCE_DIR}/tests ${CMAKE_CURRENT_BINARY_DIR}/bench-smoke/terminal)
             endif()
             foreach(mode ${BENCH_MODES})
                 add_test(NAME TestBench_${mode}

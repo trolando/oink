@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "bench/bench.hpp"
+#include "bench/experiment.hpp"
 #include "bench/json.hpp"
 #include "bench/options.hpp"
 #include "bench/runner.hpp"
@@ -529,6 +530,88 @@ test_setup()
     check("no timeout without workers", local.timeout == 0 && in_process.editing());
 }
 
+static void
+test_experiment_records()
+{
+    // a finished game survives the round trip through done.txt exactly
+    Case game;
+    game.index = 7;
+    game.name = "a \"quoted\" name";
+    game.path = "/some/path with spaces/game.pg";
+    game.seed = 1234;
+    game.hash = "0123456789abcdef";
+    game.vertices = 10;
+    game.edges = 22;
+    game.load = 0.000125;
+    game.parse = 1.0 / 3.0;
+    game.error = "";
+    game.prep.residual_vertices = 8;
+    game.prep.residual_edges = 17;
+    game.prep.solved_vertices = 2;
+    game.prep.seconds = 0.1;
+    game.prep.residual_hash = "fedcba9876543210";
+    game.cells.resize(3);
+    game.cells[0].values = {1e-6, 2.5e-6, 1.0 / 7.0};
+    game.cells[0].warmups = 1;
+    game.cells[1].failure = Status::Timeout;
+    game.cells[2].required = 40;
+    game.cells[2].pilots = {0.1, 0.2, 0.3};
+    game.cells[2].values.assign(40, 0.25);
+    const std::string line = encode_case(game);
+    Case back;
+    check("decode", decode_case(line, back));
+    check("decoded game", back.index == 7 && back.name == game.name && back.path == game.path && back.seed == game.seed && back.hash == game.hash);
+    check("decoded sizes and times", back.vertices == 10 && back.edges == 22 && back.load == game.load && back.parse == game.parse);
+    check("decoded preparation", back.prep.residual_vertices == 8 && back.prep.solved_vertices == 2 && back.prep.residual_hash == game.prep.residual_hash);
+    check("decoded cells", back.cells.size() == 3 && back.cells[0].values == game.cells[0].values && back.cells[0].warmups == 1);
+    check("decoded failure", back.cells[1].failure == Status::Timeout);
+    check("decoded calibration", back.cells[2].required == 40 && back.cells[2].pilots == game.cells[2].pilots && back.cells[2].values.size() == 40);
+    check("a cut line is rejected", !decode_case(line.substr(0, line.size() - 10), back));
+    game.seed.reset();
+    check("no seed", decode_case(encode_case(game), back) && !back.seed);
+
+    // the saved settings give the same options when they are parsed again
+    Options o;
+    o.repeats = 5;
+    o.warmups = 2;
+    o.min_solve_time = 0.0123;
+    o.max_repeats = 77;
+    o.timeout = 12.5;
+    o.seed = 18446744073709551000ULL;
+    o.vary_solver_seed = true;
+    o.preprocess = true;
+    o.single = true;
+    o.loops = false;
+    o.wcwc = true;
+    o.scc = true;
+    o.workers = 3;
+    o.force_parallel = true;
+    o.trace = 1;
+    o.reference = std::string("tl");
+    o.label = "label with spaces";
+    o.count = 9;
+    o.size = 30;
+    o.maxp = 12;
+    o.maxe = 90;
+    o.game_seed = 4242;
+    const auto args = settings_arguments(o);
+    std::vector<std::string> words(args.begin(), args.end());
+    Options parsed;
+    std::vector<SolverRun> solvers;
+    parse(words, parsed, solvers);
+    check("saved sampling", parsed.repeats == 5 && parsed.warmups == 2 && parsed.min_solve_time == o.min_solve_time && parsed.max_repeats == 77);
+    check("saved timeout and seeds", parsed.timeout == 12.5 && parsed.seed == o.seed && parsed.vary_solver_seed && parsed.game_seed == 4242 && parsed.game_seed_given);
+    check("saved recipe", parsed.preprocess && parsed.single && !parsed.loops && parsed.wcwc && !parsed.inflate && !parsed.compress);
+    check("saved solving", parsed.scc && parsed.workers == 3 && parsed.force_parallel && parsed.trace == 1);
+    check("saved reference and label", parsed.reference && *parsed.reference == "tl" && parsed.label == o.label);
+    check("saved random games", parsed.count == 9 && parsed.size == 30 && parsed.maxp == 12 && parsed.maxe == 90);
+    o.preprocess = false;
+    Options off;
+    const auto off_args = settings_arguments(o);
+    parse(std::vector<std::string>(off_args.begin(), off_args.end()), off, solvers);
+    check("saved: no preprocessing", !off.preprocess);
+}
+
 int
 test_bench()
 {
@@ -542,6 +625,7 @@ test_bench()
     test_trials();
     test_preprocessing();
     test_setup();
+    test_experiment_records();
     if (failures) std::cerr << failures << " bench test(s) failed" << std::endl;
     return failures ? 1 : 0;
 }

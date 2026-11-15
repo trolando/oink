@@ -64,6 +64,13 @@ a solver header (or press 1-9) to sort the games by it, again to reverse; g
 sorts by name and o restores the order. Without a terminal, or with --plain,
 TERM=dumb or NO_COLOR, the output is plain.
 
+A named experiment (--experiment=DIR) saves its plan, every finished game and
+the reports in DIR, and shows only a progress bar. If it is interrupted,
+--resume=DIR (or --experiment=DIR again, on a terminal) continues it with the
+saved games, solvers and settings: finished games are kept, an interrupted
+game is measured again from its warm-ups. The program, the host and the input
+files must be unchanged. -i with --experiment shows the setup screen first.
+
 Exit status: 0 on success, 1 if any trial failed, 130 when interrupted, 3 for
 an invalid command line.
 )";
@@ -104,6 +111,10 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("heatmap", "Colour all timings of the live table by their rank in the game (h toggles)")
         ("plain", "Plain output without escape sequences")
         ("exports", "Directory for the games extracted from the live table (e)", cxxopts::value<std::string>()->default_value("benchmark-extracts"))
+        ;
+    opts.add_options("Experiments")
+        ("experiment", "Run a named experiment in this directory, with simple progress; offers to resume it if it exists", cxxopts::value<std::string>())
+        ("resume", "Resume the named experiment in this directory, with its saved games, solvers and settings", cxxopts::value<std::string>())
         ;
     opts.add_options("Reports")
         ("jsonl", "Write the metadata and every trial as JSON Lines", cxxopts::value<std::string>())
@@ -148,11 +159,33 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
 
     const auto result = opts.parse(argc, argv);
     if (given(result, "help")) {
-        out << opts.help({"", "Benchmark", "Display", "Reports", "Preprocessing", "Random games", "Solving", "Solvers"}) << GUIDE << std::endl;
+        out << opts.help({"", "Benchmark", "Display", "Experiments", "Reports", "Preprocessing", "Random games", "Solving", "Solvers"}) << GUIDE << std::endl;
         return false;
     }
 
     o.argv.assign(argv, argv + argc);
+
+    // named experiments
+    if (given(result, "experiment") && given(result, "resume")) throw std::runtime_error("choose --experiment or --resume");
+    if (given(result, "resume")) {
+        // the saved plan decides everything
+        for (const auto& arg : result.arguments()) {
+            if (arg.key() != "resume" && arg.key() != "plain") throw std::runtime_error("--resume uses the saved games, solvers and settings; only --plain may be added");
+        }
+        if (!result.unmatched().empty()) throw std::runtime_error("--resume uses the saved games; give no inputs");
+        o.experiment = result["resume"].as<std::string>();
+        o.resume = true;
+        o.plain = given(result, "plain");
+        return true;
+    }
+    if (given(result, "experiment")) {
+        o.experiment = result["experiment"].as<std::string>();
+        for (const char* key : {"jsonl", "csv", "overwrite"}) {
+            if (given(result, key)) throw std::runtime_error(std::string("a named experiment writes its own reports; --") + key + " cannot be used with --experiment");
+        }
+        if (given(result, "in-process") && Worker::supported()) throw std::runtime_error("a named experiment runs its trials in worker processes; --in-process cannot be used with --experiment");
+    }
+    if ((given(result, "experiment") || given(result, "resume")) && o.experiment.empty()) throw std::runtime_error("an experiment needs a directory name");
     for (const auto& item : result.unmatched()) {
         if (item.size() > 1 && item[0] == '-') throw std::runtime_error("unknown option: " + item);
         o.inputs.push_back(item);

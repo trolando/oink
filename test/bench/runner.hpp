@@ -55,11 +55,15 @@ struct PlannedGame
  */
 std::vector<PlannedGame> plan_games(const Options& options, const std::string& executable);
 
+class Experiment;
+
 /**
  * Run the benchmark of <solvers> on <games>; returns the exit status. The
- * executable is reported in the metadata.
+ * executable is reported in the metadata. With a named <experiment>, its
+ * finished games are not measured again, and every game that finishes is
+ * committed to it.
  */
-int run_benchmark(Options& options, std::vector<SolverRun>& solvers, const std::vector<PlannedGame>& games, const std::string& executable);
+int run_benchmark(Options& options, std::vector<SolverRun>& solvers, const std::vector<PlannedGame>& games, const std::string& executable, Experiment* experiment = nullptr);
 
 }
 

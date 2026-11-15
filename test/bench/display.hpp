@@ -23,6 +23,7 @@
 #ifndef OINK_BENCH_DISPLAY_HPP
 #define OINK_BENCH_DISPLAY_HPP
 
+#include <chrono>
 #include <optional>
 #include <string>
 #include <vector>
@@ -85,6 +86,23 @@ public:
 private:
     const Options& options;
     const std::vector<SolverRun>& solvers;
+};
+
+/**
+ * The progress of a named experiment on stderr, updated at the end of every
+ * game: a bar on a terminal, or a line per game with --plain or without one.
+ */
+class ExperimentDisplay : public Display
+{
+public:
+    ExperimentDisplay(const Options& options, const std::string& directory, int session, const std::string& executable);
+    void update(const Progress&, bool) override { }
+    void completed(const Case& game, size_t planned) override;
+    void close() override;
+
+private:
+    bool bar;
+    std::chrono::steady_clock::time_point started;
 };
 
 }

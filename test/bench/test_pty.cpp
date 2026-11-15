@@ -21,7 +21,7 @@
  * restored. The screens themselves are unit tested without a terminal; this
  * test covers the terminal I/O around them.
  *
- * Usage: test_pty <bench_solvers> <directory of test games> <work directory>
+ * Usage: test_pty <bench_solvers> <oink> <directory of test games> <work directory>
  */
 
 #include <chrono>
@@ -262,21 +262,50 @@ test_setup(const std::string& bench, const std::string& games, const std::string
     check("terminal restored after cancel", cancel.restored());
 }
 
+static void
+test_experiment(const std::string& bench, const std::string& oink, const std::string& games, const std::string& work)
+{
+    // an external solver that is slow, but correct
+    const std::string slow = "slow:sleep 0.3; " + oink + " %I %O";
+    std::vector<std::string> args = {"--experiment=exp", "--tl", "-e", slow, "--quick", "--sort"};
+    for (const char* game : {"/vb001", "/vb002", "/vb003", "/vb004", "/vb006"}) args.push_back(games + game);
+    {
+        Session session(bench, args, work);
+        check("experiment starts", session.expect("Experiment: "));
+        session.read_for(0.8);
+        session.send("\003");
+        check("interrupted experiment", session.finish() == 130);
+        check("how to continue", session.expect("--resume="));
+        check("terminal restored after the experiment", session.restored());
+    }
+    // --experiment again offers to resume, and ignores the other options
+    Session again(bench, {"--experiment=exp", "--zlk"}, work);
+    check("resume prompt", again.expect("Resume the experiment? [Y/n]"));
+    again.send("\r");
+    check("resumed experiment finishes", again.finish() == 0);
+    check("all games finished", again.expect("(5/5 games)"));
+    check("the saved solvers", again.output.find("zlk") == std::string::npos);
+}
+
 int
 main(int argc, char** argv)
 {
-    if (argc != 4) {
-        std::cerr << "usage: " << argv[0] << " <bench_solvers> <games> <work directory>" << std::endl;
+    if (argc != 5) {
+        std::cerr << "usage: " << argv[0] << " <bench_solvers> <oink> <games> <work directory>" << std::endl;
         return 2;
     }
     signal(SIGPIPE, SIG_IGN);
-    const std::string work = argv[3];
+    const std::string bench = argv[1];
+    const std::string oink = argv[2];
+    const std::string games = argv[3];
+    const std::string work = argv[4];
     fs::remove_all(work);
     fs::create_directories(work);
     try {
-        test_review(argv[1], argv[2], work);
-        test_interrupt(argv[1], argv[2], work);
-        test_setup(argv[1], argv[2], work);
+        test_review(bench, games, work);
+        test_interrupt(bench, games, work);
+        test_setup(bench, games, work);
+        test_experiment(bench, oink, games, work);
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << std::endl;
         return 1;

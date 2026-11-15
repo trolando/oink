@@ -16,6 +16,7 @@
 
 #include "display.hpp"
 
+#include <algorithm>
 #include <iostream>
 
 #include "common/terminal.hpp"
@@ -55,6 +56,34 @@ PlainDisplay::completed(const Case& game, size_t)
     }
     std::cerr << std::endl;
     if (!game.error.empty()) std::cerr << "  " << ui::clean(game.error) << std::endl;
+}
+
+ExperimentDisplay::ExperimentDisplay(const Options& options, const std::string& directory, int session, const std::string& executable)
+    : bar(ui::is_tty(2) && !options.plain && !ui::dumb_terminal()), started(std::chrono::steady_clock::now())
+{
+    std::cerr << "Experiment: " << ui::clean(directory) << " | session " << session << '\n';
+    std::cerr << "Continue with: " << ui::clean(executable) << " --resume=" << ui::clean(directory) << std::endl;
+}
+
+void
+ExperimentDisplay::completed(const Case& game, size_t planned)
+{
+    const size_t finished = game.index + 1;
+    const double fraction = planned ? (double)finished / (double)planned : 0;
+    const int filled = std::min(24, (int)(fraction * 24));
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    const std::string text = "[" + std::string((size_t)filled, '=') + std::string((size_t)(24 - filled), ' ') + "] " + std::to_string((int)(fraction * 100)) + "%  " + std::to_string(finished) + "/" + std::to_string(planned) + " games | " + duration(seconds);
+    if (bar) {
+        std::cerr << '\r' << text << "\033[K" << std::flush;
+    } else {
+        std::cerr << text << std::endl;
+    }
+}
+
+void
+ExperimentDisplay::close()
+{
+    if (bar) std::cerr << std::endl;
 }
 
 }

@@ -32,6 +32,7 @@
 
 #include "common/terminal.hpp"
 #include "display.hpp"
+#include "experiment.hpp"
 #include "json.hpp"
 #include "lace.h"
 #include "live.hpp"
@@ -165,8 +166,8 @@ make_run_id()
 class Runner
 {
 public:
-    Runner(Options& options, std::vector<SolverRun>& solvers, const std::vector<PlannedGame>& plan, const std::string& executable)
-        : o(options), solvers(solvers), plan(plan), executable(executable)
+    Runner(Options& options, std::vector<SolverRun>& solvers, const std::vector<PlannedGame>& plan, const std::string& executable, Experiment* experiment)
+        : o(options), solvers(solvers), plan(plan), executable(executable), experiment(experiment)
     {
     }
 
@@ -177,6 +178,7 @@ private:
     std::vector<SolverRun>& solvers;
     const std::vector<PlannedGame>& plan;
     std::string executable;
+    Experiment* experiment;     // the named experiment, if any
     volatile std::sig_atomic_t quit = 0;
     std::vector<Case> games;
     std::unique_ptr<Report> report;
@@ -205,6 +207,7 @@ private:
     std::string save_failure(const Case& game, size_t solver, pg::Game& original, const Trial& trial);
     void skip_game(Case& game);
     void report_preparation(const Case& game);
+    bool bench_game(size_t index);
 };
 
 /** Read or generate a game, parse and sort it, and fill in what we know of it. */
@@ -525,6 +528,65 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
     }
 }
 
+/** Benchmark game <index>; false if it was interrupted before it finished. */
+bool
+Runner::bench_game(size_t index)
+{
+    games.emplace_back();
+    Case& game = games.back();
+    game.index = index;
+    game.cells.resize(solvers.size());
+
+    std::unique_ptr<pg::Game> original;
+    try {
+        original = load(game, plan[index]);
+    } catch (const std::exception& error) {
+        game.input_failed = true;
+        game.error = error.what();
+        report->game(game);
+        skip_game(game);
+        return true;
+    }
+    report->game(game);
+
+    service(game.name + " | preparing", true);
+    if (quit) {
+        for (auto& cell : game.cells) cell.failure = Status::Interrupted;
+        report->results(game);
+        return false;
+    }
+    std::unique_ptr<Prepared> prepared;
+    try {
+        std::ostringstream log;
+        prepared = prepare(*original, o, log);
+        game.prep = prepared->info;
+        if (prepared->identity()) game.prep.residual_hash = game.hash;
+    } catch (const std::exception& error) {
+        game.prep_failed = true;
+        game.error = error.what();
+    }
+    report_preparation(game);
+    if (game.prep_failed) {
+        skip_game(game);
+        return true;
+    }
+    if (prepared->residual == nullptr) {
+        game.fully_preprocessed = true;
+        skip_game(game);
+        return true;
+    }
+
+    current = index;
+    current_game = original.get();
+    measure(game, *original, *prepared);
+    current_game = nullptr;
+    const bool finished = !quit;
+    report->results(game);
+    if (finished) display->completed(game, plan.size());
+    service(game.name + " complete", true);
+    return finished;
+}
+
 int
 Runner::run()
 {
@@ -534,7 +596,9 @@ Runner::run()
     report = std::make_unique<Report>(o, solvers);
     report->metadata(plan.size(), executable);
     LiveDisplay* live = nullptr;
-    if (o.live && !o.plain && ui::Terminal::available()) {
+    if (experiment != nullptr) {
+        display = std::make_unique<ExperimentDisplay>(o, experiment->directory(), experiment->session(), executable);
+    } else if (o.live && !o.plain && ui::Terminal::available()) {
         auto table = std::make_unique<LiveDisplay>(o, solvers, &quit);
         live = table.get();
         display = std::move(table);
@@ -546,57 +610,26 @@ Runner::run()
     if (!o.isolate) lace = std::make_unique<LaceRunning>(o.workers);
 
     for (size_t index = 0; index < plan.size() && !quit; index++) {
-        games.emplace_back();
-        Case& game = games.back();
-        game.index = index;
-        game.cells.resize(solvers.size());
-
-        std::unique_ptr<pg::Game> original;
-        try {
-            original = load(game, plan[index]);
-        } catch (const std::exception& error) {
-            game.input_failed = true;
-            game.error = error.what();
-            report->game(game);
-            skip_game(game);
+        const Case* saved = experiment != nullptr ? experiment->finished(index) : nullptr;
+        if (saved != nullptr) {
+            // finished in an earlier session of the experiment
+            games.push_back(*saved);
+            done += solvers.size() * per_cell();
+            for (const auto& cell : saved->cells) {
+                if (cell.failure) failures = true;
+            }
+            display->completed(games.back(), plan.size());
             continue;
         }
-        report->game(game);
-
-        service(game.name + " | preparing", true);
-        if (quit) {
-            for (auto& cell : game.cells) cell.failure = Status::Interrupted;
-            report->results(game);
-            break;
+        // an experiment keeps the events of every game apart
+        std::ostringstream events;
+        if (experiment != nullptr) report->copy_to(&events);
+        const bool finished = bench_game(index);
+        report->copy_to(nullptr);
+        if (experiment != nullptr) {
+            if (finished) experiment->commit(games.back(), events.str());
+            else games.pop_back(); // measured again when the experiment resumes
         }
-        std::unique_ptr<Prepared> prepared;
-        try {
-            std::ostringstream log;
-            prepared = prepare(*original, o, log);
-            game.prep = prepared->info;
-            if (prepared->identity()) game.prep.residual_hash = game.hash;
-        } catch (const std::exception& error) {
-            game.prep_failed = true;
-            game.error = error.what();
-        }
-        report_preparation(game);
-        if (game.prep_failed) {
-            skip_game(game);
-            continue;
-        }
-        if (prepared->residual == nullptr) {
-            game.fully_preprocessed = true;
-            skip_game(game);
-            continue;
-        }
-
-        current = index;
-        current_game = original.get();
-        measure(game, *original, *prepared);
-        current_game = nullptr;
-        report->results(game);
-        if (!quit) display->completed(game, plan.size());
-        service(game.name + " complete", true);
     }
 
     const bool interrupted = quit != 0;
@@ -622,10 +655,18 @@ Runner::run()
     details.schedule_seed = o.seed;
     if (o.inputs.empty()) details.game_seed = o.game_seed;
     details.preprocess = o.preprocess;
-    details.jsonl = o.jsonl;
-    details.csv = o.csv;
+    if (experiment == nullptr) {
+        details.jsonl = o.jsonl;
+        details.csv = o.csv;
+    }
     details.interrupted = interrupted;
     print_summary(std::cout, totals, solvers, details, ui::color_allowed(1, o.plain));
+    if (experiment != nullptr) {
+        experiment->publish(o, solvers, executable, plan);
+        const fs::path root(experiment->directory());
+        std::cout << "Experiment results: " << (root / "results.jsonl").string() << " and results.csv (" << experiment->finished_count() << "/" << plan.size() << " games)\n";
+        if (experiment->finished_count() < plan.size()) std::cout << "Continue with: " << executable << " --resume=" << root.string() << '\n';
+    }
     if (failures && !o.artifacts.empty() && fs::exists(fs::path(o.artifacts) / run_id)) {
         std::cout << "Failed trials: " << (fs::path(o.artifacts) / run_id).string() << '\n';
     }
@@ -639,9 +680,9 @@ Runner::run()
 }
 
 int
-run_benchmark(Options& options, std::vector<SolverRun>& solvers, const std::vector<PlannedGame>& games, const std::string& executable)
+run_benchmark(Options& options, std::vector<SolverRun>& solvers, const std::vector<PlannedGame>& games, const std::string& executable, Experiment* experiment)
 {
-    Runner runner(options, solvers, games, executable);
+    Runner runner(options, solvers, games, executable, experiment);
     return runner.run();
 }
 

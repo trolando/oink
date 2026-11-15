@@ -21,9 +21,12 @@
 
 #include <csignal>
 #include <exception>
+#include <filesystem>
 #include <iostream>
+#include <memory>
 
 #include "bench.hpp"
+#include "experiment.hpp"
 #include "options.hpp"
 #include "report.hpp"
 #include "runner.hpp"
@@ -37,14 +40,27 @@ main(int argc, char** argv)
         Options options;
         std::vector<SolverRun> solvers;
         if (!parse_command_line(argc, argv, options, solvers, std::cout)) return 0;
-        if (options.interactive) {
-            volatile std::sig_atomic_t cancelled = 0;
-            if (!setup_benchmark(options, solvers, &cancelled)) return cancelled ? 130 : 0;
-        }
-        validate(options, solvers);
         const std::string executable = executable_path(argv[0]);
-        const auto games = plan_games(options, executable);
-        return run_benchmark(options, solvers, games, executable);
+        volatile std::sig_atomic_t cancelled = 0;
+
+        // an existing experiment is resumed with its own plan
+        std::unique_ptr<Experiment> experiment;
+        std::vector<PlannedGame> games;
+        if (!options.resume && !options.experiment.empty() && std::filesystem::exists(options.experiment)) {
+            if (!confirm_resume(options.experiment, &cancelled)) return cancelled ? 130 : 0;
+            options.resume = true;
+        }
+        if (options.resume) {
+            experiment = Experiment::resume(options.experiment, options, solvers, games, executable);
+        } else {
+            if (options.interactive && !setup_benchmark(options, solvers, &cancelled)) return cancelled ? 130 : 0;
+            validate(options, solvers);
+            games = plan_games(options, executable);
+            if (!options.experiment.empty()) experiment = Experiment::create(options.experiment, options, solvers, games, executable);
+        }
+        if (experiment) experiment->configure(options);
+        validate(options, solvers);
+        return run_benchmark(options, solvers, games, executable, experiment.get());
     } catch (const std::exception& error) {
         std::cerr << "bench_solvers: " << error.what() << std::endl;
         return 3;
