@@ -278,6 +278,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/bench/options.cpp
             test/bench/report.cpp
             test/bench/runner.cpp
+            test/bench/setup.cpp
             test/bench/summary.cpp
             test/bench/table.cpp
             test/bench/trial.cpp

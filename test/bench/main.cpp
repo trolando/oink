@@ -19,6 +19,7 @@
  * See test/bench/README.md and bench_solvers --help.
  */
 
+#include <csignal>
 #include <exception>
 #include <iostream>
 
@@ -26,6 +27,7 @@
 #include "options.hpp"
 #include "report.hpp"
 #include "runner.hpp"
+#include "setup.hpp"
 
 int
 main(int argc, char** argv)
@@ -35,6 +37,10 @@ main(int argc, char** argv)
         Options options;
         std::vector<SolverRun> solvers;
         if (!parse_command_line(argc, argv, options, solvers, std::cout)) return 0;
+        if (options.interactive) {
+            volatile std::sig_atomic_t cancelled = 0;
+            if (!setup_benchmark(options, solvers, &cancelled)) return cancelled ? 130 : 0;
+        }
         validate(options, solvers);
         const std::string executable = executable_path(argv[0]);
         const auto games = plan_games(options, executable);

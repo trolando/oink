@@ -46,6 +46,13 @@ summary (sum of medians, VBS wins/ties and, with --reference, the geometric
 mean speedup and W/T/L) to stdout. --jsonl writes every trial, --csv the
 statistics per game and solver.
 
+With -i, a setup screen comes first: AVAILABLE lists the solvers by family
+(x shows the experimental ones, / filters), SELECTED is the roster. Enter
+adds a solver or configures a selected one, d adds a configured variant,
+Space or Delete removes, R marks the reference; r, w, t, b and p edit the
+repetitions, warm-ups, timeout, schedule seed and sampling target, P toggles
+preprocessing, and s starts. The live table and the review follow.
+
 With --live, the table of medians updates as the trials finish: the selected
 game is marked with a cyan >, the fastest complete median of a row is green,
 failures are red, and h (or --heatmap) colours every timing by its rank in the
@@ -91,6 +98,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("recursive", "Search input directories recursively")
         ;
     opts.add_options("Display")
+        ("i,interactive", "Choose the solvers and settings in a setup screen, then show the live table and the review")
         ("live", "Show the live table on the terminal (plain output without one)")
         ("review", "Keep the live table open after the benchmark, to sort, browse and extract")
         ("heatmap", "Colour all timings of the live table by their rank in the game (h toggles)")
@@ -186,6 +194,11 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
     o.heatmap = given(result, "heatmap");
     o.plain = given(result, "plain");
     o.exports = result["exports"].as<std::string>();
+    o.interactive = given(result, "interactive");
+    if (o.interactive) {
+        o.live = true;
+        o.review = true;
+    }
     if (o.review && !o.live) throw std::runtime_error("--review needs the live table (--live)");
 
     // reports

@@ -233,6 +233,35 @@ test_interrupt(const std::string& bench, const std::string& games, const std::st
     check("terminal restored after Ctrl-C", session.restored());
 }
 
+static void
+test_setup(const std::string& bench, const std::string& games, const std::string& work)
+{
+    Session session(bench, {"-i", "--tl", "--quick", "--sort", "--jsonl=setup.jsonl", games + "/vb001", games + "/vb002"}, work);
+    check("setup screen", session.expect("BENCHMARK SETUP"));
+    session.send("r");
+    check("repetitions editor", session.expect("MEASURED REPETITIONS"));
+    session.send("\0252\r"); // Ctrl-U clears the old value
+    check("repetitions set", session.expect("Reps 2"));
+    session.send("/zielonka recursion\r");
+    check("filtered", session.expect("AVAILABLE / zielonka recursion"));
+    session.send("\r");
+    check("solver added", session.expect("SELECTED (2)"));
+    session.send("s");
+    check("benchmark runs and ends in the review", session.expect("Finished."));
+    session.send("q");
+    check("normal end", session.finish() == 0);
+    check("summary of both solvers", session.expect("zlk"));
+    check("terminal restored after setup and review", session.restored());
+
+    // q in the setup screen ends without a benchmark
+    Session cancel(bench, {"-i", "--tl", games + "/vb001"}, work);
+    check("setup screen again", cancel.expect("BENCHMARK SETUP"));
+    cancel.send("q");
+    check("cancel", cancel.finish() == 0);
+    check("no benchmark after cancel", cancel.output.find("Benchmark summary") == std::string::npos);
+    check("terminal restored after cancel", cancel.restored());
+}
+
 int
 main(int argc, char** argv)
 {
@@ -247,6 +276,7 @@ main(int argc, char** argv)
     try {
         test_review(argv[1], argv[2], work);
         test_interrupt(argv[1], argv[2], work);
+        test_setup(argv[1], argv[2], work);
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << std::endl;
         return 1;

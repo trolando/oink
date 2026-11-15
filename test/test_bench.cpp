@@ -36,9 +36,11 @@
 #include "bench/json.hpp"
 #include "bench/options.hpp"
 #include "bench/runner.hpp"
+#include "bench/setup.hpp"
 #include "bench/summary.hpp"
 #include "bench/trial.hpp"
 #include "bench/worker.hpp"
+#include "common/chooser.hpp"
 #include "common/terminal.hpp"
 #include "oink/game.hpp"
 #include "oink/game_builder.hpp"
@@ -467,6 +469,66 @@ test_preprocessing()
     check("preprocessing off", off->identity() && off->info.solved_vertices == 0);
 }
 
+/** Type <text> into the chooser and press Enter, after clearing the editor. */
+static void
+enter(ui::Chooser& chooser, char key, const std::string& text)
+{
+    chooser.handle(ui::Key::character(key));
+    chooser.handle(ui::Key(ui::Key::ClearLine));
+    for (char c : text) chooser.handle(ui::Key::character(c));
+    chooser.handle(ui::Key(ui::Key::Enter));
+}
+
+static void
+test_setup()
+{
+    Options o;
+    o.seed = 5;
+    o.game_seed = series_seed(5);
+    ui::Chooser chooser({SolverRun("tl", ""), SolverRun("zlk", "")}, setup_config(o));
+    int row = 0;
+    int column = 0;
+    std::string screen;
+    for (const auto& line : chooser.render(120, 30, false, row, column)) screen += line + "\n";
+    check("setup title", screen.find("OINK  /  BENCHMARK SETUP") != std::string::npos);
+    check("setup settings", screen.find("Reps 7   Warm-ups 1   Timeout 30 s   Seed 5   Sampling 1 ms") != std::string::npos);
+    check("setup toggles", screen.find("Preprocessing: OFF | Reference: none") != std::string::npos);
+    check("setup keys", screen.find("s START   r Reps   w Warm-ups   t Timeout   b Seed   p Sampling   P Preprocessing   R Reference   q Cancel") != std::string::npos);
+
+    enter(chooser, 'r', "3");
+    check("r sets the repetitions", o.repeats == 3 && !chooser.editing());
+    enter(chooser, 'w', "x");
+    check("bad warm-ups rejected", o.warmups == 1 && chooser.editing());
+    chooser.handle(ui::Key(ui::Key::Escape));
+    enter(chooser, 'w', "0");
+    check("w sets the warm-ups", o.warmups == 0);
+    enter(chooser, 't', "2.5");
+    check("t sets the timeout", near(o.timeout, 2.5));
+    enter(chooser, 't', "-1");
+    check("negative timeout rejected", near(o.timeout, 2.5) && chooser.editing());
+    chooser.handle(ui::Key(ui::Key::Escape));
+    enter(chooser, 'b', "99");
+    check("b sets the schedule seed and the derived series seed", o.seed == 99 && o.game_seed == series_seed(99));
+    enter(chooser, 'p', "0");
+    check("p sets the sampling target", o.min_solve_time == 0);
+    chooser.handle(ui::Key::character('P'));
+    check("P toggles preprocessing", o.preprocess);
+    chooser.handle(ui::Key(ui::Key::Tab));
+    chooser.handle(ui::Key::character('R'));
+    check("R sets the reference", chooser.reference() && *chooser.reference() == "tl");
+    screen.clear();
+    for (const auto& line : chooser.render(120, 30, false, row, column)) screen += line + "\n";
+    check("settings shown", screen.find("Reps 3   Warm-ups 0   Timeout 2.5 s   Seed 99   Sampling off") != std::string::npos);
+    check("toggles shown", screen.find("Preprocessing: ON | Reference: tl") != std::string::npos);
+
+    Options local;
+    local.isolate = false;
+    local.timeout = 0;
+    ui::Chooser in_process({SolverRun("tl", "")}, setup_config(local));
+    enter(in_process, 't', "5");
+    check("no timeout without workers", local.timeout == 0 && in_process.editing());
+}
+
 int
 test_bench()
 {
@@ -479,6 +541,7 @@ test_bench()
     test_schedule();
     test_trials();
     test_preprocessing();
+    test_setup();
     if (failures) std::cerr << failures << " bench test(s) failed" << std::endl;
     return failures ? 1 : 0;
 }
