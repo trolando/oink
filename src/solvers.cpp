@@ -44,7 +44,6 @@
 #include "solvers/zlkpp.hpp"
 #include "solvers/zlkq.hpp"
 #include "solvers/ppq.hpp"
-#include "solvers/ptl.hpp"
 #include "solvers/dtl.hpp"
 #include "solvers/tlq.hpp"
 #include "solvers/gpm.hpp"
@@ -82,8 +81,6 @@ Solvers::Solvers()
     _add("bsspm", "bounded succinct small progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<BoundedSSPMSolver>(oink, game); }, true);
     _add("qpt", "quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<QPTSolver>(oink, game); }, true);
     _add("bqpt", "bounded quasi-polynomial time progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<BoundedQPTSolver>(oink, game); }, true);
-    _add("ptl", "progressive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PTLSolver>(oink, game); }, true);
-    _add("spptl", "single-player progressive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<SPPTLSolver>(oink, game); }, true);
     _add("dtl", "distance tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<DTLSolver>(oink, game); }, true);
     _add("idtl", "interleaved distance tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<IDTLSolver>(oink, game); }, true);
     _add("rtl", "recursive tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<RTLSolver>(oink, game); });
@@ -117,7 +114,7 @@ Solvers::Solvers()
             info.familyOrder = order++;
         }
     };
-    group(Family::TangleLearning, {"tl", "tlpar", "tlj", "tlq", "rtl", "ortl", "ptl", "spptl", "dtl", "idtl",
+    group(Family::TangleLearning, {"tl", "tlpar", "tlj", "tlq", "rtl", "ortl", "dtl", "idtl",
           "pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler"});
     group(Family::ProgressMeasures, {"spm", "tspm", "mspm", "sspm", "bsspm", "qpt", "bqpt",
           "gpm", "gpm-small", "gpm-succinct", "gpm-ordered", "gpm-strahler",

@@ -226,7 +226,6 @@ target_sources(oink
     src/solvers/tlj.cpp
     src/solvers/rtl.cpp
     src/solvers/zlkpp.cpp
-    src/solvers/ptl.cpp
     src/solvers/dtl.cpp
     src/solvers/tlq.cpp
     src/solvers/gpm.cpp
@@ -462,8 +461,6 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverTLJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlj)
             add_test(NAME TestSolverRTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --rtl)
             add_test(NAME TestSolverORTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ortl)
-            add_test(NAME TestSolverPTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ptl)
-            add_test(NAME TestSolverSPPTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --spptl)
             add_test(NAME TestSolverDTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --dtl)
             add_test(NAME TestSolverIDTL COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --idtl)
             add_test(NAME TestSolverTLQ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tlq)

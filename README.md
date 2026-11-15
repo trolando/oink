@@ -47,8 +47,6 @@ TLPAR           | (parallel) Tangle learning with parallel attraction
 TLJ             | Tangle learning with justifications (after Algorithm 7 of Lapauw, Bruynooghe and Denecker)
 RTL             | Recursive Tangle Learning (research variant)
 ORTL            | One-sided Recursive Tangle Learning (research variant)
-PTL             | Progressive Tangle Learning (research variant)
-SPPTL           | Single-player Progressive Tangle Learning (research variant)
 DTL             | Distance Tangle Learning (research variant based on 'good path length')
 IDTL            | Interleaved Distance Tangle Learning (interleaved variant of DTL)
 TLQ             | Tangle Learning applied to the quasi-polynomial time recursive algorithm
@@ -230,7 +228,7 @@ The two binary counters game family appears to be a quasi-polynomial lower bound
 * The progress measures variations SSPM, QPT
 
 Some algorithms can solve the two binary counters games in polynomial time:
-* The tangle learning algorithms RTL, ORTL, PTL, SPPTL, DTL, IDTL
+* The tangle learning algorithms RTL, ORTL, DTL, IDTL
 * The strategy improvement algorithm PSI
 * Unsure: the BSSPM and BQPT algorithms
 

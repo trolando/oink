@@ -14,6 +14,11 @@ All notable changes to Oink will be documented in this file.
 - `test_solvers -i` chooses the solvers and their configurations in an
   interactive screen.
 
+### Removed
+
+- The solvers PTL and SPPTL (progressive tangle learning), unpublished
+  research variants; SPPTL could stop with vertices unsolved.
+
 ## [1.1.1] - 2026-11-14
 
 ### Fixed
