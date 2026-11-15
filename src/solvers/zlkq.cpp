@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 
 #include "zlkq.hpp"
 
@@ -38,12 +39,40 @@ ZLKQSolver::~ZLKQSolver()
 }
 
 /**
- * Attract vertices in <R> from subgame <Y> to <v> in region <Z> as player <pl>.
- * We attract only vertices in <R>, but the opponent may escape to <R> and <Y>.
+ * Word helpers. A set used by a call with top vertex <vtop> has no vertices above <vtop>, so
+ * operations on it only need the words up to vtop/64.
+ */
+static inline size_t words_upto(int vtop)
+{
+    return (size_t)vtop/64 + 1;
+}
+
+/**
+ * The highest vertex in <b> that is at most <v>, or -1 if there is none.
+ */
+static inline int top_vertex(const bitset &b, int v)
+{
+    if (v < 0) return -1;
+    const uint64_t *p = b.data();
+    long w = v/64;
+    uint64_t m = p[w] & (~uint64_t(0) >> (63 - v%64));
+    while (m == 0) {
+        if (--w < 0) return -1;
+        m = p[w];
+    }
+    return (int)(w*64 + bsr(m));
+}
+
+/**
+ * Attract vertices in <R> to <v> in region <Z> as player <pl>.
+ * We attract only vertices in <R>, and the opponent may escape to vertices of <R> outside <Z>.
  * Attracted vertices are added to <Z> and to the queue <Q>.
+ * During one attractor computation <Z> only grows, so a successor that is not an escape stays
+ * so: the search for an escape of an opponent vertex continues where its last search ended, and
+ * each successor is checked at most once. Call resetEscapes() after the attractor computation.
  */
 void
-ZLKQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y)
+ZLKQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R)
 {
     auto curedge = ins(v);
     for (int from = *curedge; from != -1; from = *++curedge) {
@@ -60,14 +89,17 @@ ZLKQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R, bit
         } else if (R[from]) {
             // a vertex in <R> that is not yet in <Z>
             if (owner(from) != pl) {
-                // check each exit
-                bool escapes = false;
-                auto curedge = outs(from);
-                for (int to = *curedge; !escapes and to != -1; to = *++curedge) {
-                    // check if escapes to a vertex in <R> or <Y> that is not in <Z>
-                    if (!Z[to] and (R[to] or Y[to])) escapes = true;
+                // check each exit, from the last escape found
+                int &pos = esc[from];
+                const int *first = outs(from);
+                const int *e = first + pos;
+                for (; *e != -1; e++) {
+                    // check if escapes to a vertex in <R> that is not in <Z>
+                    if (R[*e] and !Z[*e]) break;
                 }
-                if (escapes) continue;
+                if (pos == 0 and e != first) searched.push_back(from);
+                pos = (int)(e - first);
+                if (*e != -1) continue; // escapes
             }
             // vertex does not escape, so attract it
             Z[from] = true;
@@ -86,6 +118,13 @@ ZLKQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R, bit
 }
 
 void
+ZLKQSolver::resetEscapes()
+{
+    for (int v : searched) esc[v] = 0;
+    searched.clear();
+}
+
+void
 ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
 {
     /**
@@ -93,6 +132,8 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
      * We use several implementation tricks to make optimal use of memory and allocate as few as possible
      * For example, we record partial winning sets for Even and Odd in W0 and W1, because all partial
      * winning sets between calls are disjoint (so, safe to share the same bit array)
+     * The local sets R and H of a call are kept per recursion depth, and all set operations are
+     * limited to the words up to the top vertex of the call.
      */
 
     /**
@@ -107,30 +148,17 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
      * If our own precision is gone, assume it's all won by the opponent.
      */
 
-    if (po <= 0) {
-        W0 |= SG;
+    if (po <= 0 or pe <= 0) {
+        if (vtop < 0) return;
+        auto &W = po <= 0 ? W0 : W1;
+        uint64_t *w = W.data();
+        const uint64_t *sg = SG.data();
+        const size_t nw = words_upto(vtop);
+        for (size_t k=0; k<nw; k++) w[k] |= sg[k];
 
 #ifndef NDEBUG
-        if (trace and SG.any()) {
-            logger << "End of precision; presumed won by player 0:";
-            for (int v=vtop; v>=0; v--) {
-                if (SG[v]) {
-                    logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
-                }
-            }
-            logger << std::endl;
-        }
-#endif
-
-        return;
-    }
-
-    if (pe <= 0) {
-        W1 |= SG;
-
-#ifndef NDEBUG
-        if (trace and SG.any()) {
-            logger << "End of precision; presumed won by player 1:";
+        if (trace and top_vertex(SG, vtop) != -1) {
+            logger << "End of precision; presumed won by player " << (po <= 0 ? 0 : 1) << ":";
             for (int v=vtop; v>=0; v--) {
                 if (SG[v]) {
                     logger << " \033[38;5;38m" << label_vertex(v) << "\033[m";
@@ -147,7 +175,7 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
      * Move <vtop> to the true top (highest vertex that is in SG)
      */
 
-    while (vtop >= 0 and !SG[vtop]) vtop--;
+    vtop = top_vertex(SG, vtop);
 
     /**
      * Check if the game is empty
@@ -161,6 +189,13 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
 
     const int pr = priority(vtop);
     const int pl = pr&1;
+
+    /**
+     * Claim the local sets of this recursion depth (the recursive calls use deeper ones)
+     */
+
+    const int d = depth++;
+    struct DepthGuard { int &depth; ~DepthGuard() { depth--; } } guard{depth};
 
     /**
      * Expand the left side of the current level of the universal tree
@@ -181,14 +216,28 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
      *   (this optimization is due to Lehtinen, Parys, Schewe, Wojtczak '21)
      */
 
+    size_t nw = words_upto(vtop);
+    const unsigned long size = popcnt(SG.data(), nw*8);
     if (pl == 0) {
-        if (SG.count() <= (unsigned long)(po/2)) return;
+        if (size <= (unsigned long)(po/2)) return;
     } else {
-        if (SG.count() <= (unsigned long)(pe/2)) return;
+        if (size <= (unsigned long)(pe/2)) return;
     }
 
     auto &Wm = pl == 0 ? W0 : W1; // my W
     auto &Wo = pl == 0 ? W1 : W0; // opponent's W
+
+    while ((int)levels.size() <= d) {
+        levels.emplace_back();
+        levels.back().R.resize(nodecount());
+        levels.back().H.resize(nodecount());
+    }
+    Level &L = levels[d];
+    bitset &R = L.R;
+    bitset &H = L.H;
+
+    uint64_t *r = R.data(), *h = H.data(), *wm = Wm.data(), *wo = Wo.data();
+    const uint64_t *sg = SG.data();
 
     /**
      * Now compute <R> := vertices in subgame that we won in the left side
@@ -198,31 +247,46 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
      * Fmore, SG is immutable, R is a local bitset
      */
 
-    bitset R(SG);
-    R &= Wm;
+    for (size_t k=0; k<nw; k++) r[k] = sg[k] & wm[k];
+    for (size_t k=nw; k<L.Rdirty; k++) r[k] = 0;
+    L.Rdirty = nw;
 
     /**
      * Update vtop to the highest vertex in the intersection
      */
-    while (vtop >= 0 and !R[vtop]) vtop--;
+    vtop = top_vertex(R, vtop);
     if (vtop == -1) return;
+    nw = words_upto(vtop);
 
     /**
      * Compute H := Attr(vertices of <pr> in <R>)
+     * With on-the-fly compression: the heads are the vertices of <R> in the run of vertices (by
+     * index) of parity <pl> that ends at <vtop>, attracted together. There are none if <vtop>
+     * now has the other parity.
      */
-    bitset H(nodecount());
 
-    for (int v=vtop; v!=-1; v--) {
-        // if (priority(v) != pr) break; // stop attracting ... ;) [todo: add otf compression ?]
-        if ((priority(v)&1) != pl) break; // on-the-fly compression
-        if (R[v]) {
-            H[v] = true;
-            str[v] = -1;
-            Q.push(v);
-            while (Q.nonempty()) {
-                attractVertices(pl, Q.pop(), H, R, R);
+    for (size_t k=0; k<std::max(nw, L.Hdirty); k++) h[k] = 0;
+    L.Hdirty = nw;
+
+    if ((priority(vtop)&1) == pl) {
+        const int lo = runstart[vtop];
+        for (long k=vtop/64; k>=lo/64; k--) {
+            uint64_t m = r[k];
+            if (k == vtop/64) m &= ~uint64_t(0) >> (63 - vtop%64);
+            if (k == lo/64) m &= ~uint64_t(0) << (lo%64);
+            while (m) {
+                const int b = bsr(m);
+                m &= ~(uint64_t(1) << b);
+                const int v = (int)(k*64 + b);
+                H[v] = true;
+                str[v] = -1;
+                Q.push(v);
             }
         }
+        while (Q.nonempty()) {
+            attractVertices(pl, Q.pop(), H, R);
+        }
+        resetEscapes();
     }
 
 #ifndef NDEBUG
@@ -240,13 +304,14 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
      * Set H to the remaining subgame (G' in the universal paper)
      */
 
-    // reset opponent and our region
-    Wo -= R;
-    Wm -= R;
-    // but set everything in H to ours
-    Wm |= H;
-    // and set H := R - H
-    H ^= R;
+    for (size_t k=0; k<nw; k++) {
+        // reset opponent and our region
+        wo[k] &= ~r[k];
+        // but set everything in H to ours
+        wm[k] = (wm[k] & ~r[k]) | h[k];
+        // and set H := R - H
+        h[k] ^= r[k];
+    }
 
     /**
      * Go recursive!
@@ -258,8 +323,13 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
      * The intersection of H and Wo is the opponent's subgame
      */
     bool opponent_attracted_from_us = false;
-    for (int v=0; v<=vtop; v++) {
-        if (H[v] and Wo[v]) Q.push(v);
+    for (size_t k=0; k<nw; k++) {
+        uint64_t m = h[k] & wo[k];
+        while (m) {
+            const int v = (int)(k*64 + intrinsics::countr_zero64(m));
+            m &= m - 1;
+            Q.push(v);
+        }
     }
     if (Q.nonempty()) {
         while (Q.nonempty()) {
@@ -272,8 +342,9 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
 #endif
                 opponent_attracted_from_us = true;
             }
-            attractVertices(1-pl, v, Wo, R, R);
+            attractVertices(1-pl, v, Wo, R);
         }
+        resetEscapes();
     }
 
 #ifndef NDEBUG
@@ -305,14 +376,15 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
      * Notice this is also an optimization.
      */
     if (opponent_attracted_from_us) {
-        // Reset my winning region <Wm>
-        Wm -= R;
-
-        // Reduce subgame by removing opponent's winning region <Wo>
-        R -= Wo;
+        for (size_t k=0; k<nw; k++) {
+            // Reset my winning region <Wm>
+            wm[k] &= ~r[k];
+            // Reduce subgame by removing opponent's winning region <Wo>
+            r[k] &= ~wo[k];
+        }
 
         // Update vtop
-        while (vtop >= 0 and !R[vtop]) vtop--;
+        vtop = top_vertex(R, vtop);
 
         // Check if the game is empty
         if (vtop == -1) return; // empty game, bye
@@ -322,8 +394,13 @@ ZLKQSolver::solve(bitset &SG, int vtop, const int pe, const int po)
         else solve(R, vtop, pe/2, po);
     } else {
         // Set strategy for vertices that do not yet have a strategy
-        for (int v=vtop; v>=0; v--) {
-            if (R[v] and Wm[v] and owner(v) == pl and str[v] == -1) {
+        const uint64_t *own = game.owner().data();
+        for (size_t k=0; k<nw; k++) {
+            uint64_t m = r[k] & wm[k] & (pl ? own[k] : ~own[k]);
+            while (m) {
+                const int v = (int)(k*64 + intrinsics::countr_zero64(m));
+                m &= m - 1;
+                if (str[v] != -1) continue;
                 auto curedge = outs(v);
                 for (int to = *curedge; to != -1; to = *++curedge) {
                     if (Wm[to]) {
@@ -346,6 +423,12 @@ ZLKQSolver::run()
     Q.resize(nodecount());
     W0.resize(nodecount());
     W1.resize(nodecount());
+
+    runstart.resize(nodecount());
+    for (int v=0; v<nodecount(); v++) {
+        runstart[v] = (v > 0 and ((priority(v)^priority(v-1))&1) == 0) ? runstart[v-1] : v;
+    }
+    esc.assign(nodecount(), 0);
 
     bitset G(nodecount());
     G = disabled;

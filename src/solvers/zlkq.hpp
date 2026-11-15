@@ -17,6 +17,7 @@
 #ifndef ZLKQ_HPP
 #define ZLKQ_HPP
 
+#include <deque>
 #include <vector>
 
 #include "oink/solver.hpp"
@@ -47,7 +48,24 @@ protected:
 
     bitset W0, W1; // current approximation of winning areas
 
-    inline void attractVertices(const int pl, const int v, bitset &Z, bitset &R, bitset &Y);
+    /**
+     * The two local sets of a call, one pair per recursion depth, reused by all calls at that
+     * depth. A call with top vertex <vtop> only uses the words up to vtop/64; the words from
+     * <Rdirty> and <Hdirty> on are zero.
+     */
+    struct Level {
+        bitset R, H;
+        size_t Rdirty = 0, Hdirty = 0;
+    };
+    std::deque<Level> levels;
+    int depth = 0;
+
+    std::vector<int> runstart; // the lowest vertex of the run of vertices of v's parity that ends at v
+    std::vector<int> esc; // per vertex, where to continue the search for an escape (see attractVertices)
+    std::vector<int> searched; // the vertices with a nonzero <esc>, or with a search started
+
+    inline void attractVertices(const int pl, const int v, bitset &Z, bitset &R);
+    void resetEscapes();
     void solve(bitset &Subgame, int vtop, int pe, int po);
 };
 
