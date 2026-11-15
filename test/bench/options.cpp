@@ -35,11 +35,13 @@ static const char* const GUIDE = R"(
 Benchmark the selected solvers (default: tl, tlj, tlq, npp, fpi, fpj, zlk) on
 the given parity game files and directories, or on random games without them.
 Every trial solves a fresh copy of the game and its solution is verified; the
-metric is the wall time of Oink::run. Preprocessing is off unless --preprocess:
-then it runs once per game, outside the timing, and the solvers solve what it
-leaves; their solutions are mapped back and verified against the whole game. The trials of a game are interleaved in a
-shuffled order per round: warm-up rounds, three pilot trials that choose the
-sample count for --min-solve-time, then the measured rounds.
+metric is the wall time of Oink::run. The trials of a game are interleaved in
+a shuffled order per round: warm-up rounds, three pilot trials that choose the
+sample count for --min-solve-time, then the measured rounds. Preprocessing is
+off unless --preprocess: then it runs once per game, outside the timing, the
+solvers solve what it leaves, and their solutions are mapped back and verified
+against the whole game. On POSIX systems the trials run in a worker process,
+so crashes are caught and --timeout applies.
 
 The per-game medians are printed to stderr as each game completes, and the
 summary (sum of medians, VBS wins/ties and, with --reference, the geometric
@@ -72,7 +74,7 @@ game is measured again from its warm-ups. The program, the host and the input
 files must be unchanged. -i with --experiment shows the setup screen first.
 
 Exit status: 0 on success, 1 if any trial failed, 130 when interrupted, 3 for
-an invalid command line.
+an invalid command line. The user guide is test/bench/README.md.
 )";
 
 /** Whether option <key> was given on the command line. */
@@ -150,10 +152,13 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("all", "Benchmark all solvers")
         ("e,external", "External solver as name:command, e.g. 'mysolv:mysolver %I %O'", cxxopts::value<std::vector<std::string>>())
         ;
+    // only solvers with options take a configuration: --tlpar=parmin=1,chunk=8
     for (const auto& id : Solvers::getSolverIDs()) {
-        std::string help = Solvers::desc(id);
-        if (Solvers::hasOptions(id)) help += "; options: " + Solvers::optionsHelp(id);
-        opts.add_options("Solvers")(id, help, cxxopts::value<std::string>()->implicit_value(""));
+        if (Solvers::hasOptions(id)) {
+            opts.add_options("Solvers")(id, Solvers::desc(id) + "; options: " + Solvers::optionsHelp(id), cxxopts::value<std::string>()->implicit_value(""));
+        } else {
+            opts.add_options("Solvers")(id, Solvers::desc(id));
+        }
     }
     opts.allow_unrecognised_options();
 
@@ -291,7 +296,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         for (const auto& id : ids) add(id, "");
     }
     for (const auto& arg : result.arguments()) {
-        if (ids.count(arg.key())) add(arg.key(), arg.value());
+        if (ids.count(arg.key())) add(arg.key(), Solvers::hasOptions(arg.key()) ? arg.value() : "");
     }
     if (given(result, "external")) {
         for (const auto& spec : result["external"].as<std::vector<std::string>>()) {
