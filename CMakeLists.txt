@@ -201,6 +201,7 @@ target_sources(oink
     src/verifier.cpp
     # Solvers
     src/solvers/zlk.cpp
+    src/solvers/zlkj.cpp
     src/solvers/zlkq.cpp
     src/solvers/npp.cpp
     src/solvers/ppj.cpp
@@ -376,6 +377,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_io.cpp
             test/test_solution.cpp
             test/test_ppj.cpp
+            test/test_zlkj.cpp
             test/test_fpj_batch.cpp
             test/test_pma.cpp
             test/test_fpi_frontier.cpp
@@ -407,6 +409,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestSolution COMMAND test_unit solution)
         add_test(NAME TestFPJBatch COMMAND test_unit fpj-batch)
         add_test(NAME TestPPJ COMMAND test_unit ppj)
+        add_test(NAME TestZLKJ COMMAND test_unit zlkj)
         add_test(NAME TestPMA COMMAND test_unit pma)
         add_test(NAME TestFPIFrontier COMMAND test_unit fpi-frontier)
         add_test(NAME TestTLJCache COMMAND test_unit tlj-cache)
@@ -490,6 +493,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverZLKpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w 0 --force-parallel)
             add_test(NAME TestSolverZLKQ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkq)
             add_test(NAME TestSolverUZLK COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --uzlk)
+            add_test(NAME TestSolverZLKJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkj)
             add_test(NAME TestSolverZLKPP1 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkpp-std)
             add_test(NAME TestSolverZLKPP2 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkpp-waw)
             add_test(NAME TestSolverZLKPP3 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkpp-liv)
@@ -497,6 +501,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverFPIscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpi --scc)
             add_test(NAME TestSolverTLscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tl --scc)
             add_test(NAME TestSolverZLKscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk --scc)
+            add_test(NAME TestSolverZLKJscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkj --scc)
             add_test(NAME TestSolverPPscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp --scc)
             # short headless runs of bench_solvers (see test/bench/smoke.cmake)
             set(BENCH_MODES basic calibrated reference random errors preprocess live experiment)

@@ -28,6 +28,7 @@ int test_io();
 int test_solution();
 int test_pma(const char* fixture);
 int test_ppj();
+int test_zlkj();
 int test_fpj_batch();
 int test_fpi_frontier();
 int test_tlq_cache();
@@ -57,6 +58,7 @@ const Test tests[] = {
     {"solution", test_solution},
     {"pma", [] { return test_pma(OINK_TEST_DATA_DIR "/vb232"); }},
     {"ppj", test_ppj},
+    {"zlkj", test_zlkj},
     {"fpj-batch", test_fpj_batch},
     {"fpi-frontier", test_fpi_frontier},
     {"tlq-cache", test_tlq_cache},
