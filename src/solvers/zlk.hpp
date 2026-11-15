@@ -51,6 +51,13 @@ public:
     std::unique_ptr<int8_t[]> winning;
     std::unique_ptr<int[]> strategy;
 
+    // A superset of the open vertices: those in the current subgame that are not yet attracted
+    // to a region, that is, with region BOT or an escape counter. The sequential attractor
+    // removes the vertices it attracts, the parallel attractor does not; vertices become open
+    // again when the region is reset. The head search skips the vertices not in <open>, and
+    // drops the vertices that it finds closed.
+    bitset open;
+
     bool to_inversion = true;
     bool only_recompute_when_attracted = true;
 

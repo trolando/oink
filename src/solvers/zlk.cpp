@@ -32,6 +32,22 @@ static const int BOT = 0x80000001; // bottom state for vertex
 
 #define KC "\033[36;1m"
 
+/**
+ * The highest vertex in <b> that is at most <v>, or -1 if there is none.
+ */
+static inline int highest_at_most(const bitset &b, int v)
+{
+    if (v < 0) return -1;
+    const uint64_t *p = b.data();
+    long w = v/64;
+    uint64_t m = p[w] & (~uint64_t(0) >> (63 - v%64));
+    while (m == 0) {
+        if (--w < 0) return -1;
+        m = p[w];
+    }
+    return (int)(w*64 + bsr(m));
+}
+
 ZLKSolver::ZLKSolver(Oink& oink, Game& game) : Solver(oink, game)
 {
 }
@@ -235,15 +251,21 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
     while (true) {
         size_t next = R->size();
 
-        for (; i>=0; i--) {
+        while (i >= 0) {
             const int ri = region[i].load(memory_order_relaxed);
-            if (ri == DIS or ri >= 0) continue; // cannot be attracted
+            if (ri == DIS or ri >= 0) {
+                // cannot be attracted: drop it from <open>, continue at the next open vertex
+                open.reset(i);
+                i = highest_at_most(open, i);
+                continue;
+            }
 
             // uncomment the next line to attract until lower priority instead of until inversion
             if (!to_inversion and priority(i) != pr) break; // until other priority
             if ((priority(i)&1) != pl) break; // until parity inversion (Maks Verver optimization)
 
             region[i].store(r, memory_order_relaxed);
+            open.reset(i);
             winning[i] = pl;
             strategy[i] = -1; // head nodes do not have a strategy yet!
             H->push_back(i);
@@ -252,6 +274,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
 #ifndef NDEBUG
             if (trace >= 2) logger << KC"head\033[m " << label_vertex(i) << std::endl;
 #endif
+            i--;
         }
 
         // no new heads: <i> is -1 or a vertex that is not attracted and ends the run
@@ -270,6 +293,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
                 if (owner(from) == pl) {
                     // owned by same parity
                     region[from].store(r, memory_order_relaxed);
+                    open.reset(from);
                     winning[from] = pl;
                     strategy[from] = cur;
                     R->push_back(from);
@@ -294,6 +318,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
                     }
                     if (count == 0) {
                         region[from].store(r, memory_order_relaxed);
+                        open.reset(from);
                         winning[from] = pl;
                         strategy[from] = -1;
                         R->push_back(from);
@@ -458,6 +483,10 @@ ZLKSolver::run()
     // initialize arrays
     memset(winning.get(), -1, nodecount());
     memset(strategy.get(), -1, sizeof(int[nodecount()]));
+
+    // all vertices that are not disabled may be open
+    open = disabled;
+    open.flip();
 
     // get number of nodes and create and initialize inverse array
     max_prio = -1;
@@ -654,11 +683,13 @@ ZLKSolver::run()
                     if (winning[v] != pl) continue; // only reset for <pl>
                     if (v > new_i) new_i = v;
                     region[v].store(BOT, std::memory_order_relaxed);
+                    open.set(v);
                 }
                 for (int v : Wm) {
                     if (winning[v] != pl) continue;
                     if (v > new_i) new_i = v;
                     region[v].store(BOT, std::memory_order_relaxed);
+                    open.set(v);
                 }
                 if (new_i == -1) {
                     /**
