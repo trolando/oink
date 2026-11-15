@@ -132,14 +132,14 @@ ZLKSolver::attractParT(lace_worker* lace, int pl, int cur, int r)
     while (c) { attractParT_SYNC(lace); c--; }
 }
 
-TASK_4(int, attractPar, int, i, int, r, std::vector<int>*, R, ZLKSolver*, s)
-int attractPar_CALL(lace_worker* lace, int i, int r, std::vector<int>* R, ZLKSolver* s)
+TASK_5(int, attractPar, int, i, int, r, std::vector<int>*, R, std::vector<int>*, H, ZLKSolver*, s)
+int attractPar_CALL(lace_worker* lace, int i, int r, std::vector<int>* R, std::vector<int>* H, ZLKSolver* s)
 {
-    return s->attractPar(lace, i, r, R);
+    return s->attractPar(lace, i, r, R, H);
 }
 
 int
-ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
+ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R, std::vector<int>* H)
 {
     using std::memory_order_relaxed;
     using std::memory_order_acquire;
@@ -189,6 +189,7 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
         winning[i] = pl;
         strategy[i] = -1; // head nodes have no strategy (for now)
         ours.push_back(i);
+        H->push_back(i);
         attractParT_SPAWN(lace, pl, i, r, this);
         spawn_count++;
     }
@@ -213,7 +214,7 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R)
 }
 
 int
-ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
+ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
 {
     // Sequential attractor (the -w -1 path). region[] is std::atomic for the parallel
     // attractor; here only one thread touches it, so all accesses use relaxed order.
@@ -242,6 +243,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
             region[i].store(r, memory_order_relaxed);
             winning[i] = pl;
             strategy[i] = -1; // head nodes do not have a strategy yet!
+            H->push_back(i);
             Q.push(i);
 
 #ifndef NDEBUG
@@ -310,65 +312,99 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
 }
 
 /**
- * Find all nodes in S (and in the game with region >= r) that attract to the other player.
+ * Find all nodes in the region of <r> and in the game with region >= r that attract to the other
+ * player, that is, the opponent's attractor of <R> (the opponent's part of the subgame below the
+ * region). <H> holds the heads of the region of <r>. The attracted nodes are added to <R>.
  */
 int
-ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vector<int> *R)
+ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *H, std::vector<int> *R)
 {
     // Sequential; region[] accesses use relaxed order (single thread, see attractExt).
     using std::memory_order_relaxed;
 
-    int count = 0;
-
     const int pr = priority(i);
     const int pl = pr & 1;
 
-    // NOTE: this algorithm could be improved using an "out counter"
-
 #ifndef NDEBUG
-    for (int i : *S) if (winning[i] != pl) LOGIC_ERROR;
+    for (int i : *H) if (winning[i] != pl) LOGIC_ERROR;
 #endif
+
+    // does <v> (owned by <pl>) have a successor in the subgame that is still won by <pl>?
+    auto can_escape = [&](int v) {
+        auto curedge = outs(v);
+        for (int to = *curedge; to != -1; to = *++curedge) {
+            if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
+            if (winning[to] != pl) continue; // not an escape
+            return true;
+        }
+        return false;
+    };
+
+    // move <v> to the opponent with strategy <str> and queue it
+    auto lose = [&](int v, int str) {
+        region[v].store(r, memory_order_relaxed);
+        winning[v] = 1-pl;
+        strategy[v] = str;
+        Q.push(v);
+    };
+
+    // attract the predecessors of <cur> (won by the opponent) that are won by <pl>
+    auto attract_to = [&](int cur) {
+        auto curedge = ins(cur);
+        for (int from = *curedge; from != -1; from = *++curedge) {
+            if (region[from].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
+            if (winning[from] != pl) continue; // already lost
+
+            if (owner(from) != pl) {
+                // owned by other
+#ifndef NDEBUG
+                if (trace >= 2) logger << KC"attracted\033[m " << label_vertex(from) << std::endl;
+#endif
+                lose(from, cur);
+            } else if (!can_escape(from)) {
+                // owned by us, but cannot escape
+#ifndef NDEBUG
+                if (trace >= 2) logger << KC"forced\033[m " << label_vertex(from) << std::endl;
+#endif
+                lose(from, -1);
+            }
+        }
+    };
 
     /**
-     * First check all region nodes...
-     * In reality, we just want to check the "head nodes", because all other nodes are attracted
-     * to the head nodes and cannot be attracted to the opponent directly.
-     * But we do not record which nodes are head nodes.
-     * TODO!
+     * First find the nodes that are attracted directly, by one of two equivalent methods.
+     * Only a head of the region can be attracted directly: every other vertex of the region
+     * was attracted to the heads, so it either has a strategy into the region (if <pl> owns it)
+     * or all its successors in the subgame are in the region (if the opponent owns it).
+     * The subgame below the region is won by <pl> or by the opponent; the part won by <pl> is
+     * a trap for the opponent there, so its vertices cannot be attracted directly either.
+     * So either check the successors of the heads, or the predecessors of <R>; take the
+     * smaller set.
      */
-    for (int i : *S) {
-        // check if the node is attracted
-        if (owner(i) == pl) {
-            // "loser" attraction
-            bool can_escape = false;
-            auto curedge = outs(i);
-            for (int to = *curedge; to != -1; to = *++curedge) {
-                if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or -1/-2
-                if (winning[to] != pl) continue; // not an escape
-                can_escape = true;
-                break;
-            }
-            if (!can_escape) {
+    const size_t initial = R->size();
+    if (initial <= H->size()) {
+        for (size_t k = 0; k < initial; k++) attract_to((*R)[k]);
+    } else {
+        for (int v : *H) {
+            if (owner(v) == pl) {
+                // "loser" attraction
+                if (can_escape(v)) continue;
 #ifndef NDEBUG
-                if (trace >= 2) logger << KC"forced distraction\033[m " << label_vertex(i) << std::endl;
+                if (trace >= 2) logger << KC"forced distraction\033[m " << label_vertex(v) << std::endl;
 #endif
-                // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", i, priority(i), 1-pl);
-                strategy[i] = -1;
-                Q.push(i);
-            }
-        } else {
-            // "winner" attraction
-            auto curedge = outs(i);
-            for (int to = *curedge; to != -1; to = *++curedge) {
-                if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or -1/-2
-                if (winning[to] == pl) continue; // not attracting
+                lose(v, -1);
+            } else {
+                // "winner" attraction
+                auto curedge = outs(v);
+                for (int to = *curedge; to != -1; to = *++curedge) {
+                    if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
+                    if (winning[to] == pl) continue; // not attracting
 #ifndef NDEBUG
-                if (trace >= 2) logger << KC"attracted distraction\033[m " << label_vertex(i) << std::endl;
+                    if (trace >= 2) logger << KC"attracted distraction\033[m " << label_vertex(v) << std::endl;
 #endif
-                // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", i, priority(i), 1-pl);
-                strategy[i] = to;
-                Q.push(i);
-                break;
+                    lose(v, to);
+                    break;
+                }
             }
         }
     }
@@ -378,55 +414,12 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *S, std::vec
      */
 
     while (!Q.empty()) {
-        int cur = Q.pop();
-        ++count;
-
+        const int cur = Q.pop();
         R->push_back(cur);
-        region[cur].store(r, memory_order_relaxed);
-        winning[cur] = 1-pl;
-
-        // attract to <cur>
-        auto curedge = ins(cur);
-        for (int from = *curedge; from != -1; from = *++curedge) {
-            // if (region[from] == -1) LOGIC_ERROR;
-            if (region[from].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
-            if (winning[from] != pl) continue; // already lost
-
-            if (owner(from) != pl) {
-                // owned by other
-#ifndef NDEBUG
-                if (trace >= 2) logger << KC"attracted\033[m " << label_vertex(from) << std::endl;
-#endif
-                // if (trace) fmt::printf(logger, "attracted %d (%d) to W_%d\n", from, priority(from), 1-pl);
-                region[from].store(r, memory_order_relaxed);
-                winning[from] = 1-pl;
-                strategy[from] = cur;
-                Q.push(from);
-            } else {
-                // owned by us
-                bool can_escape = false;
-                auto curedge = outs(from);
-                for (int to = *curedge; to != -1; to = *++curedge) {
-                    // if (region[to] == -1) LOGIC_ERROR;
-                    if (region[to].load(memory_order_relaxed) < r) continue; // not in subgame, or disabled
-                    if (winning[to] != pl) continue; // not an escape
-                    can_escape = true;
-                    break;
-                }
-                if (can_escape) continue;
-#ifndef NDEBUG
-                if (trace >= 2) logger << KC"forced\033[m " << label_vertex(from) << std::endl;
-#endif
-                // if (trace) fmt::printf(logger, "forced %d (%d) to W_%d\n", from, priority(from), 1-pl);
-                region[from].store(r, memory_order_relaxed);
-                winning[from] = 1-pl;
-                strategy[from] = -1;
-                Q.push(from);
-            }
-        }
+        attract_to(cur);
     }
 
-    return count;
+    return R->size() - initial;
 }
 
 void
@@ -442,6 +435,7 @@ ZLKSolver::run()
     std::vector<int> history;
     std::vector<int> W0, W1;
     std::vector<std::vector<int>> levels;
+    std::vector<std::vector<int>> heads; // the heads of each level (see attractLosing)
 
     // initialize arrays
     memset(winning.get(), -1, sizeof(int[nodecount()]));
@@ -468,6 +462,7 @@ ZLKSolver::run()
         if (space >= 500) space = 500;
         history.reserve(3*space);
         levels.reserve(space);
+        heads.reserve(space);
     }
 
     // start the loop at the last node (highest priority) and at depth 0
@@ -485,6 +480,7 @@ ZLKSolver::run()
 
     // initialize first level (i, r=0, phase=0)
     levels.push_back(std::vector<int>());
+    heads.push_back(std::vector<int>());
     history.push_back(i);
     history.push_back(next_r++);
     history.push_back(0);
@@ -495,6 +491,7 @@ ZLKSolver::run()
         if (hsize == 0) break; // no frame on the stack
 
         std::vector<int> *A = &(*levels.rbegin());
+        std::vector<int> *H = &(*heads.rbegin());
         const int i = history[hsize-3];
         const int r = history[hsize-2];
         const int phase = history[hsize-1];
@@ -528,7 +525,7 @@ ZLKSolver::run()
 #endif
 
             // attract until inversion and add to A
-            int j = usePar ? pg::attractPar(i, r, A, this) : attractExt(i, r, A);
+            int j = usePar ? pg::attractPar(i, r, A, H, this) : attractExt(i, r, A, H);
             // j is now the next i (subgame), or -1 if the subgame is empty
 
 #ifndef NDEBUG
@@ -544,6 +541,7 @@ ZLKSolver::run()
             if (j != -1) {
                 // go recursive (subgame not empty)
                 levels.push_back(std::vector<int>());
+                heads.push_back(std::vector<int>());
                 history.push_back(j);
                 history.push_back(next_r++);
                 history.push_back(0);
@@ -563,10 +561,10 @@ ZLKSolver::run()
 
             int count = 0;
             if (pl == 0) {
-                if (!W1.empty()) count = attractLosing(i, r, A, &W1);
+                if (!W1.empty()) count = attractLosing(i, r, H, &W1);
                 else count = -1;
             } else {
-                if (!W0.empty()) count = attractLosing(i, r, A, &W0);
+                if (!W0.empty()) count = attractLosing(i, r, H, &W0);
                 else count = -1;
             }
 
@@ -625,6 +623,7 @@ ZLKSolver::run()
                  * Finally, pop the stack and go up...
                  */
                 levels.pop_back();
+                heads.pop_back();
                 history.pop_back();
                 history.pop_back();
                 history.pop_back();
@@ -657,6 +656,7 @@ ZLKSolver::run()
                      * And pop the stack to go up
                      */
                     levels.pop_back();
+                    heads.pop_back();
                     history.pop_back();
                     history.pop_back();
                     history.pop_back();
@@ -674,6 +674,7 @@ ZLKSolver::run()
                      */
                     history.back() = 2; // set current phase to 2
                     levels.push_back(std::vector<int>());
+                    heads.push_back(std::vector<int>());
                     history.push_back(new_i);
                     history.push_back(next_r++);
                     history.push_back(0);
@@ -707,6 +708,7 @@ ZLKSolver::run()
              * Finally, pop the stack to go up...
              */
             levels.pop_back();
+            heads.pop_back();
             history.pop_back();
             history.pop_back();
             history.pop_back();

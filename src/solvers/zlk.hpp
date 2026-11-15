@@ -62,10 +62,10 @@ public:
     };
     std::vector<par_buffer> pvec;
 
-    int attractExt(int i, int r, std::vector<int> *R);
-    int attractLosing(int i, int r, std::vector<int> *S, std::vector<int> *R);
+    int attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H);
+    int attractLosing(int i, int r, std::vector<int> *H, std::vector<int> *R);
     void attractParT(lace_worker*, int pl, int cur, int r);
-    int attractPar(lace_worker*, int i, int r, std::vector<int>* R);
+    int attractPar(lace_worker*, int i, int r, std::vector<int>* R, std::vector<int>* H);
     // friend void updateOutcount_WORK(WorkerP*, Task*, int, int, ZLKSolver*);
 };
 
