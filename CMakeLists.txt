@@ -505,14 +505,14 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             set(BENCH_MODES basic calibrated reference random errors preprocess live experiment)
             if(NOT WIN32)
                 list(APPEND BENCH_MODES timeout) # worker processes
-            endif()
-            if(NOT WIN32)
                 # the interactive screens on a pseudo terminal
                 add_executable(test_pty test/bench/test_pty.cpp)
                 target_include_directories(test_pty PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
                 target_link_libraries(test_pty oink_testtools)
                 set_target_props(test_pty)
                 add_test(NAME TestBenchTerminal COMMAND test_pty $<TARGET_FILE:bench_solvers> $<TARGET_FILE:solve> ${CMAKE_CURRENT_SOURCE_DIR}/tests ${CMAKE_CURRENT_BINARY_DIR}/bench-smoke/terminal)
+                # several sessions of a few seconds each; slow under the sanitizers
+                set_tests_properties(TestBenchTerminal PROPERTIES TIMEOUT 300)
             endif()
             foreach(mode ${BENCH_MODES})
                 add_test(NAME TestBench_${mode}
@@ -522,6 +522,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
                         -DWORK=${CMAKE_CURRENT_BINARY_DIR}/bench-smoke/${mode}
                         -DMODE=${mode}
                         -P ${CMAKE_CURRENT_SOURCE_DIR}/test/bench/smoke.cmake)
+                set_tests_properties(TestBench_${mode} PROPERTIES TIMEOUT 300)
             endforeach()
             # without a terminal, test_solvers -i stops with an error instead of waiting
             add_test(NAME TestSolversInteractiveNoTerminal COMMAND test_solvers -i --tl ${CMAKE_CURRENT_SOURCE_DIR}/tests/vb001)
