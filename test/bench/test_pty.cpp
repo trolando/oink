@@ -284,7 +284,12 @@ test_experiment(const std::string& bench, const std::string& oink, const std::st
     again.send("\r");
     check("resumed experiment finishes", again.finish() == 0);
     check("all games finished", again.expect("(5/5 games)"));
-    check("the saved solvers", again.output.find("zlk") == std::string::npos);
+    // the output shows paths of the test, which may contain any text, such as "zlk"
+    std::string output = again.output;
+    for (const std::string& path : {bench, oink, games, work}) {
+        for (size_t at; (at = output.find(path)) != std::string::npos;) output.erase(at, path.size());
+    }
+    check("the saved solvers", output.find("zlk") == std::string::npos);
 }
 
 int
