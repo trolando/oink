@@ -76,6 +76,7 @@ public:
         solver.G.flip();
         solver.Q.resize(n);
         solver.Updated.resize(n);
+        solver.Deferred.resize(n);
         solver.Changed[0].resize(n);
         solver.Changed[1].resize(n);
         solver.escape_offset.resize(n);

@@ -524,6 +524,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
     int scanned = 0; // the ties up to here were scanned for heads
     E = G; // initialize escapes (for opponent) with G
     Updated.reset();
+    Deferred.reset();
     bool any_updated = false;
 
     // go from "best" to "worst" vertex
@@ -691,6 +692,9 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
         // solution is to keep track of a separate new set of measures pm2 and only replace pm with pm2 at the end. That
         // is likely faster.
         if (Updated[top]) {
+            // the lifts of this region are postponed to the next round, so shortcuts() must
+            // treat its vertices as changed (like lifted vertices)
+            for (const int v : Zlist) if (Z[v]) Deferred[v] = true;
             for (const int v : Zlist) Z[v] = false; // Z.reset()
             Zlist.clear();
             for (const int h : heads) OpenHead[h] = false;
@@ -1039,6 +1043,8 @@ PMTLSolver::shortcuts(const int player, Measures &pm, Measures &target1, Measure
     for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
         if (pm.is_top(v)) L[v] = true;
     }
+    // and the vertices of the regions that update() skipped: they may be liftable already
+    L |= Deferred;
     for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
         //logger << "pushing " << label_vertex(v) << std::endl;
         Q.push(v);
@@ -1270,6 +1276,7 @@ PMTLSolver::run()
     R.resize(nodecount());
     E.resize(nodecount());
     Updated = disabled;
+    Deferred.resize(nodecount());
     OpenHead.resize(nodecount());
     WasHead.resize(nodecount());
     bool c0 = true;

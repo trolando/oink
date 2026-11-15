@@ -19,6 +19,12 @@ All notable changes to Oink will be documented in this file.
 - The solvers PTL and SPPTL (progressive tangle learning), unpublished
   research variants; SPPTL could stop with vertices unsolved.
 
+### Fixed
+
+- PMA and PMTL could leave vertices unsolved: the attractor shortcut
+  (optimisation 2) ignored the regions whose lifts were postponed to the
+  next round. This bug dates from the first PMTL.
+
 ## [1.1.1] - 2026-11-14
 
 ### Fixed

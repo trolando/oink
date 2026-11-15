@@ -70,6 +70,7 @@ private:
     bitset R;
     bitset E;
     bitset Updated;
+    bitset Deferred; // the vertices of regions skipped in this round (their lifts are postponed)
     bitset OpenHead; // heads of the current region that can escape it
     bitset WasHead; // vertices that were an extra head in this round (at most once)
     bitset TZ; // the part of a partially closed region that does not depend on open heads
