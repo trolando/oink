@@ -1,0 +1,412 @@
+/*
+ * Copyright 2026 Tom van Dijk
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * Unit tests for bench_solvers: the statistics, the colours, the summary with
+ * its VBS and reference comparisons, the command line, the schedule, single
+ * trials and the worker process that isolates them.
+ */
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <csignal>
+#include <iostream>
+#include <limits>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "bench/bench.hpp"
+#include "bench/json.hpp"
+#include "bench/options.hpp"
+#include "bench/runner.hpp"
+#include "bench/summary.hpp"
+#include "bench/trial.hpp"
+#include "bench/worker.hpp"
+#include "common/terminal.hpp"
+#include "oink/game.hpp"
+#include "oink/game_builder.hpp"
+
+using namespace bench;
+
+static int failures = 0;
+
+static void
+check(const char* name, bool ok)
+{
+    if (!ok) {
+        std::cerr << "FAIL [" << name << "]" << std::endl;
+        failures++;
+    }
+}
+
+static bool
+near(double a, double b)
+{
+    return std::abs(a - b) <= 1e-12 * std::max(1.0, std::abs(b));
+}
+
+static void
+test_statistics()
+{
+    const Stats odd = summarize({5, 1, 3, 2, 4});
+    check("odd median", odd.samples == 5 && near(odd.median, 3));
+    check("odd quartiles", near(odd.q1, 2) && near(odd.q3, 4));
+    check("odd mad", near(odd.mad, 1));
+    const Stats even = summarize({4, 1, 3, 2});
+    check("even median interpolates", near(even.median, 2.5));
+    check("even quartiles interpolate", near(even.q1, 1.75) && near(even.q3, 3.25));
+    check("even mad", near(even.mad, 1));
+    const Stats empty = summarize({});
+    check("empty sample", empty.samples == 0 && empty.median == 0);
+
+    Cell cell;
+    cell.values = {3, 1, 2};
+    check("cell statistics", near(cell.stats().median, 2));
+    cell.values.push_back(10);
+    check("cell statistics follow new values", near(cell.stats().median, 2.5));
+    check("cell target", cell.target(7) == 7 && !cell.complete(7) && cell.complete(4));
+    cell.required = 4;
+    check("calibrated target", cell.target(7) == 4 && cell.complete(7));
+    cell.failure = Status::Timeout;
+    check("failed cell is not complete", !cell.complete(7));
+
+    check("calibration rounds up", calibrated_repetitions(0.001, 0.0003, 7, 100) == 7);
+    check("calibration target", calibrated_repetitions(0.001, 0.00001, 7, 1000) == 100);
+    check("calibration cap", calibrated_repetitions(0.001, 1e-9, 7, 50) == 50);
+    check("calibration of a slow game", calibrated_repetitions(0.001, 2.0, 3, 50) == 3);
+
+    check("duration us", duration(0.0000123) == "12.3 us");
+    check("duration small us", duration(0.00000123) == "1.23 us");
+    check("duration ms", duration(0.00456) == "4.56 ms");
+    check("duration s", duration(1.5) == "1.50 s");
+    check("setting seconds", seconds_setting(30) == "30 s" && seconds_setting(0.001) == "1 ms" && seconds_setting(0) == "off");
+}
+
+static void
+test_colors()
+{
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const auto colors = heatmap_colors({3, 1, 2, nan, 4});
+    check("fastest green", colors[1] == 82);
+    check("slowest red", colors[4] == 196);
+    check("middle between", colors[0] != 82 && colors[0] != 196 && colors[2] != 82 && colors[2] != 196);
+    check("NaN uncoloured", colors[3] == -1);
+    const auto ties = heatmap_colors({1, 1, 2});
+    check("ties share a colour", ties[0] == ties[1] && ties[0] == 82 && ties[2] == 196);
+    const auto equal = heatmap_colors({2, 2, 2});
+    check("all equal is neutral", equal[0] == 226 && equal[1] == 226 && equal[2] == 226);
+    const auto none = heatmap_colors({nan, -1});
+    check("nothing to rank", none[0] == -1 && none[1] == -1);
+}
+
+static void
+test_reference()
+{
+    const std::vector<SolverRun> roster = {SolverRun("tl", ""), SolverRun("tlpar", "parmin=1"), SolverRun("tlpar", "parmin=2")};
+    check("no reference", !reference_index(std::nullopt, roster));
+    check("reference none", !reference_index(std::string("none"), roster));
+    check("reference first", reference_index(std::string("first"), roster) == size_t(0));
+    check("reference by id", reference_index(std::string("tl"), roster) == size_t(0));
+    check("reference by name", reference_index(std::string("tlpar[parmin=2]"), roster) == size_t(2));
+    bool ambiguous = false;
+    try {
+        reference_index(std::string("tlpar"), roster);
+    } catch (const std::runtime_error&) {
+        ambiguous = true;
+    }
+    check("ambiguous reference rejected", ambiguous);
+    bool unselected = false;
+    try {
+        reference_index(std::string("zlk"), roster);
+    } catch (const std::runtime_error&) {
+        unselected = true;
+    }
+    check("unselected reference rejected", unselected);
+}
+
+/** A game with cells whose medians are <medians> (NaN: failed). */
+static Case
+game_with(size_t index, const std::vector<double>& medians)
+{
+    Case game;
+    game.index = index;
+    game.name = "g" + std::to_string(index);
+    game.cells.resize(medians.size());
+    for (size_t s = 0; s < medians.size(); s++) {
+        if (std::isnan(medians[s])) {
+            game.cells[s].failure = Status::Timeout;
+        } else {
+            game.cells[s].values = {medians[s]};
+        }
+    }
+    return game;
+}
+
+static void
+test_totals()
+{
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    std::vector<Case> games;
+    games.push_back(game_with(0, {1.0, 2.0, 1.005})); // solver 0 and 2 tie for fastest
+    games.push_back(game_with(1, {4.0, 2.0, nan}));   // solver 1 uniquely fastest
+    games.push_back(game_with(2, {3.0, 3.0, 9.0}));   // 0 and 1 tie
+    const auto totals = compute_totals(games, 3, 3, 1, size_t(0));
+    check("coverage", totals.solvers[0].complete == 3 && totals.solvers[2].complete == 2 && !totals.complete_coverage);
+    check("failures", totals.solvers[2].failed == 1 && totals.solvers[0].failed == 0);
+    check("sums", near(totals.solvers[0].sum, 8) && near(totals.solvers[1].sum, 7));
+    check("vbs", totals.solvers[0].vbs_wins == 0 && totals.solvers[0].vbs_ties == 2);
+    check("vbs unique", totals.solvers[1].vbs_wins == 1 && totals.solvers[1].vbs_ties == 1);
+    check("vbs tie band", totals.solvers[2].vbs_ties == 1);
+    // against reference solver 0: ratios 0.5, 2, 1
+    const SolverTotals& t = totals.solvers[1];
+    check("pairs", t.paired == 3 && t.wins == 1 && t.losses == 1 && t.ties == 1);
+    check("geometric mean", t.geomean() && near(*t.geomean(), 1.0));
+    check("one-sided pairs", totals.solvers[2].paired == 2 && totals.solvers[2].reference_only == 1);
+    check("order: full coverage by sum, then the rest", totals.order == std::vector<size_t>({1, 0, 2}));
+
+    const auto none = compute_totals(games, 3, 3, 1, std::nullopt);
+    check("no reference, no pairs", none.solvers[1].paired == 0 && !none.solvers[1].geomean());
+
+    // the printed summary, plain and styled
+    const std::vector<SolverRun> roster = {SolverRun("tl", ""), SolverRun("zlk", ""), SolverRun("npp", "")};
+    RunDetails details;
+    details.schedule_seed = 42;
+    std::ostringstream plain;
+    print_summary(plain, totals, roster, details, false);
+    check("plain summary has no escapes", plain.str().find('\033') == std::string::npos);
+    check("summary names the reference", plain.str().find("Reference: tl.") != std::string::npos);
+    check("summary has the comparison columns", plain.str().find("geom. speedup") != std::string::npos && plain.str().find("W/T/L") != std::string::npos);
+    check("summary has the replay seed", plain.str().find("--bench-seed=42") != std::string::npos);
+    std::ostringstream plain_none;
+    print_summary(plain_none, none, roster, details, false);
+    check("no comparison columns without a reference", plain_none.str().find("W/T/L") == std::string::npos && plain_none.str().find("VBS W/T") != std::string::npos);
+
+    std::vector<Case> full;
+    full.push_back(game_with(0, {1.0, 2.0, 3.0}));
+    full.push_back(game_with(1, {1.0, 2.0, 3.0}));
+    std::ostringstream styled;
+    print_summary(styled, compute_totals(full, 2, 3, 1, std::nullopt), roster, details, true);
+    check("styled sums are coloured", styled.str().find("\033[38;5;82m") != std::string::npos && styled.str().find("\033[38;5;196m") != std::string::npos);
+}
+
+static void
+test_json()
+{
+    check("json escapes", json_string("a\"b\\c\n\x01") == "\"a\\\"b\\\\c\\n\\u0001\"");
+    Json json;
+    json.add("s", "x").add("i", 3).add("b", true).add("d", 0.5).null("n").add("o", std::optional<int>());
+    check("json object", json.str() == "{\"s\":\"x\",\"i\":3,\"b\":true,\"d\":0.5,\"n\":null,\"o\":null}");
+    check("json non-finite", json_number(std::numeric_limits<double>::infinity()) == "null");
+}
+
+/** Parse a command line given as a list of words. */
+static bool
+parse(const std::vector<std::string>& words, Options& options, std::vector<SolverRun>& solvers)
+{
+    std::vector<const char*> argv = {"bench_solvers"};
+    for (const auto& word : words) argv.push_back(word.c_str());
+    std::ostringstream out;
+    return parse_command_line((int)argv.size(), argv.data(), options, solvers, out);
+}
+
+static void
+test_command_line()
+{
+    {
+        Options o;
+        std::vector<SolverRun> solvers;
+        parse({"some/dir"}, o, solvers);
+        check("default roster", solvers.size() == 7 && solvers[0].name == "tl" && solvers[6].name == "zlk");
+        check("default sampling", o.repeats == 7 && o.warmups == 1 && near(o.min_solve_time, 0.001) && o.max_repeats == 10000);
+        check("inputs", o.inputs == std::vector<std::string>({"some/dir"}));
+        check("isolation by default", o.isolate == Worker::supported() && (o.isolate ? near(o.timeout, 30) : o.timeout == 0));
+        check("series seed from the schedule seed", o.game_seed == series_seed(o.seed));
+    }
+    {
+        Options o;
+        std::vector<SolverRun> solvers;
+        parse({"--zlk", "--tlpar=parmin=1,chunk=8", "--tl", "--quick", "--bench-seed=9", "--seed=4", "--reference=tl"}, o, solvers);
+        check("solvers in the given order", solvers.size() == 3 && solvers[0].name == "zlk" && solvers[1].name == "tlpar[parmin=1,chunk=8]" && solvers[2].name == "tl");
+        check("quick", o.repeats == 1 && o.warmups == 0 && o.min_solve_time == 0);
+        check("seeds", o.seed == 9 && o.game_seed == 4 && o.game_seed_given);
+        check("reference option", o.reference && *o.reference == "tl");
+    }
+    {
+        Options o;
+        std::vector<SolverRun> solvers;
+        parse({"--tlpar", "-c", "parmin=2,chunk=4", "--in-process", "--quick", "--repeat=3"}, o, solvers);
+        check("-c configures the single solver", solvers.size() == 1 && solvers[0].name == "tlpar[parmin=2,chunk=4]");
+        check("in-process has no timeout", !o.isolate && o.timeout == 0);
+        check("explicit setting overrides quick", o.repeats == 3);
+    }
+    {
+        Options o;
+        std::vector<SolverRun> solvers;
+        check("help returns false", !parse({"--help"}, o, solvers));
+    }
+    bool unknown = false;
+    try {
+        Options o;
+        std::vector<SolverRun> solvers;
+        parse({"--no-such-option"}, o, solvers);
+    } catch (const std::runtime_error&) {
+        unknown = true;
+    }
+    check("unknown option rejected", unknown);
+
+    bool bad_config = false;
+    try {
+        Options o;
+        std::vector<SolverRun> solvers;
+        parse({"--tlpar=bogus"}, o, solvers);
+        validate(o, solvers);
+    } catch (const std::runtime_error&) {
+        bad_config = true;
+    }
+    check("invalid configuration rejected", bad_config);
+}
+
+static void
+test_schedule()
+{
+    Options o;
+    o.count = 5;
+    o.game_seed = 77;
+    const auto a = plan_games(o, "");
+    const auto b = plan_games(o, "");
+    check("random plan", a.size() == 5 && a[0].seed && a[0].path.empty());
+    bool same = true;
+    for (size_t i = 0; i < a.size(); i++) same = same && a[i].seed == b[i].seed;
+    check("random plan is reproducible", same);
+    o.count = 1;
+    check("a single random game uses the series seed", plan_games(o, "")[0].seed == uint32_t(77));
+
+    check("trial seeds depend on the round", trial_seed(1, 2, 0) != trial_seed(1, 2, 1));
+    check("trial seeds depend on the game", trial_seed(1, 2, 0) != trial_seed(1, 3, 0));
+    check("round seeds", round_seed(1, 2, 0) != round_seed(1, 2, 1));
+
+    Options files;
+    files.inputs = {OINK_TEST_DATA_DIR};
+    files.seed = 5;
+    const auto first = plan_games(files, "");
+    const auto again = plan_games(files, "");
+    files.seed = 6;
+    const auto other = plan_games(files, "");
+    files.sort = true;
+    const auto sorted = plan_games(files, "");
+    bool reproducible = first.size() == again.size();
+    for (size_t i = 0; reproducible && i < first.size(); i++) reproducible = first[i].path == again[i].path;
+    bool differs = false;
+    for (size_t i = 0; i < first.size() && i < other.size(); i++) differs = differs || first[i].path != other[i].path;
+    bool ordered = true;
+    for (size_t i = 1; i < sorted.size(); i++) ordered = ordered && sorted[i-1].path < sorted[i].path;
+    check("directory inputs found", first.size() > 100);
+    check("only parity games", std::none_of(first.begin(), first.end(), [](const PlannedGame& g) { return g.path.find("dot.sh") != std::string::npos; }));
+    check("shuffle is reproducible", reproducible);
+    check("shuffle depends on the seed", differs);
+    check("--sort keeps the sorted order", ordered);
+}
+
+/** A small game: an even and an odd cycle connected by a choice. */
+static pg::Game
+small_game()
+{
+    pg::GameBuilder b(4);
+    b.set_priority(0, 0);
+    b.set_owner(0, pg::Player::Even);
+    b.add_edge(0, 1);
+    b.add_edge(0, 2);
+    b.set_priority(1, 2);
+    b.set_owner(1, pg::Player::Even);
+    b.add_edge(1, 0);
+    b.set_priority(2, 3);
+    b.set_owner(2, pg::Player::Odd);
+    b.add_edge(2, 3);
+    b.set_priority(3, 4);
+    b.set_owner(3, pg::Player::Even);
+    b.add_edge(3, 2);
+    b.add_edge(3, 3);
+    pg::Game game = b.build();
+    game.ensure_sorted();
+    return game;
+}
+
+static void
+test_trials()
+{
+    const pg::Game game = small_game();
+    Options o;
+    o.preprocess = false;
+    std::ostringstream log;
+    const auto prepared = prepare(game, o, log);
+    check("prepared without preprocessing", prepared->identity() && prepared->info.residual_vertices == 4);
+    for (const char* id : {"tl", "zlk", "fpi", "npp", "psi"}) {
+        const Trial trial = execute(*prepared, SolverRun(id, ""), o, 1);
+        check("trial verified", trial.status == Status::Ok && trial.solve >= 0 && trial.effective_solver == id);
+    }
+    const Trial bad = execute(*prepared, SolverRun("mspm", "bogus"), o, 1);
+    check("bad options fail the trial", bad.status == Status::SolverError && !bad.message.empty());
+
+#ifndef _WIN32
+    volatile std::sig_atomic_t quit = 0;
+    ui::InterruptGuard guard(&quit);
+    int calls = 0;
+    Worker worker([&](size_t solver, uint32_t seed) {
+        calls++; // counted in the child only
+        if (solver == 1) std::raise(SIGKILL);
+        if (solver == 2) std::this_thread::sleep_for(std::chrono::seconds(10));
+        Trial trial = execute(*prepared, SolverRun("tl", ""), o, seed);
+        trial.message = "seed " + std::to_string(seed);
+        return trial;
+    });
+    const Trial ok = worker.run(0, 12, 5, &quit);
+    check("worker trial", ok.status == Status::Ok && ok.message == "seed 12" && ok.effective_solver == "tl");
+    const Trial again = worker.run(0, 13, 5, &quit);
+    check("worker serves several trials", again.status == Status::Ok && worker.generation() == 1);
+    check("trials run in the child", calls == 0);
+    const Trial crash = worker.run(1, 0, 5, &quit);
+    check("worker crash", crash.status == Status::Crash && crash.message.find("signal") != std::string::npos && !worker.running());
+    const auto start = std::chrono::steady_clock::now();
+    const Trial slow = worker.run(2, 0, 0.3, &quit);
+    const double waited = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    check("worker timeout", slow.status == Status::Timeout && waited < 5 && worker.generation() == 2);
+    const Trial after = worker.run(0, 14, 5, &quit);
+    check("fresh worker after a failure", after.status == Status::Ok && worker.generation() == 3);
+    quit = 1;
+    const Trial stopped = worker.run(0, 15, 5, &quit);
+    check("interrupted worker", stopped.status == Status::Interrupted);
+    worker.stop();
+#endif
+}
+
+int
+test_bench()
+{
+    test_statistics();
+    test_colors();
+    test_reference();
+    test_totals();
+    test_json();
+    test_command_line();
+    test_schedule();
+    test_trials();
+    if (failures) std::cerr << failures << " bench test(s) failed" << std::endl;
+    return failures ? 1 : 0;
+}

@@ -40,6 +40,7 @@ int test_game();
 int test_verifier();
 int test_terminal();
 int test_chooser();
+int test_bench();
 
 namespace {
 
@@ -67,6 +68,7 @@ const Test tests[] = {
     {"verifier", test_verifier},
     {"terminal", test_terminal},
     {"chooser", test_chooser},
+    {"bench", test_bench},
 };
 
 int

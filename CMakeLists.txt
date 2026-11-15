@@ -269,6 +269,22 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/common/external_solver.cpp
         )
         set_target_props(oink_testtools)
+
+        # bench_solvers, apart from its main, so the unit tests can use it
+        add_library(oink_bench STATIC
+            test/bench/core.cpp
+            test/bench/display.cpp
+            test/bench/options.cpp
+            test/bench/report.cpp
+            test/bench/runner.cpp
+            test/bench/summary.cpp
+            test/bench/trial.cpp
+            test/bench/worker.cpp
+        )
+        target_include_directories(oink_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+        target_compile_definitions(oink_bench PRIVATE OINK_BENCH_BUILD_TYPE="$<CONFIG>")
+        target_link_libraries(oink_bench oink_testtools)
+        set_target_props(oink_bench)
     endif()
 
     if(OINK_BUILD_TOOLS)
@@ -276,6 +292,10 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         target_sources(test_solvers PRIVATE test/test_solvers.cpp)
         target_link_libraries(test_solvers oink_testtools)
         set_target_props(test_solvers)
+        add_executable(bench_solvers test/bench/main.cpp)
+        target_include_directories(bench_solvers PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+        target_link_libraries(bench_solvers oink_bench oink_testtools)
+        set_target_props(bench_solvers)
         add_executable(test_measures)
         target_sources(test_measures PRIVATE test/test_measures.cpp)
         set_target_props(test_measures)
@@ -366,8 +386,10 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_verifier.cpp
             test/test_terminal.cpp
             test/test_chooser.cpp
+            test/test_bench.cpp
         )
-        target_link_libraries(test_unit oink_testtools)
+        target_include_directories(test_unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+        target_link_libraries(test_unit oink_bench oink_testtools)
         set_target_props(test_unit)
         target_compile_definitions(test_unit PRIVATE OINK_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
         if(BZIP2_FOUND)
@@ -393,6 +415,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestVerifier COMMAND test_unit verifier)
         add_test(NAME TestTerminal COMMAND test_unit terminal)
         add_test(NAME TestChooser COMMAND test_unit chooser)
+        add_test(NAME TestBench COMMAND test_unit bench)
 
         if(OINK_BUILD_TOOLS) # the solver tests use test_solvers
             # test fixpoint algorithms
@@ -472,6 +495,20 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverTLscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tl --scc)
             add_test(NAME TestSolverZLKscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk --scc)
             add_test(NAME TestSolverPPscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp --scc)
+            # short headless runs of bench_solvers (see test/bench/smoke.cmake)
+            set(BENCH_MODES basic calibrated reference random errors)
+            if(NOT WIN32)
+                list(APPEND BENCH_MODES timeout) # worker processes
+            endif()
+            foreach(mode ${BENCH_MODES})
+                add_test(NAME TestBench_${mode}
+                    COMMAND ${CMAKE_COMMAND}
+                        -DBENCH=$<TARGET_FILE:bench_solvers>
+                        -DDATA=${CMAKE_CURRENT_SOURCE_DIR}/tests
+                        -DWORK=${CMAKE_CURRENT_BINARY_DIR}/bench-smoke/${mode}
+                        -DMODE=${mode}
+                        -P ${CMAKE_CURRENT_SOURCE_DIR}/test/bench/smoke.cmake)
+            endforeach()
             # without a terminal, test_solvers -i stops with an error instead of waiting
             add_test(NAME TestSolversInteractiveNoTerminal COMMAND test_solvers -i --tl ${CMAKE_CURRENT_SOURCE_DIR}/tests/vb001)
             set_tests_properties(TestSolversInteractiveNoTerminal PROPERTIES PASS_REGULAR_EXPRESSION "needs a (POSIX )?terminal")
