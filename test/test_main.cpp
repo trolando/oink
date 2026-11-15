@@ -38,6 +38,8 @@ int test_in_edge_map();
 int test_builder();
 int test_game();
 int test_verifier();
+int test_terminal();
+int test_chooser();
 
 namespace {
 
@@ -63,6 +65,8 @@ const Test tests[] = {
     {"builder", test_builder},
     {"game", test_game},
     {"verifier", test_verifier},
+    {"terminal", test_terminal},
+    {"chooser", test_chooser},
 };
 
 int

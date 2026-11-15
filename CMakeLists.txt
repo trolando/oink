@@ -260,6 +260,16 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     option(OINK_BUILD_EXAMPLES "Build the library usage examples" ON)
     option(OINK_BUILD_TESTS "Build tests" ON)
 
+    # Support code shared by the test tools and their unit tests: the terminal
+    # and the interactive solver chooser.
+    if(OINK_BUILD_TOOLS OR OINK_BUILD_TESTS)
+        add_library(oink_testtools STATIC
+            test/common/terminal.cpp
+            test/common/chooser.cpp
+        )
+        set_target_props(oink_testtools)
+    endif()
+
     if(OINK_BUILD_TOOLS)
         add_executable(test_solvers)
         target_sources(test_solvers PRIVATE test/test_solvers.cpp)
@@ -352,7 +362,10 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_builder.cpp
             test/test_game.cpp
             test/test_verifier.cpp
+            test/test_terminal.cpp
+            test/test_chooser.cpp
         )
+        target_link_libraries(test_unit oink_testtools)
         set_target_props(test_unit)
         target_compile_definitions(test_unit PRIVATE OINK_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
         if(BZIP2_FOUND)
@@ -376,6 +389,8 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestBuilder COMMAND test_unit builder)
         add_test(NAME TestGame COMMAND test_unit game)
         add_test(NAME TestVerifier COMMAND test_unit verifier)
+        add_test(NAME TestTerminal COMMAND test_unit terminal)
+        add_test(NAME TestChooser COMMAND test_unit chooser)
 
         if(OINK_BUILD_TOOLS) # the solver tests use test_solvers
             # test fixpoint algorithms
