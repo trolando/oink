@@ -223,25 +223,34 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
     const int pl = pr & 1;
 
     /**
-     * Starting at <i>, attract head nodes until "inversion"
+     * Starting at <i>, attract head nodes until "inversion".
+     * All consecutive heads are added at once and then attracted together, which is cheaper than
+     * attracting them one by one: a head that would be attracted by an earlier head needs no
+     * escape count. The result is the same region. A vertex of the other parity that the heads
+     * attract does not end the run of heads (Maks Verver optimization).
      */
 
-    for (; i>=0; i--) {
-        const int ri = region[i].load(memory_order_relaxed);
-        if (ri == DIS or ri >= 0) continue; // cannot be attracted
+    while (true) {
+        for (; i>=0; i--) {
+            const int ri = region[i].load(memory_order_relaxed);
+            if (ri == DIS or ri >= 0) continue; // cannot be attracted
 
-        // uncomment the next line to attract until lower priority instead of until inversion
-        if (!to_inversion and priority(i) != pr) break; // until other priority
-        if ((priority(i)&1) != pl) break; // until parity inversion (Maks Verver optimization)
+            // uncomment the next line to attract until lower priority instead of until inversion
+            if (!to_inversion and priority(i) != pr) break; // until other priority
+            if ((priority(i)&1) != pl) break; // until parity inversion (Maks Verver optimization)
 
-        region[i].store(r, memory_order_relaxed);
-        winning[i] = pl;
-        strategy[i] = -1; // head nodes do not have a strategy yet!
-        Q.push(i);
+            region[i].store(r, memory_order_relaxed);
+            winning[i] = pl;
+            strategy[i] = -1; // head nodes do not have a strategy yet!
+            Q.push(i);
 
 #ifndef NDEBUG
-        if (trace >= 2) logger << KC"head\033[m " << label_vertex(i) << std::endl;
+            if (trace >= 2) logger << KC"head\033[m " << label_vertex(i) << std::endl;
 #endif
+        }
+
+        // no new heads: <i> is -1 or a vertex that is not attracted and ends the run
+        if (Q.empty()) break;
 
         while (!Q.empty()) {
             int cur = Q.pop();
@@ -250,8 +259,9 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
             // attract to <cur>
             for (auto curedge = ins(cur); *curedge != -1; curedge++) {
                 int from = *curedge;
+                if (from > i) continue; // above <i>: not in the subgame, or already attracted
                 const int rf = region[from].load(memory_order_relaxed);
-                if (from >= i or rf == DIS or rf >= 0) continue; // cannot be attracted
+                if (rf == DIS or rf >= 0) continue; // cannot be attracted
 
                 if (owner(from) == pl) {
                     // owned by same parity
@@ -292,6 +302,8 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R)
                 }
             }
         }
+
+        // the heads may have attracted <i>; if so, the run of heads continues below it
     }
 
     return i;
