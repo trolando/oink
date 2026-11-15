@@ -207,7 +207,13 @@ main(int argc, char **argv)
     opts.allow_unrecognised_options();
 
     /* Parse command line */
-    auto options = opts.parse(argc, argv);
+    cxxopts::ParseResult options;
+    try {
+        options = opts.parse(argc, argv);
+    } catch (const cxxopts::exceptions::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return 1;
+    }
     auto unmatched = options.unmatched();
 
     if (options.count("help")) {

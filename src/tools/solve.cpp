@@ -207,7 +207,13 @@ int main(int argc, char **argv)
 
     /* Parse command line */
     opts.parse_positional(std::vector<std::string>({"input", "output"}));
-    auto options = opts.parse(argc, argv);
+    cxxopts::ParseResult options;
+    try {
+        options = opts.parse(argc, argv);
+    } catch (const cxxopts::exceptions::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return 1;
+    }
 
     if (options.count("help")) {
         std::cout << opts.help() << std::endl;
