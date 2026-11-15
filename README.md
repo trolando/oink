@@ -194,7 +194,8 @@ oink          | The main tool for solving parity games
 verify        | Small tool that just verifies a solution (can be done by Oink too)
 nudge         | Swiss army knife for transforming parity games
 dotty         | Small tool that just generates a .dot graph of a parity game
-test\_solvers | Main testing tool for parity game solvers and benchmarking
+test\_solvers | Main testing tool for parity game solvers (`-i` chooses the solvers interactively)
+bench\_solvers | Benchmarks the solvers: verified, repeated trials, a live table and resumable experiments ([guide](test/bench/README.md))
 multistrat    | Inspects and benchmarks the multi-strategy solvers FPIM and FPJM
 
 ### Game generators
@@ -245,7 +246,7 @@ Oink does **not** require Boost.
 
 ### Building
 
-Oink uses an out-of-tree CMake build. By default it builds the library `liboink`, the main tool `oink`, the test runner `test_solvers` and the example program (use `ccmake` or `-D` options such as `OINK_BUILD_EXTRA_TOOLS=ON` to change this). Without `-DCMAKE_BUILD_TYPE=...` the build type defaults to `Release`; pass `-DCMAKE_BUILD_TYPE=Debug` for a debug build.
+Oink uses an out-of-tree CMake build. By default it builds the library `liboink`, the main tool `oink`, the test runner `test_solvers`, the benchmark tool `bench_solvers` and the example program (use `ccmake` or `-D` options such as `OINK_BUILD_EXTRA_TOOLS=ON` to change this). Without `-DCMAKE_BUILD_TYPE=...` the build type defaults to `Release`; pass `-DCMAKE_BUILD_TYPE=Debug` for a debug build.
 
 ```
 cmake -S . -B build

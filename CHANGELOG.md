@@ -2,6 +2,18 @@
 
 All notable changes to Oink will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- The tool `bench_solvers` benchmarks the solvers with verified, repeated
+  and interleaved trials, in worker processes with timeouts, optional
+  once-per-game preprocessing, a live table with a review, JSON Lines and
+  CSV reports, and named experiments that can be resumed. See
+  `test/bench/README.md`.
+- `test_solvers -i` chooses the solvers and their configurations in an
+  interactive screen.
+
 ## [1.1.1] - 2026-11-14
 
 ### Fixed
