@@ -86,6 +86,9 @@ protected:
     bitset escapes; // which escapes we considered
 
     bitset Z; // current region being grown
+    bitset C; // the vertices in G with a region below <cpr> or unassigned (the candidates
+              // for attraction when growing region <cpr>; see setCandidates)
+    int cpr = -1; // see <C> (-1: to be computed again)
     bitset G; // the unsolved game
     bitset S; // dominion vertices found during extraction
 
@@ -133,6 +136,7 @@ protected:
     void invalidateSolved();
     void solveDominion(bitset &Dom, const int pl, const bool attract);
     void setMembers(const int p);
+    void setCandidates(const int p);
     void improveRegion(int p);
     void promote();
     bool extractTangles(int i, bitset &R, int *str);

@@ -72,6 +72,7 @@ public:
         G.resize(7);
         G.flip();
         Z.resize(7);
+        C.resize(7);
         tangled.resize(7);
         rcount.resize(8);
         nonempty[0].resize(8);
