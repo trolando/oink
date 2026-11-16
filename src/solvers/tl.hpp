@@ -51,6 +51,8 @@ protected:
 
     uintqueue Q; // main queue when attracting vertices (during a pass: the vertices of its regions)
 
+    const int *inedges; // the in-edges of the game (each list ends with -1)
+    int *firstin; // for each vertex, its first in-edge in <inedges> (a copy, see prefetchAhead)
     int *str; // stores currently assigned strategy of each vertex
     unsigned int *escs; // stores remaining escapes of each vertex
     unsigned int *gdeg; // number of successors in <G> of each vertex in <G>, or 0 if not known yet
@@ -92,6 +94,7 @@ protected:
 
     bitset C; // during an attraction: the vertices in <R> but not in <Z>
     unsigned int ncand = 0; // the number of vertices in <C>
+    bool prefetch = false; // prefetch the in-edges of the next vertices to attract from (see prefetchAhead)
 
     bitset R; // remaining region (in tl)
     bitset Z; // current region (in tl)
@@ -104,6 +107,7 @@ protected:
     bitset Odd; // accumulate odd regions
 
     inline void attractVertices(const int pl, int v, bitset &R, bitset &Z);
+    inline void prefetchAhead(const unsigned int qh);
     bool attractTangle(const int t, const int v0, const int pl, bitset &R, bitset &Z, int maxpr);
     int tangleTarget(const int t);
     void addTangle(const int pr, const int *strat);

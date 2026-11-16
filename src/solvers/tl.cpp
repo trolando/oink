@@ -45,7 +45,7 @@ TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
     // (nothing left to attract, see setCandidates)
     if (ncand == 0) return;
     // attract vertices with an edge to <v>
-    for (auto curedge = ins(v); *curedge != -1; curedge++) {
+    for (auto curedge = inedges + firstin[v]; *curedge != -1; curedge++) {
         const int from = *curedge;
         // (only vertices in <R> but not in <Z>; the heads of <pl> get their strategy after the
         // attraction, see tl)
@@ -92,6 +92,27 @@ TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
 #endif
         }
     }
+}
+
+
+/**
+ * On large games, the attraction mostly waits for memory: every vertex taken from the queue
+ * reads the start of its in-edges, and then its in-edges, both at random places. The queue
+ * holds the next vertices, so before attracting via <Q[qh]>, prefetch the in-edges of the
+ * vertex <PREFETCH_AHEAD> places further, and the start of the in-edges of the vertex twice as
+ * far (TL keeps its own copy of these starts, in <firstin>, to know their address). Also
+ * prefetching the escape counters and strategies of the predecessors cost more than it saved.
+ */
+static const unsigned int PREFETCH_AHEAD = 16;
+static const int PREFETCH_MIN = 131072; // (vertices; the data of smaller games is in the caches)
+
+__attribute__((always_inline)) inline void
+TLSolver::prefetchAhead(const unsigned int qh)
+{
+    if (!prefetch or ncand == 0) return;
+    const unsigned int qs = Q.size();
+    if (qh+2*PREFETCH_AHEAD < qs) __builtin_prefetch(&firstin[Q[qh+2*PREFETCH_AHEAD]]);
+    if (qh+PREFETCH_AHEAD < qs) __builtin_prefetch(inedges + firstin[Q[qh+PREFETCH_AHEAD]]);
 }
 
 
@@ -574,6 +595,7 @@ TLSolver::analyseLazies(const bool broken)
             setCandidates(G, S);
             for (unsigned int qh = 0; qh < Q.size(); qh++) {
                 const int v = Q[qh];
+                prefetchAhead(qh);
                 attractVertices(pl, v, G, S);
                 attractTangles(pl, v, G, S, INT_MAX);
             }
@@ -733,6 +755,7 @@ TLSolver::tl(void)
             }
             for (; qn < Q.size(); qn++) {
                 const int v = Q[qn];
+                prefetchAhead(qn);
                 R[v] = false; // remove from <R>
                 if (kept) regidx[v] = ridx; // (see the end of tl)
                 attractVertices(pl, v, R, Z);
@@ -779,6 +802,7 @@ TLSolver::tl(void)
             // (the queue is processed in FIFO order)
             for (; qn < Q.size(); qn++) {
                 const int v = Q[qn];
+                prefetchAhead(qn);
                 R[v] = false; // remove from <R>
                 if (kept) regidx[v] = ridx; // (see the end of tl)
                 attractVertices(pl, v, R, Z);
@@ -941,6 +965,7 @@ TLSolver::tl(void)
                         setCandidates(G, Z);
                         for (unsigned int qh = 0; qh < Q.size(); qh++) {
                             const int v = Q[qh];
+                            prefetchAhead(qh);
                             attractVertices(pl, v, G, Z);
                             attractTangles(pl, v, G, Z, INT_MAX);
                         }
@@ -988,6 +1013,7 @@ TLSolver::tl(void)
                         setCandidates(G, S);
                         for (unsigned int qh = 0; qh < Q.size(); qh++) {
                             const int v = Q[qh];
+                            prefetchAhead(qh);
                             attractVertices(pl, v, G, S);
                             attractTangles(pl, v, G, S, INT_MAX);
                         }
@@ -1065,6 +1091,10 @@ TLSolver::run()
     tin_cap = new unsigned int[nodecount()];
     has_tin.resize(nodecount());
     str = new int[nodecount()];
+    inedges = game.inedges();
+    firstin = new int[nodecount()];
+    for (int v=0; v<nodecount(); v++) firstin[v] = game.firstin(v);
+    prefetch = nodecount() >= PREFETCH_MIN;
     escs = new unsigned int[nodecount()];
     gdeg = new unsigned int[nodecount()];
     regidx = new int[nodecount()];
@@ -1126,6 +1156,7 @@ TLSolver::run()
     delete[] regidx;
     delete[] astr;
     delete[] str;
+    delete[] firstin;
     delete[] pea_vidx;
     delete[] escs;
     delete[] gdeg;
