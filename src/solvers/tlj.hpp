@@ -33,10 +33,12 @@ namespace pg {
  * A closed region whose escapes all go to the highest region of its player is
  * learned as one region tangle (as in tl) instead of being decomposed.
  *
- * Visits caused only by promoted tangles reuse the surviving closure and process
- * newly attracted vertices. New targets and invalidated heads require complete
- * region replay. Current TL also retains unaffected regions; persistence alone
- * does not determine how much work the two solvers perform.
+ * Visits caused by promoted tangles, new heads or a dominion reuse the surviving
+ * closure and only process the newly attracted vertices: after a dominion, the
+ * vertices that were reset, that lost successors, or the tangles that lost
+ * escapes are remembered for the regions that may now attract them. New targets
+ * (vertices pulled up into a region) require a complete region replay. When a
+ * dominion resets most of the game, all regions are computed again.
  *
  * Reference: Lapauw, Bruynooghe, Denecker, "Improving Parity Game Solvers with
  * Justifications", VMCAI 2020 (Algorithm 7).
@@ -93,6 +95,7 @@ protected:
     bitset C; // the vertices in G with a region below <cpr> or unassigned (the candidates
               // for attraction when growing region <cpr>; see setCandidates)
     int cpr = -1; // see <C> (-1: to be computed again)
+    bitset A; // when attracting to a dominion: the vertices in G that are not in it
     bitset G; // the unsolved game
     bitset S; // dominion vertices found during extraction
 
@@ -103,6 +106,11 @@ protected:
     };
     std::vector<RegionWork> region_work;
     std::vector<int> pending_next; // next promoted tangle at the same target region
+    std::vector<char> tpending; // whether a tangle is in the pending list of a region
+    std::vector<std::vector<int>> pendv; // for each region priority, the vertices that may now
+                                         // be attracted into it (see seedVertex)
+    std::vector<int> resets; // the vertices reset after a dominion (see solveDominion)
+    bool repairing = false; // whether resets are recorded in <resets> (see invalidate)
     bitset extracted; // priorities whose (closed) region has been extracted at its current size
 
     std::vector<int> gdeg; // the number of successors in G of each vertex in G
@@ -122,7 +130,7 @@ protected:
     std::vector<int> gfirst; // for each region priority, the first of its heads (vertices)
     std::vector<int> gend; // for each region priority, one past the last of its heads (0: none)
     uintqueue zlist; // the vertices of <Z>, in the order of attraction (its queue)
-    int zlast = -1; // the region whose vertices (its members) are in <Z>, if any
+    bitset M; // scratch for removing duplicates from <mpool> (see setMembers)
     std::vector<int> heads; // the heads of the current region, in order
     int sweep_lo = 0; // the nonempty regions from <sweep_lo> up to the current one are
                       // marked dirty (see run)
@@ -139,10 +147,14 @@ protected:
     void dropTangle(const int t);
     bool learnRegion(const int p, const int pl, const int h);
     void invalidateOpponent(const int start, const int p, const int pl);
-    void invalidateSolved();
+    bool invalidateSolved(const size_t limit);
+    void resetAll();
     void solveDominion(bitset &Dom, const int pl, const bool attract);
-    void setMembers(const int p);
+    void setMembers(const int p, const bool keep_old);
     void setCandidates(const int p);
+    void seedVertex(const int x, const int limit);
+    void seedForced(const int x);
+    void seedTangle(const int t);
     void improveRegion(int p);
     void promote();
     bool extractTangles(int i, bitset &R, int *str);

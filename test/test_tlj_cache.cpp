@@ -78,6 +78,7 @@ public:
         nonempty[0].resize(8);
         nonempty[1].resize(8);
         anyregion.resize(8);
+        dirty.resize(8);
         zlist.resize(7);
         flipped.resize(7);
         pull_lo = p;

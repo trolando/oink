@@ -181,6 +181,7 @@ pearce_again:
         tcpos.push_back(0);
         tblock.push_back(-1);
         pending_next.push_back(-1);
+        tpending.push_back(0);
 
         tangles++;
         tangle.clear();
@@ -235,7 +236,8 @@ TLJSolver::invalidate(const int m)
 {
     const int r = region[m];
     dirty[rprio[m]] = true;
-    region_work[rprio[m]].replay = true;
+    // (after a dominion, the vertices that can attract <m> again are found from <resets>)
+    if (!repairing) region_work[rprio[m]].replay = true;
     if (rprio[m] == r) {
         if (owner(m) == (r&1)) str[m] = -1;
         extracted[r] = false; // (its tangles change: each contains a head)
@@ -246,6 +248,7 @@ TLJSolver::invalidate(const int m)
     str[m] = -1;
     tangled[m] = false;
     Dq.push(m);
+    if (repairing) resets.push_back(m);
 }
 
 
@@ -261,6 +264,7 @@ TLJSolver::pull(const int v, const int s, const int p, const int pl)
     const int lo = (oldr >= 0 && (oldr&1) == pl) ? oldr+1 : 0;
     if (lo < pull_lo) pull_lo = lo;
     if (oldr != -1 && (oldr&1) != pl) flipped.push(v);
+    if (oldr != -1 && rprio[v] == oldr) dirty[oldr] = true; // (a head left: it may be closed now)
     pull_count++;
     setRegion(v, p);
     str[v] = s;
@@ -330,6 +334,7 @@ TLJSolver::learnRegion(const int p, const int pl, const int h)
     tcpos.push_back(0);
     tblock.push_back(-1);
     pending_next.push_back(-1);
+    tpending.push_back(0);
     tangles++;
     tangleto.clear();
     return true;
@@ -436,12 +441,14 @@ TLJSolver::invalidateOpponent(const int start, const int p, const int pl)
 /**
  * Invalidate the justification closure of the vertices in <Dq> (reset to unassigned after a
  * dominion was solved): every vertex whose justification reaches them is reset to unassigned
- * and marked dirty, regardless of parity.
+ * and marked dirty, regardless of parity. Gives up (returns false) when more than <limit>
+ * vertices are reset (see solveDominion).
  */
-void
-TLJSolver::invalidateSolved()
+bool
+TLJSolver::invalidateSolved(const size_t limit)
 {
     while (Dq.nonempty()) {
+        if (resets.size() > limit) return false;
         const int v = Dq.pop();
         for (auto curedge = ins(v); *curedge != -1; curedge++) {
             const int m = *curedge;
@@ -449,6 +456,37 @@ TLJSolver::invalidateSolved()
             if (region[m] == -1) continue;
             if (str[m] == v || str[m] == -1) invalidate(m);
         }
+    }
+    return true;
+}
+
+
+/**
+ * Reset all vertices in G to unassigned: every region is computed again from its heads.
+ */
+void
+TLJSolver::resetAll()
+{
+    Dq.clear();
+    resets.clear();
+    for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
+        region[v] = -1;
+        str[v] = -1;
+    }
+    tangled.reset();
+    Z.reset();
+    C = G;
+    cpr = INT_MAX; // (all are unassigned)
+    std::fill(rcount.begin(), rcount.end(), 0);
+    nonempty[0].reset();
+    nonempty[1].reset();
+    anyregion.reset();
+    extracted.reset();
+    for (int q = 0; q < (int)mlen.size(); q++) {
+        mlen[q] = 0;
+        region_work[q].replay = true;
+        pendv[q].clear();
+        if (gend[q] != 0) dirty[q] = true;
     }
 }
 
@@ -465,24 +503,24 @@ TLJSolver::solveDominion(bitset &Dom, const int pl, const bool attract)
     if (attract) {
         // attract maximally over G (the opponent's vertices with a counter of their
         // successors in G that are not yet in Dom)
-        // (the candidates in <C> are the vertices in G that are not in Dom)
-        C = G;
-        C -= Dom;
+        // (the candidates in <A> are the vertices in G that are not in Dom)
+        A = G;
+        A -= Dom;
         for (auto v = Dom.find_first(); v != bitset::npos; v = Dom.find_next(v)) Q.push(v);
         while (Q.nonempty()) {
             const int v = Q.pop();
             for (auto curedge = ins(v); *curedge != -1; curedge++) {
                 const int from = *curedge;
-                if (!C[from]) continue;
+                if (!A[from]) continue;
                 if (owner(from) == pl) {
-                    Dom[from] = true; C[from] = false; str[from] = v; Q.push(from);
+                    Dom[from] = true; A[from] = false; str[from] = v; Q.push(from);
                 } else {
                     // opponent: attracted iff all edges (in G) lead into Dom
                     if (cnt[from] < 0) {
                         cnt[from] = gdeg[from];
                         touched.push(from);
                     }
-                    if (--cnt[from] == 0) { Dom[from] = true; C[from] = false; str[from] = -1; Q.push(from); }
+                    if (--cnt[from] == 0) { Dom[from] = true; A[from] = false; str[from] = -1; Q.push(from); }
                 }
             }
         }
@@ -490,9 +528,10 @@ TLJSolver::solveDominion(bitset &Dom, const int pl, const bool attract)
 
     // solve and remove from G
     G -= Dom;
-    cpr = -1; // (<C> is computed again for the next region)
+    C -= Dom;
     for (auto v = Dom.find_first(); v != bitset::npos; v = Dom.find_next(v)) {
         Solver::solve(v, pl, str[v]);
+        if (region[v] >= 0) dirty[region[v]] = true; // (its region may be closed now)
         setRegion(v, -1);
         region[v] = SOLVED;
     }
@@ -504,6 +543,7 @@ TLJSolver::solveDominion(bitset &Dom, const int pl, const bool attract)
     // region (or higher) before it, unless a tangle attracted it (with vertices that may
     // have left G; a needless reset if it was attracted again since); its region may have
     // new tangles though.
+    repairing = true;
     for (unsigned i = 0; i < touched.size(); i++) {
         const int m = touched[i];
         const int c = cnt[m];
@@ -511,60 +551,210 @@ TLJSolver::solveDominion(bitset &Dom, const int pl, const bool attract)
         if (!G[m]) continue;
         gdeg[m] = c;
         if (region[m] == -1) continue;
+        dirty[region[m]] = true; // (it may be closed or open now)
         if (str[m] == -1 && !tangled[m]) extracted[region[m]] = false;
         else if (str[m] == -1 || Dom[str[m]]) invalidate(m);
     }
+    // (when most of the game is reset, computing all regions again is cheaper)
+    const bool repaired = invalidateSolved(G.count()/2);
+    repairing = false;
+    if (!repaired) {
+        resetAll();
+        touched.clear();
+        return;
+    }
+
+    // The regions are not attracted again from all their vertices: find what each can attract
+    // now. Only these vertices can be attracted into a region that could not be before: the
+    // reset ones, the ones next to Dom (that lost successors), and the tangles that escape to
+    // Dom (that lost escapes).
+    for (const int m : resets) if (G[m] && region[m] == -1) seedVertex(m, INT_MAX);
+    // (a vertex next to Dom is of the opponent of <pl>: losing successors can only let a
+    // region of <pl> attract it)
+    if (nonempty[pl].any()) {
+        for (unsigned i = 0; i < touched.size(); i++) {
+            const int m = touched[i];
+            if (G[m]) seedForced(m);
+        }
+    }
+    resets.clear();
     touched.clear();
-    invalidateSolved();
+    // (each tangle once: <tcnt> is -1 for every tangle here, see improveRegion; <M> is empty)
+    for (int tp = 0; promoted != 0 && tp < 2; tp++) {
+        M = has_tin[tp];
+        M &= Dom;
+        for (auto v = M.find_first(); v != bitset::npos; v = M.find_next(v)) {
+            for (const int t : tin[tin_index[v]].by_player[tp]) {
+                if (tcnt[t] == -3) continue;
+                tcnt[t] = -3;
+                ttouched.push_back(t);
+                seedTangle(t);
+            }
+        }
+        M.reset();
+    }
+    for (const int t : ttouched) tcnt[t] = -1;
+    ttouched.clear();
 }
 
 
 /**
- * Store the vertices of region <p> (in <zlist>) as its members: append them to <mpool>,
- * after removing the vertices that left their regions from it when it is full.
+ * Vertex <x> (in G) may now be attracted into a higher region than its own: into a region
+ * of its owner (below <limit>) with a successor in it, or into a region of the opponent (below
+ * <limit>) if all its successors are in that region or in higher regions of the opponent.
+ * Remember it for the highest such region (see improveRegion).
  */
 void
-TLJSolver::setMembers(const int p)
+TLJSolver::seedVertex(const int x, const int limit)
+{
+    const int a = owner(x);
+    int best = -1; // the highest region of <a> below <limit> with a successor
+    int lo = INT_MAX; // the lowest region of a successor (if all are in regions of 1-a)
+    bool opp = true;
+    for (auto curedge = outs(x); *curedge != -1; curedge++) {
+        const int y = *curedge;
+        if (!G[y]) continue;
+        const int r = region[y];
+        if (r < 0) { opp = false; continue; }
+        if ((r&1) == a) {
+            opp = false;
+            if (r < limit && r > best) best = r;
+        } else if (r < lo) {
+            lo = r;
+        }
+    }
+    int target = best;
+    if (opp && lo < limit && lo > target) target = lo;
+    if (target > region[x]) {
+        pendv[target].push_back(x);
+        dirty[target] = true;
+    }
+}
+
+
+/**
+ * Vertex <x> (in G) may now be attracted into a region of its opponent: if all its successors
+ * are in regions of the opponent, remember it for the lowest of them (see seedVertex).
+ */
+void
+TLJSolver::seedForced(const int x)
+{
+    const int a = owner(x);
+    int lo = INT_MAX;
+    for (auto curedge = outs(x); *curedge != -1; curedge++) {
+        const int y = *curedge;
+        if (!G[y]) continue;
+        const int r = region[y];
+        if (r < 0 || (r&1) == a) return;
+        if (r < lo) lo = r;
+    }
+    if (lo != INT_MAX && lo > region[x]) {
+        pendv[lo].push_back(x);
+        dirty[lo] = true;
+    }
+}
+
+
+/**
+ * Tangle <t> lost escapes: add it to the pending tangles of the region it can now be
+ * attracted into, if any (as in promote).
+ */
+void
+TLJSolver::seedTangle(const int t)
+{
+    if (tpr[t] == -1 || tpending[t] || (size_t)t >= promoted) return;
+    const int tpl = tpr[t]&1;
+    int minreg = INT_MAX;
+    for (int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ptr++) {
+        if (!G[*ptr]) continue;
+        const int r = region[*ptr];
+        if (r == -1 || (r&1) != tpl) return;
+        if (r < minreg) minreg = r;
+    }
+    if (minreg == INT_MAX || minreg < tpr[t]) return;
+    dirty[minreg] = true;
+    tpending[t] = 1;
+    auto& work = region_work[minreg];
+    if (work.last == -1) work.first = t;
+    else pending_next[work.last] = t;
+    work.last = t;
+    pending_next[t] = -1;
+}
+
+
+/**
+ * Store the vertices of region <p> as its members: those in <zlist>, and (if <keep_old>) its
+ * last members. When <mpool> is full, it is compacted first: the vertices that left their
+ * regions (and duplicates) are removed from it.
+ */
+void
+TLJSolver::setMembers(const int p, const bool keep_old)
 {
     const unsigned zn = zlist.size();
-    if (mpool.size() + zn > mpool.capacity()) {
+    if (keep_old && mbeg[p] + mlen[p] == mpool.size() && mpool.size() + zn <= mpool.capacity()) {
+        // (the last members are at the end: append)
+        mpool.insert(mpool.end(), &zlist[0], &zlist[0]+zn);
+        mlen[p] += zn;
+        return;
+    }
+    if (mpool.size() + (keep_old ? mlen[p] : 0) + zn > mpool.capacity()) {
         // compact: keep for each region only its current vertices (at most all vertices)
         std::vector<int> fresh;
         fresh.reserve(std::max(mpool.capacity(), 2*(size_t)nodecount()+zn));
         for (int q = 0; q < (int)mlen.size(); q++) {
             const unsigned b = (unsigned)fresh.size();
             for (unsigned i = mbeg[q], e = i+mlen[q]; i < e; i++) {
-                if (region[mpool[i]] == q) fresh.push_back(mpool[i]);
+                const int v = mpool[i];
+                if (region[v] == q && !M[v]) { M[v] = true; fresh.push_back(v); }
             }
+            for (unsigned i = b; i < fresh.size(); i++) M[fresh[i]] = false;
             mbeg[q] = b;
             mlen[q] = (unsigned)fresh.size()-b;
         }
+        const size_t need = fresh.size() + (keep_old ? mlen[p] : 0) + zn;
+        if (need > fresh.capacity()) fresh.reserve(2*need);
         mpool.swap(fresh);
     }
-    mbeg[p] = (unsigned)mpool.size();
-    mlen[p] = zn;
+    // (the capacity suffices, so copying from <mpool> itself is safe)
+    const unsigned b = (unsigned)mpool.size();
+    if (keep_old) {
+        for (unsigned i = mbeg[p], e = i+mlen[p]; i < e; i++) mpool.push_back(mpool[i]);
+    }
     mpool.insert(mpool.end(), &zlist[0], &zlist[0]+zn);
+    mbeg[p] = b;
+    mlen[p] = (unsigned)mpool.size()-b;
 }
 
 
 /**
  * Before growing region <p>: let <C> be the vertices in G that are unassigned or in a region
- * below <p>. Within a sweep (from the highest region down), only the vertices of the regions
- * from <p> up to the last region grown leave <C>; otherwise <C> is computed again from G.
- * (Every change of a region after this keeps <C> up to date: see pull and invalidate.)
+ * below <p>. From the last region grown (<cpr>), only the vertices of the regions between it
+ * and <p> enter or leave <C>, unless computing <C> again from G is cheaper. (Every change of
+ * a region keeps <C> up to date: see pull, invalidate and solveDominion.)
  */
 void
 TLJSolver::setCandidates(const int p)
 {
     if (cpr == p) return;
-    const bool rebuild = cpr < p;
-    if (rebuild) C = G;
-    const size_t end = rebuild ? bitset::npos : (size_t)cpr;
-    for (auto q = p == 0 ? anyregion.find_first() : anyregion.find_next(p-1);
-         q != bitset::npos && q < end; q = anyregion.find_next(q)) {
+    auto first = [&](const int q) { return q <= 0 ? anyregion.find_first() : anyregion.find_next(q-1); };
+    // the number of vertices in the regions from <lo> up to <hi> (excluded)
+    auto size = [&](const int lo, const int hi) {
+        size_t n = 0;
+        for (auto q = first(lo); q != bitset::npos && (int)q < hi; q = anyregion.find_next(q)) n += rcount[q];
+        return n;
+    };
+    bool rebuild = cpr < 0;
+    if (!rebuild && cpr < p) rebuild = size(cpr, p) > size(p, INT_MAX) + C.size()/64;
+    if (rebuild) {
+        C = G;
+        cpr = INT_MAX;
+    }
+    const bool raise = cpr < p;
+    const int lo = raise ? cpr : p, hi = raise ? p : cpr;
+    for (auto q = first(lo); q != bitset::npos && (int)q < hi; q = anyregion.find_next(q)) {
         for (unsigned i = mbeg[q], e = i+mlen[q]; i < e; i++) {
             const int v = mpool[i];
-            if (region[v] == (int)q) C[v] = false;
+            if (region[v] == (int)q) C[v] = raise;
         }
     }
     cpr = p;
@@ -586,65 +776,101 @@ TLJSolver::improveRegion(int p)
 {
     const int pl = p&1;
 
-    if (zlast >= 0) {
-        for (unsigned i = mbeg[zlast], e = i+mlen[zlast]; i < e; i++) Z[mpool[i]] = false;
-        zlast = -1;
-    }
+    for (unsigned i = 0; i < zlist.size(); i++) Z[zlist[i]] = false; // (see below)
     zlist.clear();
     heads.clear();
     pull_lo = p;
     pull_count = 0;
     flipped.clear();
 
+    // A promotion can reuse the surviving justification closure. A move to a
+    // higher region of the same parity preserves a valid target. Other removals
+    // invalidate every justification that reaches them. New targets force a
+    // complete replay.
+    auto& work = region_work[p];
+    const bool incremental = !work.replay;
+    work.replay = false;
+
     // seed: the heads (the vertices of the priorities of region p that are in region p or
-    // unassigned, in order), then the other vertices of region p. Region p only gains
-    // vertices here, so these are among the vertices of the last call for p (its members).
+    // unassigned, in order), then (for a replay) the other vertices of region p. Region p
+    // only gains vertices here, so these are among its last members. Otherwise <Z> and
+    // <zlist> only hold the new vertices of region p until they are needed (see fillZ).
+    // (<zlist> is processed from the start in either case)
     setCandidates(p);
-    bool new_head = false;
+    unsigned new_heads = 0;
     for (int v = gfirst[p]; v < gend[p]; v++) {
-        if (region[v] == -1) {
-            setRegion(v, p);
+        const int r = region[v];
+        if (r == -1) {
+            region[v] = p;
             str[v] = -1;
-            new_head = true;
-        } else if (region[v] != p) {
-            continue; // in a higher region, or solved
+            new_heads++;
+        } else if (r != p || incremental) {
+            if (r == p) { C[v] = false; heads.push_back(v); }
+            continue; // in a higher region, or solved, or an old head (incremental)
         }
         Z[v] = true;
         C[v] = false;
         zlist.push(v);
         heads.push_back(v);
     }
-    for (unsigned i = mbeg[p], e = i+mlen[p]; i < e; i++) {
-        const int v = mpool[i];
-        if (region[v] != p || rprio[v] == p) continue; // (not in region p, or a head)
-        Z[v] = true;
-        zlist.push(v);
+    if (new_heads != 0) {
+        if (rcount[p] == 0) { nonempty[pl][p] = true; anyregion[p] = true; }
+        rcount[p] += new_heads;
     }
+    if (!incremental) {
+        for (unsigned i = mbeg[p], e = i+mlen[p]; i < e; i++) {
+            const int v = mpool[i];
+            if (region[v] != p || Z[v]) continue; // (not in region p, or a head or seen)
+            Z[v] = true;
+            zlist.push(v);
+        }
+    }
+    const bool new_head = new_heads != 0;
+    auto& pv = pendv[p];
+    bool zfull = !incremental; // whether <Z> and <zlist> hold all vertices of region p
+    auto fillZ = [&]() {
+        if (zfull) return;
+        for (unsigned i = mbeg[p], e = i+mlen[p]; i < e; i++) {
+            const int v = mpool[i];
+            if (region[v] == p && !Z[v]) { Z[v] = true; zlist.push(v); }
+        }
+        zfull = true;
+    };
 
-    if (zlist.empty()) {
+    if (rcount[p] == 0) {
         // nothing at this priority (and the promoted region tangles cannot go here)
         mlen[p] = 0;
-        auto& work = region_work[p];
         for (int t = work.first; t != -1; t = pending_next[t]) {
+            tpending[t] = 0;
             if (tregion[t] && tpr[t] != -1) dropTangle(t);
         }
         work.first = work.last = -1;
+        for (unsigned i = 0; i < pv.size(); i++) if (C[pv[i]]) seedVertex(pv[i], p);
+        pv.clear();
         return;
     }
 
-    // A promotion can reuse the surviving justification closure. A move to a
-    // higher region of the same parity preserves a valid target. Other removals
-    // invalidate every justification that reaches them. New targets and
-    // invalidated heads force a complete replay.
-    auto& work = region_work[p];
-    const bool incremental = !work.replay && !new_head;
-    work.replay = false;
-    const unsigned first_new = incremental ? zlist.size() : 0;
     const int first_pending = work.first;
     work.first = work.last = -1;
     if (incremental) {
         for (int t = first_pending; t != -1; t = pending_next[t]) {
-            attractTangleInto(t, first_new, p, pl);
+            attractTangleInto(t, 0, p, pl);
+        }
+        // the vertices that may now be attracted (see seedVertex), as if found by the grow
+        for (unsigned i = 0; i < pv.size(); i++) {
+            const int x = pv[i];
+            if (!C[x]) continue;
+            if (owner(x) == pl) {
+                for (auto curedge = outs(x); *curedge != -1; curedge++) {
+                    if (region[*curedge] == p) { pull(x, *curedge, p, pl); break; }
+                }
+            } else if (cnt[x] < 0) {
+                touched.push(x);
+                const int e = findEscape(x, 0, p, pl);
+                cnt[x] = e < 0 ? 0 : 1;
+                cpos[x] = (unsigned)e;
+                if (e < 0) pull(x, -1, p, pl);
+            }
         }
     }
 
@@ -656,7 +882,7 @@ TLJSolver::improveRegion(int p)
     const bool use_witness = pl_above || incremental;
 
     // grow region p (<zlist> is the queue)
-    for (unsigned qi = first_new; qi < zlist.size(); qi++) {
+    for (unsigned qi = 0; qi < zlist.size(); qi++) {
         const int v = zlist[qi];
         for (auto curedge = ins(v); *curedge != -1; curedge++) {
             const int from = *curedge;
@@ -682,7 +908,7 @@ TLJSolver::improveRegion(int p)
                     }
                 } else if (!use_witness) {
                     cnt[from]--;
-                } else if (Z[outs(from)[cpos[from]]]) {
+                } else if (region[outs(from)[cpos[from]]] == p) {
                     const int e = findEscape(from, cpos[from]+1, p, pl);
                     if (e < 0) cnt[from] = 0;
                     else cpos[from] = (unsigned)e;
@@ -697,8 +923,12 @@ TLJSolver::improveRegion(int p)
     }
     // a promoted region tangle that is not attracted now is deleted (see learnRegion)
     for (int t = first_pending; t != -1; t = pending_next[t]) {
+        tpending[t] = 0;
         if (tregion[t] && tpr[t] != -1 && tcnt[t] != -2) dropTangle(t);
     }
+    // the vertices that were not attracted may go into a lower region
+    for (unsigned i = 0; i < pv.size(); i++) if (C[pv[i]]) seedVertex(pv[i], p);
+    pv.clear();
     for (const int t : ttouched) tcnt[t] = -1;
     ttouched.clear();
 
@@ -707,7 +937,7 @@ TLJSolver::improveRegion(int p)
     for (const int h : heads) {
         if (owner(h) != pl || str[h] != -1) continue;
         for (auto curedge = outs(h); *curedge != -1; curedge++) {
-            if (Z[*curedge]) { str[h] = *curedge; break; }
+            if (region[*curedge] == p) { str[h] = *curedge; break; }
         }
     }
 
@@ -744,7 +974,8 @@ TLJSolver::improveRegion(int p)
             for (auto curedge = outs(v); *curedge != -1; curedge++) {
                 const int to = *curedge;
                 if (C[to]) { leaks = true; break; }
-                if (!Z[to] && G[to]) up = true;
+                const int r = region[to];
+                if (r > p && r != SOLVED) up = true;
             }
             if (leaks) break;
         }
@@ -764,24 +995,27 @@ TLJSolver::improveRegion(int p)
             for (unsigned i = 0; i < touched.size(); i++) cnt[touched[i]] = -1;
             touched.clear();
         }
+        fillZ();
         solveDominion(Z, pl, attract);
         Z.reset();
         mlen[p] = 0;
         restart = true;
         return;
     }
-    setMembers(p);
-    zlast = p;
     for (unsigned i = 0; i < touched.size(); i++) cnt[touched[i]] = -1;
     touched.clear();
 
     // a region that grew (gained a vertex) has new tangles to find; one that did
     // not grow but only now closed must still be extracted once
     if (new_head || pull_count != 0) extracted[p] = false;
+    if (leaks) extracted[p] = false;
 
-    if (leaks) { extracted[p] = false; return; }
-
-    if (extracted[p]) return; // already extracted in this (closed) state
+    if (leaks || extracted[p]) {
+        setMembers(p, !zfull);
+        return; // open, or already extracted in this (closed) state
+    }
+    fillZ();
+    setMembers(p, false);
 
     // closed region: learn it as a whole if all its escapes are in the highest region of <pl>
     const auto h = nonempty[pl].find_last();
@@ -856,10 +1090,12 @@ TLJSolver::promote()
         }
         if (good && minreg != INT_MAX && minreg >= tpr[t]) {
             dirty[minreg] = true;
+            tpending[t] = 1;
             auto& work = region_work[minreg];
             if (work.last == -1) work.first = int(t);
             else pending_next[work.last] = int(t);
             work.last = int(t);
+            pending_next[t] = -1;
         }
     }
     promoted = tpr.size();
@@ -878,6 +1114,8 @@ TLJSolver::run()
 
     Z.resize(nodecount());
     C.resize(nodecount());
+    A.resize(nodecount());
+    M.resize(nodecount());
     S.resize(nodecount());
     G = disabled;
     G.flip();
@@ -905,6 +1143,7 @@ TLJSolver::run()
     const int max_prio = G.any() ? priority(G.find_last()) : -1;
     dirty.resize(max_prio+1);
     region_work.resize(max_prio+1);
+    pendv.resize(max_prio+1);
     extracted.resize(max_prio+1);
     rcount.assign(max_prio+1, 0);
     nonempty[0].resize(max_prio+1);
@@ -967,12 +1206,12 @@ TLJSolver::run()
             improveRegion(p);
             if (!G.any()) break;
             if (restart) {
-                // a dominion was solved: the decomposition can change widely, so all
-                // nonempty regions are re-examined (the regions that are empty only gain
-                // vertices that were reset, and are marked dirty for those)
-                dirty |= anyregion;
-                for (auto q = anyregion.find_first(); q != bitset::npos; q = anyregion.find_next(q)) {
-                    region_work[q].replay = true;
+                // a dominion was solved: the regions that changed are marked dirty (see
+                // solveDominion), and so is the highest region of each player, which may be
+                // a dominion now
+                for (int q = 0; q < 2; q++) {
+                    const auto h = nonempty[q].find_last();
+                    if (h != bitset::npos) dirty[h] = true;
                 }
                 // a new sweep (from the highest region) can use the new tangles
                 promote();
