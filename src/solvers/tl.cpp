@@ -42,6 +42,8 @@ TLSolver::~TLSolver()
 void
 TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
 {
+    // (nothing left to attract, see setCandidates)
+    if (ncand == 0) return;
     // attract vertices with an edge to <v>
     for (auto curedge = ins(v); *curedge != -1; curedge++) {
         const int from = *curedge;
@@ -77,6 +79,7 @@ TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
             // attract
             Z[from] = true;
             C[from] = false;
+            ncand--;
             str[from] = owner(from) == pl ? v : -1;
             Q.push(from);
 #ifndef NDEBUG
@@ -181,6 +184,7 @@ TLSolver::attractTangle(const int t, const int v0, const int pl, bitset &R, bits
             if (!C[v]) continue; // already in <Z>, or not in <R> (might be higher region)
             Z[v] = true;
             C[v] = false;
+            ncand--;
             str[v] = s;
             Q.push(v);
 
@@ -221,13 +225,15 @@ TLSolver::attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr)
  * Before attracting to <Z> from <R>: the candidates for attraction are the vertices in <R>
  * but not in <Z> (in <C>). Every vertex added to <Z> is then removed from <C>. (Testing
  * one bitset instead of <Z> and then <R> makes the attraction about twice as fast on games
- * with many edges.)
+ * with many edges.) The candidates are counted in <ncand>: once none is left, the rest of
+ * the queue needs no scan of its in-edges (for example, when the whole subgame is in <Z>).
  */
 void
 TLSolver::setCandidates(const bitset &R, const bitset &Z)
 {
     C = R;
     C -= Z;
+    ncand = C.count();
 }
 
 
@@ -720,6 +726,7 @@ TLSolver::tl(void)
                     if (!C[u]) continue; // (in <Z>, or not in <R>)
                     Z[u] = true;
                     C[u] = false;
+                    ncand--;
                     str[u] = *(ptr+1);
                     Q.push(u);
                 }
@@ -757,6 +764,7 @@ TLSolver::tl(void)
                 heads.push_back(top);
                 Z[top] = true; // add to <Z>
                 C[top] = false;
+                ncand--;
                 str[top] = -1;
                 Q.push(top);
 

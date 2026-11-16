@@ -91,6 +91,7 @@ protected:
     bitset escapes; // which escapes we considered
 
     bitset C; // during an attraction: the vertices in <R> but not in <Z>
+    unsigned int ncand = 0; // the number of vertices in <C>
 
     bitset R; // remaining region (in tl)
     bitset Z; // current region (in tl)
