@@ -176,8 +176,11 @@ Game::init_random_game(int n, long maxP, long maxE)
     vec_init();
 
     for (int i=0; i<n; i++) {
-        // initialize vertex i with random priority and random owner
-        init_vertex(i, rng(0, maxP), rng(0, 1));
+        // initialize vertex i with random priority and random owner; draw the owner first
+        // (separately, as the order of function arguments is unspecified)
+        const int owner = rng(0, 1);
+        const int priority = rng(0, maxP);
+        init_vertex(i, priority, owner);
         // add 1 random edge (including self-loops)
         vec_add_edge(i, rng(0, n-1));
     }

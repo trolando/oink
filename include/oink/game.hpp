@@ -18,6 +18,7 @@
 #define GAME_HPP
 
 #include <cassert>
+#include <cstdint>
 #include <sstream>
 #include <vector>
 #include <map>
@@ -449,7 +450,26 @@ private:
     void unsafe_permute(int *mapping); // apply a reordering
     
     std::mt19937 generator;
-    inline long rng(long low, long high) { return std::uniform_int_distribution<> (low, high)(generator); }
+
+    /**
+     * A uniform random number in [low, high]. std::uniform_int_distribution is not the
+     * same in every C++ library, so random games would differ between platforms. This
+     * computes what libstdc++ (GCC 11 and later) computes for std::mt19937 (Lemire's
+     * method), so every platform generates the same games as GCC on Linux.
+     */
+    inline long rng(long low, long high) {
+        const uint32_t range = uint32_t(high - low) + 1;
+        uint64_t product = uint64_t(uint32_t(generator())) * range;
+        uint32_t lowbits = uint32_t(product);
+        if (lowbits < range) {
+            const uint32_t threshold = uint32_t(-range) % range;
+            while (lowbits < threshold) {
+                product = uint64_t(uint32_t(generator())) * range;
+                lowbits = uint32_t(product);
+            }
+        }
+        return low + long(product >> 32);
+    }
 
     friend class PGParser;
     friend class GameBuilder;
