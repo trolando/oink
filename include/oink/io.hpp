@@ -29,14 +29,16 @@ class Solution;
 
 /**
  * Write a (partial) solution in pgsolver format. For a vertex won by its owner,
- * writes the single strategy move, or — when the solution carries a multi-
- * strategy (the -1 sentinel) — a representative move (pgsolver allows only one).
+ * writes the single strategy move, or all moves of a multi-strategy (the -1
+ * sentinel) separated by commas, as the successors in the game format; pgsolver
+ * itself reads only single moves.
  */
 void write_solution(const Game& game, const Solution& solution, std::ostream& out);
 
 /**
  * Parse a [full or partial] pgsolver solution into <solution> (which should be
- * sized to the game's vertex count).
+ * sized to the game's vertex count). A vertex with several moves, separated by
+ * commas, gets them as its multi-strategy (the solution gets one if it has none).
  */
 void parse_solution(const Game& game, Solution& solution, std::istream& in);
 

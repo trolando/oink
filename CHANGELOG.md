@@ -13,6 +13,9 @@ All notable changes to Oink will be documented in this file.
   `test/bench/README.md`.
 - `test_solvers -i` chooses the solvers and their configurations in an
   interactive screen.
+- Solution files can hold multi-strategies: all winning moves of a vertex,
+  separated by commas. Oink writes the multi-strategies of FPIM and FPJM
+  this way (before, one of their moves), and reads and verifies them.
 
 ### Removed
 
@@ -24,6 +27,9 @@ All notable changes to Oink will be documented in this file.
 - PMA and PMTL could leave vertices unsolved: the attractor shortcut
   (optimisation 2) ignored the regions whose lifts were postponed to the
   next round. This bug dates from the first PMTL.
+- Reading a solution file ignored the rest of a malformed line (so
+  `1,2x,0` was read as `1`) and the moves of a vertex won by its opponent;
+  both are now errors.
 - SPM could give a vertex to both players or end with a losing strategy:
   its analysis of measures beyond the counts made two unsound
   conclusions. It now keeps every measure at or below the least fixed

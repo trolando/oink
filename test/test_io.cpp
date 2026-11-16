@@ -16,7 +16,8 @@
 
 /**
  * Tests for open_input: decompressing .bz2 input (in parallel for large files, which have
- * many blocks), with several streams, trailing data, and corrupt or truncated files.
+ * many blocks), with several streams, trailing data, and corrupt or truncated files. And
+ * for writing and parsing solutions, with single and multi-strategies.
  */
 
 #include <cstdint>
@@ -24,10 +25,15 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
+#include "oink/game.hpp"
+#include "oink/game_builder.hpp"
 #include "oink/io.hpp"
+#include "oink/solution.hpp"
+#include "verifier.hpp"
 
 #ifdef OINK_HAVE_BZIP2
 #include <bzlib.h>
@@ -155,6 +161,98 @@ test_bzip2()
 
 #endif
 
+/** Parse <text> as a solution of <game>; false if parsing fails. */
+static bool
+parse(const Game& game, const std::string& text, Solution& solution)
+{
+    solution = Solution(game.nodecount());
+    std::istringstream in(text);
+    try {
+        parse_solution(game, solution, in);
+    } catch (std::runtime_error&) {
+        return false;
+    }
+    return true;
+}
+
+/** Whether the verifier accepts <solution> of the (sorted) <game>. */
+static bool
+verifies(const Game& game, const Solution& solution)
+{
+    std::ostringstream log;
+    Verifier verifier(game, solution, log);
+    try {
+        verifier.verify(true, true, true);
+    } catch (std::runtime_error&) {
+        return false;
+    }
+    return true;
+}
+
+static void
+test_solution_format()
+{
+    // Even wins everywhere: 0 may move to 1 or 2, which loop; 3 (Odd) must move to 0
+    // (priorities in order, so the vertices keep their numbers)
+    GameBuilder builder(4);
+    const int prio[] = {2, 2, 2, 3};
+    for (int v = 0; v < 4; v++) builder.set_priority(v, prio[v]);
+    builder.set_owner(3, Player::Odd);
+    builder.add_edge(0, 1);
+    builder.add_edge(0, 2);
+    builder.add_edge(1, 1);
+    builder.add_edge(2, 2);
+    builder.add_edge(3, 0);
+    Game game = builder.build();
+    game.ensure_sorted(); // (already sorted)
+
+    // a multi-strategy is written with all moves
+    Solution multi(4);
+    multi.init_multi(game.edgeArraySize());
+    multi.solve(0, 0, -1);
+    multi.add_edge_index(game.firstout(0));
+    multi.add_edge_index(game.firstout(0) + 1);
+    multi.solve(1, 0, 1); // (single and multi mix)
+    multi.solve(2, 0, -1);
+    multi.add_edge_index(game.firstout(2));
+    multi.solve(3, 0, -1);
+    std::ostringstream out;
+    write_solution(game, multi, out);
+    check(out.str() == "paritysol 4;\n0 0 1,2;\n1 0 1;\n2 0 2;\n3 0;\n", "write a multi-strategy");
+
+    // and read back
+    Solution read;
+    check(parse(game, out.str(), read), "parse a multi-strategy");
+    check(read.has_multi() and read.strategy(0) == -1 and has_strategy_edge_to(game, read, 0, 1) and has_strategy_edge_to(game, read, 0, 2),
+          "both moves of the multi-strategy");
+    check(read.strategy(1) == 1 and read.strategy(2) == 2 and read.is_solved(3) and read.winner(3) == 0, "the single moves");
+    check(verifies(game, read), "the parsed multi-strategy verifies");
+    std::ostringstream again;
+    write_solution(game, read, again);
+    check(again.str() == out.str(), "write it again the same");
+
+    // single moves only: no multi-strategy
+    check(parse(game, "paritysol 4;\n0 0 2;\n1 0 1;\n2 0 2;\n3 0;\n", read) and !read.has_multi() and read.strategy(0) == 2, "single moves");
+    check(parse(game, "0 0 2, 1 ;\n", read) and has_strategy_edge_to(game, read, 0, 1) and has_strategy_edge_to(game, read, 0, 2), "spaces around the comma");
+    check(!parse(game, "0 0 1,3;\n", read), "a move that is not an edge");
+    check(!parse(game, "0 0 1,;\n", read), "a comma without a move");
+    check(!parse(game, "0 0;\n", read), "no move for the owner");
+    check(parse(game, "0 0 1,1,2;\n", read) and has_strategy_edge_to(game, read, 0, 1) and has_strategy_edge_to(game, read, 0, 2), "a duplicate move counts once");
+    std::ostringstream dup;
+    write_solution(game, read, dup);
+    check(dup.str() == "paritysol 1;\n0 0 1,2;\n", "and is written once");
+    check(parse(game, "0 0 1\n1 0 1 ;\n3 0\r\n", read) and read.strategy(0) == 1 and read.is_solved(3), "the semicolon is optional");
+
+    // malformed lines are errors, not cut short
+    check(!parse(game, "0 0 1,2x,0;\n", read), "a move with trailing letters");
+    check(!parse(game, "0 0 1,2 0;\n", read), "a move without a comma");
+    check(!parse(game, "0 0 1;junk\n", read), "text after the semicolon");
+    check(!parse(game, "0x 0 1;\n", read), "a vertex with trailing letters");
+    check(!parse(game, "x 0;\n", read), "a vertex that is not a number");
+    check(!parse(game, "3 0 0;\n", read), "a move of the losing player");
+    check(!parse(game, "3 0 0,1;\n", read), "moves of the losing player");
+}
+
 int
 test_io()
 {
@@ -163,6 +261,7 @@ test_io()
 #else
     std::cout << "bzip2 support not built, nothing to test" << std::endl;
 #endif
+    test_solution_format();
     if (failures) {
         std::cout << failures << " test(s) failed" << std::endl;
         return 1;

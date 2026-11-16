@@ -503,6 +503,13 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverZLKscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk --scc)
             add_test(NAME TestSolverZLKJscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkj --scc)
             add_test(NAME TestSolverPPscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp --scc)
+            # multi-strategies in solution files, with oink and --sol (see test/test_multisol.cmake)
+            add_test(NAME TestMultiStrategyFiles
+                COMMAND ${CMAKE_COMMAND}
+                    -DOINK=$<TARGET_FILE:solve>
+                    -DGAME=${CMAKE_CURRENT_SOURCE_DIR}/examples/amba_decomposed_arbiter_4.tlsf.ehoa.pg
+                    -DWORK=${CMAKE_CURRENT_BINARY_DIR}/multisol
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/test/test_multisol.cmake)
             # short headless runs of bench_solvers (see test/bench/smoke.cmake)
             set(BENCH_MODES basic calibrated reference random errors preprocess live experiment)
             if(NOT WIN32)

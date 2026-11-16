@@ -361,10 +361,19 @@ int main(int argc, char **argv)
     }
 
     // The partial solution (--sol, renumbered with the game) goes into Oink's
-    // solution; Oink picks up pre-solved vertices when run() is called.
+    // solution; Oink picks up pre-solved vertices when run() is called. Its
+    // multi-strategy is kept (the edge layout is the same: sorting the game
+    // does not move the edges of a vertex), and fpim and fpjm add to it.
     if (options.count("sol")) {
+        if (presolution.has_multi()) en.solution().init_multi(pg.edgeArraySize());
         for (int v=0; v<pg.nodecount(); v++) {
-            if (presolution.is_solved(v)) en.solution().solve(v, presolution.winner(v), presolution.strategy(v));
+            if (!presolution.is_solved(v)) continue;
+            const int str = presolution.strategy(v);
+            en.solution().solve(v, presolution.winner(v), str);
+            if (str != -1 or !presolution.has_multi() or presolution.winner(v) != pg.owner(v)) continue;
+            for (int i = pg.firstout(v), end = i + pg.outcount(v); i < end; i++) {
+                if (presolution.has_edge_index(i)) en.solution().add_edge_index(i);
+            }
         }
     }
 

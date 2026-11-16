@@ -330,3 +330,5 @@ paritysol <count>;            # optional header line, ignored on input
 ```
 
 `<strategy>` is the successor the winning player moves to; it is required exactly when `<winner>` equals the vertex's owner, and omitted otherwise. Every vertex must appear (a full solution is expected).
+
+A multi-strategy (as found by `--fpim` and `--fpjm`) lists all winning moves of a vertex, separated by commas, like the successors in a game: `<vertex> <winner> <move>,<move>,...;`. A duplicate move counts once. The verifier checks that every listed move stays in the winner's region and that every play with these moves is won. PGSolver itself reads only single moves.

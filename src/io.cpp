@@ -19,6 +19,7 @@
 #include "oink/solution.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -271,18 +272,36 @@ void
 write_solution(const Game& game, const Solution& solution, std::ostream& out)
 {
     out << "paritysol " << solution.solved().count() << ";" << std::endl;
+    std::vector<int> moves;
     for (int i=0; i<game.nodecount(); i++) {
         if (!solution.is_solved(i)) continue;
         out << i << " " << (solution.winner(i) ? "1" : "0");
         if (solution.winner(i) == game.owner(i)) {
-            // pgsolver allows one successor: the single strategy, or (for a
-            // multi-strategy, where it is the -1 sentinel) a representative move
-            int str = solution.strategy(i);
-            if (str == -1 and solution.has_multi()) str = first_strategy_edge(game, solution, i);
-            if (str != -1) out << " " << str;
+            // the single strategy, or all moves of a multi-strategy, separated by commas
+            moves.clear();
+            strategy_targets(game, solution, i, moves);
+            for (size_t k=0; k<moves.size(); k++) out << (k == 0 ? " " : ",") << moves[k];
         }
         out << ";" << std::endl;
     }
+}
+
+/**
+ * Add the move <v> -> <to> to the multi-strategy of <solution>.
+ */
+static void
+add_multi_move(const Game& game, Solution& solution, int v, int to)
+{
+    const int first = game.firstout(v);
+    const int count = game.outcount(v);
+    const int* outs = game.outedges();
+    for (int k=0; k<count; k++) {
+        if (outs[first + k] == to) {
+            solution.add_edge_index((std::size_t)first + k);
+            return;
+        }
+    }
+    throw std::runtime_error("strategy is not a valid move");
 }
 
 void
@@ -295,7 +314,14 @@ parse_solution(const Game& game, Solution& solution, std::istream& in)
         if (!(ss >> token)) continue;          // ignore empty line
         if (token == "paritysol") continue;    // ignore banner
 
-        int ident = std::stoi(token);
+        int ident = -1;
+        size_t digits = 0;
+        try {
+            ident = std::stoi(token, &digits);
+        } catch (std::exception&) {
+            digits = 0;
+        }
+        if (digits == 0 || digits != token.size()) throw std::runtime_error("invalid node index");
         if (ident < 0 || ident >= game.nodecount()) {
             throw std::runtime_error("node index out of bounds");
         }
@@ -308,7 +334,28 @@ parse_solution(const Game& game, Solution& solution, std::istream& in)
         int str = -1;
         if (w == game.owner(ident)) {
             if (!(ss >> str)) throw std::runtime_error("missing strategy for winning node");
-            // validity of the strategy edge is checked by the verifier
+            // more moves, separated by commas: a multi-strategy
+            std::vector<int> moves;
+            while ((ss >> std::ws) and ss.peek() == ',') {
+                ss.get();
+                int to;
+                if (!(ss >> to)) throw std::runtime_error("missing move after a comma");
+                moves.push_back(to);
+            }
+            if (!moves.empty()) {
+                if (!solution.has_multi()) solution.init_multi(game.edgeArraySize());
+                moves.push_back(str);
+                for (int to : moves) add_multi_move(game, solution, ident, to);
+                str = -1; // (the sentinel of a multi-strategy)
+            }
+            // the validity of a single strategy edge is checked by the verifier
+        }
+
+        // the rest of the line: an optional semicolon (as written by write_solution)
+        if ((ss >> std::ws) and ss.peek() == ';') ss.get();
+        if ((ss >> std::ws) and ss.peek() != std::char_traits<char>::eof()) {
+            if (w != game.owner(ident) and std::isdigit(ss.peek())) throw std::runtime_error("losing vertex has strategy");
+            throw std::runtime_error("unexpected text after the moves of a vertex");
         }
         solution.solve(ident, w, str);
     }
