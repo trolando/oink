@@ -82,6 +82,7 @@ public:
         flipped.resize(7);
         pull_lo = p;
         tpr = {invert};
+        tregion = {0};
         tcnt = {-1};
         tcpos = {0};
         tblock = {-1};

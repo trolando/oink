@@ -30,6 +30,9 @@ namespace pg {
  * Changes that break these dependencies reset the backwards justification
  * closure. Original heads group consecutive enabled priorities of one parity.
  *
+ * A closed region whose escapes all go to the highest region of its player is
+ * learned as one region tangle (as in tl) instead of being decomposed.
+ *
  * Visits caused only by promoted tangles reuse the surviving closure and process
  * newly attracted vertices. New targets and invalidated heads require complete
  * region replay. Current TL also retains unaffected regions; persistence alone
@@ -63,6 +66,7 @@ protected:
     bitset tangled; // the vertices of the opponent attracted into their region with a tangle
                     // (the mark can remain when it moves on: see solveDominion)
     std::vector<int> tpr; // priority of a tangle (-1 = deleted)
+    std::vector<char> tregion; // for each tangle: whether it is a region tangle (see learnRegion)
     std::vector<int> tcnt; // for attracting: the escapes of a tangle (-1: not counted)
     std::vector<unsigned> tcpos; // the size of <zlist> when <tcnt> was counted
     std::vector<int> tblock; // remembered escape, revalidated before counting
@@ -132,6 +136,8 @@ protected:
     inline void invalidate(const int m);
     inline void pull(const int v, const int s, const int p, const int pl);
     bool attractTangleInto(const int t, const unsigned vpos, const int p, const int pl);
+    void dropTangle(const int t);
+    bool learnRegion(const int p, const int pl, const int h);
     void invalidateOpponent(const int start, const int p, const int pl);
     void invalidateSolved();
     void solveDominion(bitset &Dom, const int pl, const bool attract);

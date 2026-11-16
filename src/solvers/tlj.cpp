@@ -176,6 +176,7 @@ pearce_again:
         toutdata.push_back(-1);
 
         tpr.push_back(pr);
+        tregion.push_back(0);
         tcnt.push_back(-1);
         tcpos.push_back(0);
         tblock.push_back(-1);
@@ -270,6 +271,72 @@ TLJSolver::pull(const int v, const int s, const int p, const int pl)
 
 
 /**
+ * Delete tangle <t>. A region tangle stands for all tangles of its region (see learnRegion),
+ * so that region is extracted again (when it is closed).
+ */
+void
+TLJSolver::dropTangle(const int t)
+{
+    const int p = tpr[t];
+    tpr[t] = -1;
+    if (tregion[t]) {
+        dirty[p] = true;
+        extracted[p] = false;
+    }
+}
+
+
+/**
+ * Learn the closed region <p> (of player <pl>, its vertices in <zlist>) as one region tangle, if
+ * all its escapes are in region <h>, the highest region of <pl>: then each of its tangles is
+ * attracted into region <h> as soon as it is promoted, and so is the rest of the region, so
+ * the region is not decomposed into its tangles (as in tl). If it cannot be attracted when it
+ * is promoted, it is deleted and its region extracted again (see promote and dropTangle).
+ * Returns whether it was learned.
+ */
+bool
+TLJSolver::learnRegion(const int p, const int pl, const int h)
+{
+    bool single = true;
+    for (unsigned i = 0; single && i < zlist.size(); i++) {
+        const int u = zlist[i];
+        if (owner(u) == pl) continue;
+        for (auto curedge = outs(u); *curedge != -1; curedge++) {
+            const int to = *curedge;
+            if (Z[to] || escapes[to] || !G[to]) continue;
+            if (region[to] != h) { single = false; break; }
+            escapes[to] = true;
+            tangleto.push(to);
+        }
+    }
+    for (unsigned int x = 0; x < tangleto.size(); x++) escapes[tangleto[x]] = false;
+    if (!single || tangleto.empty()) { // (without escapes, extracting finds the dominion)
+        tangleto.clear();
+        return false;
+    }
+    tvpos.push_back(tvdata.size());
+    for (unsigned i = 0; i < zlist.size(); i++) {
+        const int v = zlist[i];
+        tvdata.push_back(v);
+        tvdata.push_back(str[v]);
+    }
+    tvdata.push_back(-1);
+    toutpos.push_back(toutdata.size());
+    toutdata.insert(toutdata.end(), &tangleto[0], &tangleto[0]+tangleto.size());
+    toutdata.push_back(-1);
+    tpr.push_back(p);
+    tregion.push_back(1);
+    tcnt.push_back(-1);
+    tcpos.push_back(0);
+    tblock.push_back(-1);
+    pending_next.push_back(-1);
+    tangles++;
+    tangleto.clear();
+    return true;
+}
+
+
+/**
  * Try to attract tangle <t> into region <p> (player <pl>) after its escape at <vpos> in
  * <zlist> has been popped: possible if the tangle is of the right parity, not deleted,
  * still entirely in G, and all of its escapes are already won by <pl> at priority >= p.
@@ -324,7 +391,7 @@ TLJSolver::attractTangleInto(const int t, const unsigned vpos, const int p, cons
 
     // verify the tangle is still entirely in G (on-the-fly delete otherwise)
     for (int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) {
-        if (!G[*ptr]) { tpr[t] = -1; return false; }
+        if (!G[*ptr]) { dropTangle(t); return false; }
     }
 
     bool attracted = false;
@@ -555,8 +622,14 @@ TLJSolver::improveRegion(int p)
     }
 
     if (zlist.empty()) {
+        // nothing at this priority (and the promoted region tangles cannot go here)
         mlen[p] = 0;
-        return; // nothing at this priority
+        auto& work = region_work[p];
+        for (int t = work.first; t != -1; t = pending_next[t]) {
+            if (tregion[t] && tpr[t] != -1) dropTangle(t);
+        }
+        work.first = work.last = -1;
+        return;
     }
 
     // A promotion can reuse the surviving justification closure. A move to a
@@ -621,6 +694,10 @@ TLJSolver::improveRegion(int p)
         if (has_tin[pl][v]) {
             for (int t : tin[tin_index[v]].by_player[pl]) attractTangleInto(t, qi, p, pl);
         }
+    }
+    // a promoted region tangle that is not attracted now is deleted (see learnRegion)
+    for (int t = first_pending; t != -1; t = pending_next[t]) {
+        if (tregion[t] && tpr[t] != -1 && tcnt[t] != -2) dropTangle(t);
     }
     for (const int t : ttouched) tcnt[t] = -1;
     ttouched.clear();
@@ -706,6 +783,13 @@ TLJSolver::improveRegion(int p)
 
     if (extracted[p]) return; // already extracted in this (closed) state
 
+    // closed region: learn it as a whole if all its escapes are in the highest region of <pl>
+    const auto h = nonempty[pl].find_last();
+    if (h != bitset::npos && (int)h > p && learnRegion(p, pl, (int)h)) {
+        extracted[p] = true;
+        return;
+    }
+
     // closed region: extract tangles (and possibly dominions)
     const auto dom_before = dominions;
 
@@ -741,6 +825,19 @@ TLJSolver::promote()
     for (size_t t = promoted; t < tpr.size(); t++) {
         if (tpr[t] == -1) continue;
         const int tpl = tpr[t]&1;
+        if (tregion[t]) {
+            // a region tangle must go into the region of its escapes as a whole, or be deleted
+            bool ok = true;
+            for (int *ptr = &tvdata[tvpos[t]]; ok && *ptr != -1; ptr += 2) ok = G[*ptr];
+            int r = -1;
+            for (int *ptr = &toutdata[toutpos[t]]; ok && *ptr != -1; ptr++) {
+                if (!G[*ptr]) continue;
+                const int re = region[*ptr];
+                if (re == -1 || (re&1) != tpl || re < tpr[t] || (r != -1 && re != r)) ok = false;
+                else r = re;
+            }
+            if (!ok || r == -1) { dropTangle((int)t); continue; }
+        }
         int minreg = INT_MAX;
         bool good = true; // whether all escapes are in regions of <tpl>
         for (int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ptr++) {
@@ -887,7 +984,7 @@ TLJSolver::run()
         if (!G.any()) break;
 
         // the sweep is done: promote the tangles found in it
-        if (promoted == tpr.size()) break; // nothing new and nothing dirty: done
+        if (promoted == tpr.size() && dirty.none()) break; // nothing new and nothing dirty: done
         promote();
     }
 
