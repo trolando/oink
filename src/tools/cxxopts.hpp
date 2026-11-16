@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #include <cassert>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <limits>
