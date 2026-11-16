@@ -34,6 +34,11 @@ All notable changes to Oink will be documented in this file.
   its analysis of measures beyond the counts made two unsound
   conclusions. It now keeps every measure at or below the least fixed
   point.
+- The verifier was slow on games with vertices with many moves: its search
+  scanned the moves of a vertex from the start each time it returned to
+  that vertex. On the game of `counter_ortl 3000` it took over 10 s, now
+  0.1 s. It could also accept a wrong solution after more than 2^31 steps
+  of the search, as it stored a 64-bit number in an `int`.
 
 ## [1.1.1] - 2026-11-14
 

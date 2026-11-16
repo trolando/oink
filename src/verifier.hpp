@@ -26,9 +26,9 @@ namespace pg {
 class Verifier
 {
 public:
-    // The game must already be sorted by priority (call game.ensure_sorted()
-    // before constructing the Verifier); verification reads the game (structure)
-    // and the solution (solved/winner/strategy).
+    // Verification reads the game (structure) and the solution (solved/winner/
+    // strategy). The vertices can be in any order, but verification is faster if
+    // they are sorted by priority (game.ensure_sorted()).
     Verifier(const Game& game, const Solution& solution, std::ostream &logger)
         : game(game), solution(solution), logger(logger) { }
 
@@ -52,6 +52,15 @@ protected:
 
     // winner of a solved vertex (0 or 1), or -1 if unsolved
     [[nodiscard]] int getWinner(int v) const { return solution.is_solved(v) ? solution.winner(v) : -1; }
+
+    // The successors of <v> in the solution graph are the moves of its strategy if <v> is
+    // won by its owner, otherwise all its moves. successorMode(v) tells how to find them:
+    // 0 for a single strategy, 1 for the moves of a multi-strategy, 2 for all moves. Then
+    // nextSuccessor(v, mode, pos) returns the successor at or after position <pos>, which
+    // starts at firstPosition(v, mode), and advances <pos>; it returns -1 after the last.
+    [[nodiscard]] char successorMode(int v) const;
+    [[nodiscard]] long firstPosition(int v, char mode) const;
+    [[nodiscard]] int nextSuccessor(int v, char mode, long& pos) const;
 };
 
 }

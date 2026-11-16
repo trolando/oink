@@ -20,9 +20,9 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-#include <queue>
-#include <deque>
-#include <stack>
+#include <cstdint>
+#include <stdexcept>
+#include <vector>
 
 #include "verifier.hpp"
 
@@ -30,12 +30,46 @@ using namespace std;
 
 namespace pg {
 
+inline char
+Verifier::successorMode(int v) const
+{
+    if (solution.strategy(v) != -1) return 0;
+    // without a multi-strategy, the first part ensures that v is won by its opponent
+    if (solution.has_multi() and getWinner(v) == game.owner(v)) return 1;
+    return 2;
+}
+
+inline long
+Verifier::firstPosition(int v, char mode) const
+{
+    return mode == 0 ? 0 : game.firstout(v);
+}
+
+inline int
+Verifier::nextSuccessor(int v, char mode, long& pos) const
+{
+    if (mode == 0) {
+        // a single strategy: the only successor
+        if (pos != 0) return -1;
+        pos = 1;
+        return solution.strategy(v);
+    }
+
+    // the moves of the multi-strategy (mode 1) or all moves (mode 2)
+    const int* edges = game.outedges();
+    while (edges[pos] != -1) {
+        const long e = pos++;
+        if (mode == 2 or solution.has_edge_index(e)) return edges[e];
+    }
+    return -1;
+}
+
 void
 Verifier::verify(bool fullgame, bool even, bool odd)
 {
-    // The caller must pass a game that is already sorted by priority; the SCC
-    // search below relies on vertices being ordered by priority. Verification
-    // only reads outgoing edges, so no incoming-edge array is needed.
+    // The result does not depend on the order of the vertices, but the searches below
+    // are faster if the vertices are sorted by priority. Verification only reads
+    // outgoing edges, so no incoming-edge array is needed.
     const int n_vertices = game.vertexcount();
 
     /**
@@ -99,14 +133,38 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         }
     }
 
-    // Allocate datastructures for Tarjan search
-    int *done = new int[n_vertices];
-    int64_t *low = new int64_t[n_vertices];
-    for (int i=0; i<n_vertices; i++) done[i] = -1;
-    for (int i=0; i<n_vertices; i++) low[i] = 0;
+    /**
+     * The second part searches, for each priority <prio> of the loser's parity, the strongly
+     * connected components (SCCs) of the solution graph restricted to the vertices with a
+     * priority of at most <prio>, from the vertices with priority <prio>. The solution graph
+     * has the moves of the strategy from each vertex won by its owner and all moves from the
+     * other vertices. An SCC with a cycle and a highest priority of the loser's parity has a
+     * cycle that the loser wins.
+     *
+     * Each vertex on the stack of the search keeps its position in its successors, so that
+     * the depth-first search visits each edge once (as in Tarjan's algorithm). If the
+     * vertices are sorted by priority, then the searches at one priority follow each other,
+     * and together they visit each vertex at most once.
+     */
 
-    std::vector<int> res;
-    std::stack<int> st;
+    // <done> has the priority of the last search that found the SCC of a vertex. A vertex
+    // gets a number in <low> when the search visits it; the numbers increase over all
+    // searches, so a vertex is visited in the current search if its number is above <bot>.
+    // Then <low> decreases when the vertex reaches a lower number on the stack.
+    std::vector<int> done(n_vertices, -1);
+    std::vector<int64_t> low(n_vertices, 0);
+
+    std::vector<int> res; // the vertices of the SCCs that are not yet complete
+
+    // the search stack: a vertex, its position in its successors, whether it is the root of
+    // its SCC so far (its number in <low> did not decrease), and how to find its successors
+    struct Frame {
+        long pos;
+        int v;
+        bool root;
+        char mode;
+    };
+    std::vector<Frame> st;
 
     int64_t pre = 0;
 
@@ -128,95 +186,56 @@ Verifier::verify(bool fullgame, bool even, bool odd)
         if (done[top] == prio) continue;
 
         // set <bot> (in tarjan search) to current pre
-        int64_t bot = pre;
+        const int64_t bot = pre;
+
+        auto visit = [&](int v) {
+            low[v] = ++pre;
+            res.push_back(v);
+            const char mode = successorMode(v);
+            st.push_back({firstPosition(v, mode), v, true, mode});
+        };
 
         // start the tarjan search at vertex <top>
-        st.push(top);
+        visit(top);
 
         while (!st.empty()) {
-            int v = st.top();
+            Frame& f = st.back();
+            const int v = f.v;
 
             /**
-             * When we see it for the first item, we assign the next number to it and add it to <res>.
+             * Check the next outgoing (allowed) edge.
+             * If new, then 'recurse'; if on the stack, then update low.
              */
-            if (low[v] <= bot) {
-                low[v] = ++pre;
-                res.push_back(v);
-            }
-
-            /**
-             * Now we check all outgoing (allowed) edges.
-             * If seen earlier, then update "min"
-             * If new, then 'recurse'
-             */
-            int min = low[v];
-            bool pushed = false;
-            if (solution.has_multi() && solution.strategy(v) == -1 && getWinner(v) == game.owner(v)) {
-                // sentinel: -1 with winner==owner means a multi-strategy. The winner
-                // may use *any* recorded strategy edge, so follow all of them (like
-                // the loser's all-edges branch below, but restricted to strategy edges)
-                const int* outbase = game.outedges();
-                for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
-                    if (!solution.has_edge_index(curedge - outbase)) continue;
-                    int to = *curedge;
-                    // skip if to higher priority
-                    if (game.priority(to) > prio) continue;
-                    // skip if already found scc (done[to] set to prio)
-                    if (done[to] == prio) continue;
-                    // check if visited in this search
-                    if (low[to] <= bot) {
-                        // not visited, add to <st> and break!
-                        st.push(to);
-                        pushed = true;
-                        break;
-                    } else {
-                        // visited, update min
-                        if (low[to] < min) min = low[to];
-                    }
+            const int to = nextSuccessor(v, f.mode, f.pos);
+            if (to != -1) {
+                // skip if to higher priority
+                if (game.priority(to) > prio) continue;
+                // skip if already found scc (done[to] set to prio)
+                if (done[to] == prio) continue;
+                if (low[to] <= bot) {
+                    // not visited, add to <st>
+                    visit(to);
+                } else if (low[to] < low[v]) {
+                    // visited and on the stack, update low
+                    low[v] = low[to];
+                    f.root = false;
                 }
-            } else if (solution.strategy(v) != -1) {
-                int to = solution.strategy(v);
-                if (game.priority(to) > prio) {
-                    // skip if to higher priority
-                } else if (done[to] == prio) {
-                    // skip if already found scc (done[to] set to prio)
-                } else if (low[to] <= bot) {
-                    // not visited, add to <st> and break!
-                    st.push(to);
-                    pushed = true;
-                } else {
-                    // visited, update min
-                    if (low[to] < min) min = low[to];
-                }
-            } else {
-                for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
-                    int to = *curedge;
-                    // skip if to higher priority
-                    if (game.priority(to) > prio) continue;
-                    // skip if already found scc (done[to] set to prio)
-                    if (done[to] == prio) continue;
-                    // check if visited in this search
-                    if (low[to] <= bot) {
-                        // not visited, add to <st> and break!
-                        st.push(to);
-                        pushed = true;
-                        break;
-                    } else {
-                        // visited, update min
-                        if (low[to] < min) min = low[to];
-                    }
-                }
-            }
-            if (pushed) continue; // we pushed a new vertex to <st>...
-
-            // there was no edge to a new vertex
-            // check if we are the root of a SCC
-            if (min < low[v]) {
-                // not the root (outgoing edge to lower ranked vertex)
-                low[v] = min;
-                st.pop();
                 continue;
             }
+
+            // there are no more edges; pass low to the parent
+            const bool root = st.back().root;
+            st.pop_back();
+            if (!st.empty()) {
+                Frame& parent = st.back();
+                if (low[v] < low[parent.v]) {
+                    low[parent.v] = low[v];
+                    parent.root = false;
+                }
+            }
+
+            // check if we are the root of a SCC
+            if (!root) continue;
 
             /**
              * We're the root!
@@ -234,17 +253,18 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 if (n == v) break;
             }
 
-            bool self_strategy;
-            if (solution.has_multi() && solution.strategy(v) == -1 && getWinner(v) == game.owner(v)) {
-                // multi-strategy (sentinel): self-loop only if v->v is a strategy edge
-                self_strategy = has_strategy_edge_to(game, solution, v, v);
-            } else if (solution.strategy(v) != -1) {
-                self_strategy = (solution.strategy(v) == v);
-            } else {
-                // loser: any self-edge keeps v in its own SCC
-                self_strategy = game.has_edge(v, v);
+            // a single vertex has a cycle if it is its own successor
+            bool cycles = scc_size > 1;
+            if (!cycles) {
+                const char mode = successorMode(v);
+                long pos = firstPosition(v, mode);
+                for (int next; (next = nextSuccessor(v, mode, pos)) != -1; ) {
+                    if (next == v) {
+                        cycles = true;
+                        break;
+                    }
+                }
             }
-            bool cycles = scc_size > 1 or self_strategy;
 
             if (cycles && (max_prio&1) == (prio&1)) {
                 /**
@@ -257,8 +277,6 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                     if (n == v) break;
                 }
                 logger << std::endl;
-                delete[] done;
-                delete[] low;
 
                 throw std::runtime_error("loser can win");
             }
@@ -271,12 +289,8 @@ Verifier::verify(bool fullgame, bool even, bool odd)
                 res.pop_back();
                 if (n == v) break;
             }
-            st.pop();
         }
     }
-
-    delete[] done;
-    delete[] low;
 }
 
 }
