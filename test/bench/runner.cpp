@@ -649,7 +649,7 @@ Runner::run()
     interaction.add("extractions", extractions);
     report->event(interaction.str());
 
-    const auto totals = compute_totals(games, plan.size(), solvers.size(), o.repeats, reference_index(o.reference, solvers));
+    const auto totals = compute_totals(games, plan.size(), solvers.size(), o.repeats, reference_index(o.reference, solvers), o.timeout);
     report->summary(totals, interrupted, games.size());
     RunDetails details;
     details.schedule_seed = o.seed;

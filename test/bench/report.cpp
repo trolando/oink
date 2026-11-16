@@ -519,6 +519,8 @@ Report::summary(const Totals& totals, bool interrupted, size_t started)
         json.add("wins", ref ? std::optional<size_t>(t.wins) : std::nullopt);
         json.add("ties", ref ? std::optional<size_t>(t.ties) : std::nullopt);
         json.add("losses", ref ? std::optional<size_t>(t.losses) : std::nullopt);
+        json.add("geomean_vbs_ratio", t.vbs_ratio());
+        json.add("vbs_ratio_games", t.vbs_games);
         json.add("vbs_wins", t.vbs_wins);
         json.add("vbs_ties", t.vbs_ties);
         json.add("point_estimate_tie_band", TIE_BAND);

@@ -16,8 +16,10 @@
 
 /**
  * The final summary of a benchmark: per solver the coverage, the sum of its
- * per-game medians, the virtual best solver counts and, with a reference, the
- * geometric mean speedup and wins/ties/losses against the reference.
+ * per-game medians, the geometric mean of its medians over the fastest median
+ * of each game (the virtual best solver), the virtual best solver counts and,
+ * with a reference, the geometric mean speedup and wins/ties/losses against
+ * the reference.
  */
 
 #ifndef OINK_BENCH_SUMMARY_HPP
@@ -49,8 +51,12 @@ struct SolverTotals
     double log_ratios = 0;          // the sum of log(reference/solver) over the pairs
     size_t vbs_wins = 0;            // games where this solver is uniquely fastest
     size_t vbs_ties = 0;            // games where it shares the fastest median (1% band)
+    size_t vbs_games = 0;           // games verified or timed out, with a fastest median
+    double log_vbs = 0;             // the sum of log(solver/fastest) over these games
 
     std::optional<double> geomean() const;
+    /** The geometric mean of the median over the fastest median (a timeout counts as the limit). */
+    std::optional<double> vbs_ratio() const;
 };
 
 struct Totals
@@ -62,11 +68,13 @@ struct Totals
     size_t prep_failures = 0;       // games whose preparation failed
     bool complete_coverage = true;  // every solver verified every game
     std::optional<size_t> reference;
+    double timeout = 0;             // the time limit of a trial; 0: none
+    size_t vbs_games = 0;           // games with a fastest median (of the VBS ratios)
     std::vector<SolverTotals> solvers;
     std::vector<size_t> order;      // full coverage first, then by sum
 };
 
-Totals compute_totals(const std::vector<Case>& games, size_t planned, size_t solver_count, int repeats, std::optional<size_t> reference);
+Totals compute_totals(const std::vector<Case>& games, size_t planned, size_t solver_count, int repeats, std::optional<size_t> reference, double timeout);
 
 /** What the "Run details" part of the summary reports. */
 struct RunDetails

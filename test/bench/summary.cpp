@@ -34,13 +34,21 @@ SolverTotals::geomean() const
     return std::exp(log_ratios / (double)paired);
 }
 
+std::optional<double>
+SolverTotals::vbs_ratio() const
+{
+    if (vbs_games == 0) return std::nullopt;
+    return std::exp(log_vbs / (double)vbs_games);
+}
+
 Totals
-compute_totals(const std::vector<Case>& games, size_t planned, size_t solver_count, int repeats, std::optional<size_t> reference)
+compute_totals(const std::vector<Case>& games, size_t planned, size_t solver_count, int repeats, std::optional<size_t> reference, double timeout)
 {
     Totals totals;
     totals.planned = planned;
     totals.started = games.size();
     totals.reference = reference;
+    totals.timeout = timeout;
     totals.solvers.resize(solver_count);
     for (const auto& game : games) {
         if (game.fully_preprocessed) totals.preprocessed++;
@@ -64,6 +72,19 @@ compute_totals(const std::vector<Case>& games, size_t planned, size_t solver_cou
         for (size_t s : leaders) {
             if (leaders.size() == 1) totals.solvers[s].vbs_wins++;
             else totals.solvers[s].vbs_ties++;
+        }
+        // the ratio to the virtual best solver; a timeout counts as the time limit
+        if (best > 0 && best < std::numeric_limits<double>::infinity()) {
+            totals.vbs_games++;
+            for (size_t s = 0; s < solver_count; s++) {
+                const Cell& cell = game.cells[s];
+                double time = 0;
+                if (cell.complete(repeats)) time = cell.stats().median;
+                else if (cell.failure == Status::Timeout && timeout > 0) time = std::max(timeout, best);
+                if (time <= 0) continue;
+                totals.solvers[s].log_vbs += std::log(time / best);
+                totals.solvers[s].vbs_games++;
+            }
         }
 
         const bool ref_ok = reference && game.cells[*reference].complete(repeats);
@@ -120,12 +141,12 @@ print_summary(std::ostream& out, const Totals& totals, const std::vector<SolverR
     const int digits = (int)std::to_string(totals.planned).size();
     const int coverage_width = std::max(10, 3 * digits + 4);
     const int wtl_width = std::max(9, 3 * digits + 2);
-    size_t rule_width = name_width + (size_t)coverage_width + 14 + 2 + (size_t)std::max(7, 2 * digits + 1);
+    size_t rule_width = name_width + (size_t)coverage_width + 14 + 12 + 2 + (size_t)std::max(7, 2 * digits + 1);
     if (reference) rule_width += 14 + (totals.complete_coverage ? 0 : 10) + 2 + (size_t)wtl_width;
     const std::string rule(rule_width, '-');
 
     out << '\n' << heading << "Benchmark summary - sum of per-game medians (seconds)" << reset << "\n\n";
-    out << bold << std::left << std::setw((int)name_width) << "solver" << std::right << std::setw(coverage_width) << "complete" << std::setw(14) << "sum medians";
+    out << bold << std::left << std::setw((int)name_width) << "solver" << std::right << std::setw(coverage_width) << "complete" << std::setw(14) << "sum medians" << std::setw(12) << "geom. VBS";
     if (reference) out << std::setw(14) << "geom. speedup";
     if (reference && !totals.complete_coverage) out << std::setw(10) << "pairs";
     if (reference) out << "  " << std::left << std::setw(wtl_width) << "W/T/L";
@@ -139,6 +160,13 @@ print_summary(std::ostream& out, const Totals& totals, const std::vector<SolverR
         if (totals.timed_planned > 0 && t.complete == totals.timed_planned) ranked[s] = t.sum;
     }
     const auto colors = styled ? heatmap_colors(ranked) : std::vector<int>(solvers.size(), -1);
+    // and the VBS ratios of the solvers without failures other than timeouts
+    std::vector<double> ratios(solvers.size(), std::numeric_limits<double>::quiet_NaN());
+    for (size_t s = 0; s < solvers.size(); s++) {
+        const SolverTotals& t = totals.solvers[s];
+        if (t.vbs_ratio() && t.vbs_games == totals.vbs_games) ratios[s] = *t.vbs_ratio();
+    }
+    const auto vbs_colors = styled ? heatmap_colors(ratios) : std::vector<int>(solvers.size(), -1);
 
     for (size_t s : totals.order) {
         const SolverTotals& t = totals.solvers[s];
@@ -150,6 +178,10 @@ print_summary(std::ostream& out, const Totals& totals, const std::vector<SolverR
         else sum << "-";
         out << std::left << std::setw((int)name_width) << ui::clean(solvers[s].name) << std::right << std::setw(coverage_width) << coverage;
         out << ui::style::color256(colors[s]) << sum.str() << (colors[s] >= 0 ? reset : "");
+        std::ostringstream vbs;
+        if (t.vbs_ratio()) vbs << std::fixed << std::setprecision(3) << *t.vbs_ratio() << "x";
+        else vbs << "-";
+        out << ui::style::color256(vbs_colors[s]) << std::setw(12) << vbs.str() << (vbs_colors[s] >= 0 ? reset : "");
         if (reference) {
             std::ostringstream speedup;
             if (t.geomean()) {
@@ -169,6 +201,9 @@ print_summary(std::ostream& out, const Totals& totals, const std::vector<SolverR
     out << bold << "Column guide" << reset << '\n' << dim;
     out << "  Complete       Verified games / games needing a solver; !N counts failures.\n";
     out << "  Sum medians    Sum of the per-game medians of the solve time, in seconds.\n";
+    out << "  Geom. VBS      Geometric mean of the median over the fastest median of each game (the\n";
+    out << "                 virtual best solver); 1x is always the fastest, lower is better.\n";
+    if (totals.timeout > 0) out << "                 A timeout counts as the time limit.\n";
     if (reference) {
         out << "  Geom. speedup  Geometric mean of the paired ratios against the reference (>1x is faster).\n";
         out << "  W/T/L          Wins/ties/losses against the reference, with a 1% tie band.\n";

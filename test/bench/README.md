@@ -77,13 +77,15 @@ given. The solver seed is fixed per game unless `--vary-solver-seed`. With
 As each game finishes, stderr gets a line with the median and interquartile
 range of every solver. At the end, stdout gets the summary: per solver the
 coverage (verified games out of the games that need a solver; `!N` counts
-failures), the sum of the per-game medians and `VBS W/T`, the games where it
-is uniquely fastest or within 1% of the fastest median. With `--reference`
+failures), the sum of the per-game medians, `geom. VBS`, the geometric mean
+of its median over the fastest median of each game (the virtual best
+solver; a timeout counts as the time limit), and `VBS W/T`, the games where
+it is uniquely fastest or within 1% of the fastest median. With `--reference`
 (a selected name, its id if it has one variant, or `first`), the summary adds
 the geometric mean speedup against the reference over the games both
 verified, and wins/ties/losses with a 1% tie band. Solvers with full coverage
-come first, by their sum; on a terminal the sums are coloured green (fastest)
-to red. These are point estimates, not significance tests.
+come first, by their sum; on a terminal the sums and `geom. VBS` are coloured
+green (fastest) to red. These are point estimates, not significance tests.
 
 `--jsonl=FILE` writes JSON Lines, flushed as they happen: the metadata (build,
 machine, settings, solvers, a clock probe), every game, preparation, warm-up,

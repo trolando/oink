@@ -435,7 +435,7 @@ Experiment::publish(const Options& options, const std::vector<SolverRun>& solver
                 if (!line.empty()) report.event(line);
             }
         }
-        const auto totals = compute_totals(finished_games, games.size(), solvers.size(), options.repeats, reference_index(options.reference, solvers));
+        const auto totals = compute_totals(finished_games, games.size(), solvers.size(), options.repeats, reference_index(options.reference, solvers), options.timeout);
         report.summary(totals, !complete, finished_games.size());
     }
     replace_file(aggregate.jsonl, root_path / "results.jsonl");

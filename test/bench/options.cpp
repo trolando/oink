@@ -44,8 +44,9 @@ against the whole game. On POSIX systems the trials run in a worker process,
 so crashes are caught and --timeout applies.
 
 The per-game medians are printed to stderr as each game completes, and the
-summary (sum of medians, VBS wins/ties and, with --reference, the geometric
-mean speedup and W/T/L) to stdout. --jsonl writes every trial, --csv the
+summary (sum of medians, the geometric mean over the virtual best solver (VBS),
+VBS wins/ties and, with --reference, the geometric mean speedup and W/T/L) to
+stdout. --jsonl writes every trial, --csv the
 statistics per game and solver.
 
 With -i, a setup screen comes first: AVAILABLE lists the solvers by family

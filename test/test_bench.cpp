@@ -170,7 +170,7 @@ test_totals()
     games.push_back(game_with(0, {1.0, 2.0, 1.005})); // solver 0 and 2 tie for fastest
     games.push_back(game_with(1, {4.0, 2.0, nan}));   // solver 1 uniquely fastest
     games.push_back(game_with(2, {3.0, 3.0, 9.0}));   // 0 and 1 tie
-    const auto totals = compute_totals(games, 3, 3, 1, size_t(0));
+    const auto totals = compute_totals(games, 3, 3, 1, size_t(0), 10);
     check("coverage", totals.solvers[0].complete == 3 && totals.solvers[2].complete == 2 && !totals.complete_coverage);
     check("failures", totals.solvers[2].failed == 1 && totals.solvers[0].failed == 0);
     check("sums", near(totals.solvers[0].sum, 8) && near(totals.solvers[1].sum, 7));
@@ -183,9 +183,13 @@ test_totals()
     check("geometric mean", t.geomean() && near(*t.geomean(), 1.0));
     check("one-sided pairs", totals.solvers[2].paired == 2 && totals.solvers[2].reference_only == 1);
     check("order: full coverage by sum, then the rest", totals.order == std::vector<size_t>({1, 0, 2}));
+    // the fastest medians are 1, 2 and 3; the timeout of solver 2 counts as the limit 10
+    check("vbs ratio", totals.solvers[0].vbs_games == 3 && near(*totals.solvers[0].vbs_ratio(), std::cbrt(2.0)));
+    check("vbs ratio with a timeout", totals.solvers[2].vbs_games == 3 && near(*totals.solvers[2].vbs_ratio(), std::cbrt(1.005 * 5 * 3)));
 
-    const auto none = compute_totals(games, 3, 3, 1, std::nullopt);
+    const auto none = compute_totals(games, 3, 3, 1, std::nullopt, 0);
     check("no reference, no pairs", none.solvers[1].paired == 0 && !none.solvers[1].geomean());
+    check("vbs ratio without a time limit", none.solvers[2].vbs_games == 2 && near(*none.solvers[2].vbs_ratio(), std::sqrt(1.005 * 3)));
 
     // the printed summary, plain and styled
     const std::vector<SolverRun> roster = {SolverRun("tl", ""), SolverRun("zlk", ""), SolverRun("npp", "")};
@@ -197,6 +201,8 @@ test_totals()
     check("summary names the reference", plain.str().find("Reference: tl.") != std::string::npos);
     check("summary has the comparison columns", plain.str().find("geom. speedup") != std::string::npos && plain.str().find("W/T/L") != std::string::npos);
     check("summary has the replay seed", plain.str().find("--bench-seed=42") != std::string::npos);
+    check("summary has the vbs ratio", plain.str().find("geom. VBS") != std::string::npos && plain.str().find("1.260x") != std::string::npos);
+    check("summary explains the timeout", plain.str().find("counts as the time limit") != std::string::npos);
     std::ostringstream plain_none;
     print_summary(plain_none, none, roster, details, false);
     check("no comparison columns without a reference", plain_none.str().find("W/T/L") == std::string::npos && plain_none.str().find("VBS W/T") != std::string::npos);
@@ -205,8 +211,9 @@ test_totals()
     full.push_back(game_with(0, {1.0, 2.0, 3.0}));
     full.push_back(game_with(1, {1.0, 2.0, 3.0}));
     std::ostringstream styled;
-    print_summary(styled, compute_totals(full, 2, 3, 1, std::nullopt), roster, details, true);
+    print_summary(styled, compute_totals(full, 2, 3, 1, std::nullopt, 0), roster, details, true);
     check("styled sums are coloured", styled.str().find("\033[38;5;82m") != std::string::npos && styled.str().find("\033[38;5;196m") != std::string::npos);
+    check("styled vbs ratios are coloured", styled.str().find("\033[38;5;82m      1.000x") != std::string::npos && styled.str().find("\033[38;5;196m      3.000x") != std::string::npos);
 }
 
 static void
