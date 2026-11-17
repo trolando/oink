@@ -46,6 +46,7 @@ protected:
 
     std::vector<int*> tout; // for each tangle
     std::vector<int> *tin; // for each normal vertex
+    bitset has_tin; // vertices with at least one tangle backlink
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
 

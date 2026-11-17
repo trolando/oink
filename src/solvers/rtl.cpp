@@ -178,6 +178,7 @@ RTLSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G, i
 void
 RTLSolver::attractTangles(int pl, int v, bitset &R, bitset &Z, bitset &G, int maxpr)
 {
+    if (!has_tin[v]) return;
     const auto &in_cur = tin[v];
     for (int from : in_cur) attractTangle(from, pl, R, Z, G, maxpr);
 }
@@ -380,7 +381,11 @@ pearce_again:
         const int tidx = tpr.size();
 
         // add back links to all normal vertices in our [out]
-        for (unsigned int x = 0; x < tangleto.size(); x++) tin[tangleto[x]].push_back(tidx);
+        for (unsigned int x = 0; x < tangleto.size(); x++) {
+            const int v = tangleto[x];
+            tin[v].push_back(tidx);
+            has_tin.set(v);
+        }
 
         // move tangleto into vout
         int* _tout = new int[tangleto.size()+1];
@@ -596,6 +601,7 @@ void
 RTLSolver::run()
 {
     tin = new std::vector<int>[nodecount()];
+    has_tin.resize(nodecount());
     str = new int[nodecount()];
 
     V.resize(nodecount());
