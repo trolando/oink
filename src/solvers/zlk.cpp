@@ -251,7 +251,10 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
     while (true) {
         size_t next = R->size();
 
-        while (i >= 0) {
+        while (true) {
+            // With no open vertices left, the FIFO cannot attract anything else.
+            if (i < 0) return -1;
+
             const int ri = region[i].load(memory_order_relaxed);
             if (ri == DIS or ri >= 0) {
                 // cannot be attracted: drop it from <open>, continue at the next open vertex
@@ -277,7 +280,7 @@ ZLKSolver::attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H)
             i--;
         }
 
-        // no new heads: <i> is -1 or a vertex that is not attracted and ends the run
+        // No new heads: <i> ends the run.
         if (next == R->size()) break;
 
         while (next < R->size()) {
