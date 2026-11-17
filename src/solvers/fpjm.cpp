@@ -178,6 +178,8 @@ FPJMSolver::runSeq()
                 for (auto curedge = ins(v); *curedge != -1; curedge++) {
                     const int from = *curedge;
                     if (disabled[from]) continue;
+                    // New winner's moves stayed valid through the batch and its resets.
+                    if (won[1-cur_parity][from]) continue;
                     if (!justified[from]) continue;
                     bool reset = false;
                     if (nstrat[from] == 0) {
