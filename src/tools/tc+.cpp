@@ -16,6 +16,7 @@
 
 #include <iostream>
 #include <memory>
+#include <vector>
 
 #include "oink/game.hpp"
 
@@ -179,10 +180,10 @@ main(int argc, char** argv)
     }
 
     game.vec_finish();
-    int mapping[game.nodecount()];
-    game.sort(mapping);
+    std::vector<int> mapping(game.nodecount());
+    game.sort(mapping.data());
     game.renumber();
-    game.permute(mapping);
+    game.permute(mapping.data());
     game.write_pgsolver(std::cout);
 
     delete[] in0;

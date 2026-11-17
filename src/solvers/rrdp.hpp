@@ -29,7 +29,7 @@ class RRDPSolver : public RRSolver
 public:
     RRDPSolver(Oink& oink, Game& game);
 
-    virtual void run();
+    void run() override;
 
     int delayed = 0;
 
@@ -37,7 +37,7 @@ protected:
     int *region_;
     int reset0, reset1;
 
-    int getRegionStatus(int index, int priority);
+    int getRegionStatus(int index, int priority) override;
     bool checkRegion(int priority) override; // region_-aware recovery check
 };
 

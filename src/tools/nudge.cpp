@@ -15,7 +15,6 @@
  */
 
 #include <algorithm>
-#include <cstring>
 #include <iostream>
 #include <fstream>
 #include <random>
@@ -44,8 +43,7 @@ tarjan(Game *game, int n, std::vector<int> &res, bool nonempty)
 {
     // initialize
     unsigned n_vertices = game->vertexcount();
-    int *low = new int[n_vertices];
-    memset(low, 0, sizeof(int[n_vertices]));
+    int *low = new int[n_vertices]();
     int pre = 0;
 
     // search stack "st"

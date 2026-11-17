@@ -17,7 +17,6 @@
 #include <algorithm>
 #include <iostream>
 #include <random>
-#include <cstring>
 
 #include "oink/game.hpp"
 
@@ -98,11 +97,8 @@ main(int argc, char** argv)
     int src_count = n, tgt_count = n;
     int intodo = n, outtodo = n;
 
-    int *outcounts = new int[n];
-    int *incounts = new int[n];
-
-    memset(outcounts, 0, sizeof(int[n]));
-    memset(incounts, 0, sizeof(int[n]));
+    int *outcounts = new int[n]();
+    int *incounts = new int[n]();
 
     // array for temporarily removing unwanted target nodes
     int **ptrs = new int*[maxD+1];

@@ -62,6 +62,8 @@ All notable changes to Oink will be documented in this file.
 - `oink`, `nudge` and `test_solvers` report option parsing errors and exit
   with an error status.
 - Fixed a Clang build failure with libstdc++ on Ubuntu 26.04.
+- Clang can build the library and extra tools with warnings treated as
+  errors.
 - PMA and PMTL could leave vertices unsolved: the attractor shortcut
   (optimisation 2) ignored the regions whose lifts were postponed to the
   next round. This bug dates from the first PMTL.
