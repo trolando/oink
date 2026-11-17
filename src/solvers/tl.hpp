@@ -52,7 +52,7 @@ protected:
     uintqueue Q; // main queue when attracting vertices (during a pass: the vertices of its regions)
 
     const int *inedges; // the in-edges of the game (each list ends with -1)
-    int *firstin; // for each vertex, its first in-edge in <inedges> (a copy, see prefetchAhead)
+    const int *firstin; // offsets into <inedges>, owned by the game
     int *str; // stores currently assigned strategy of each vertex
     unsigned int *escs; // stores remaining escapes of each vertex
     unsigned int *gdeg; // number of successors in <G> of each vertex in <G>, or 0 if not known yet

@@ -318,6 +318,12 @@ public:
         return _inedges.data();
     }
 
+    // Offsets into inedges(), valid until the incoming edges are rebuilt.
+    inline const int* firstins() const
+    {
+        return _firstins.data();
+    }
+
     inline int firstout(const int vertex) const
     {
         return _firstouts[vertex];

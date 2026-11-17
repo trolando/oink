@@ -100,8 +100,8 @@ TLSolver::attractVertices(const int pl, const int v, bitset &R, bitset &Z)
  * reads the start of its in-edges, and then its in-edges, both at random places. The queue
  * holds the next vertices, so before attracting via <Q[qh]>, prefetch the in-edges of the
  * vertex <PREFETCH_AHEAD> places further, and the start of the in-edges of the vertex twice as
- * far (TL keeps its own copy of these starts, in <firstin>, to know their address). Also
- * prefetching the escape counters and strategies of the predecessors cost more than it saved.
+ * far. Prefetching the escape counters and strategies of the predecessors cost more than it
+ * saved.
  */
 static const unsigned int PREFETCH_AHEAD = 16;
 static const int PREFETCH_MIN = 131072; // (vertices; the data of smaller games is in the caches)
@@ -1092,8 +1092,7 @@ TLSolver::run()
     has_tin.resize(nodecount());
     str = new int[nodecount()];
     inedges = game.inedges();
-    firstin = new int[nodecount()];
-    for (int v=0; v<nodecount(); v++) firstin[v] = game.firstin(v);
+    firstin = game.firstins();
     prefetch = nodecount() >= PREFETCH_MIN;
     escs = new unsigned int[nodecount()];
     gdeg = new unsigned int[nodecount()];
@@ -1156,7 +1155,6 @@ TLSolver::run()
     delete[] regidx;
     delete[] astr;
     delete[] str;
-    delete[] firstin;
     delete[] pea_vidx;
     delete[] escs;
     delete[] gdeg;
