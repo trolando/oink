@@ -6,16 +6,41 @@ All notable changes to Oink will be documented in this file.
 
 ### Added
 
+- Solver ZLKJ, Zielonka with justifications, after Algorithm 5 of
+  Lapauw, Bruynooghe and Denecker (VMCAI 2020).
+- Solver PPJ, priority promotion with justifications, after Algorithm 4.4
+  of the thesis of Ruben Lapauw.
+- Solver PMA, progress measures with attractors, formerly only available
+  as the `notangles` option of PMTL. PMA is experimental and offers small,
+  succinct, ordered and Strahler measures.
 - The tool `bench_solvers` benchmarks the solvers with verified, repeated
   and interleaved trials, in worker processes with timeouts, optional
   once-per-game preprocessing, a live table with a review, JSON Lines and
-  CSV reports, and named experiments that can be resumed. See
-  `test/bench/README.md`.
+  CSV reports, and named experiments that can be resumed. Its summary
+  includes the geometric mean relative to the fastest solver per game.
+  See `test/bench/README.md`.
 - `test_solvers -i` chooses the solvers and their configurations in an
   interactive screen.
 - Solution files can hold multi-strategies: all winning moves of a vertex,
   separated by commas. Oink writes the multi-strategies of FPIM and FPJM
   this way (before, one of their moves), and reads and verifies them.
+- The solver registry reports solver families, experimental status and
+  configuration syntax. `Oink::effectiveSolver()` and
+  `Oink::effectiveSolverOptions()` report the solver and options used.
+
+### Changed
+
+- Random games are now generated the same way on every platform. Games
+  selected with `--gameseed` may differ from those in earlier releases.
+- Sorting a game by priority now keeps vertices with equal priority in
+  their original order.
+- ZLK and ZLKQ do less work in recursive calls. Priority promotion and
+  tangle learning scan fewer edges or revisit fewer regions. The fixpoint
+  solvers reuse evaluations and process updates in batches. GPM and PMTL
+  do fewer measure operations.
+- `oink --solvers` shows the available solver options. Oink validates
+  options before loading the game. Library callers can catch invalid
+  solver options as exceptions.
 
 ### Removed
 
@@ -24,9 +49,19 @@ All notable changes to Oink will be documented in this file.
 
 ### Fixed
 
+- Oink now excludes vertices from an installed partial solution during
+  preprocessing, so they are only attracted to once.
+- Small measures for Odd could read past the end of the priority counts
+  when the highest priority was even.
+- `test_solvers` reports a failing external solver's exit status.
+- `oink`, `nudge` and `test_solvers` report option parsing errors and exit
+  with an error status.
+- Fixed a Clang build failure with libstdc++ on Ubuntu 26.04.
 - PMA and PMTL could leave vertices unsolved: the attractor shortcut
   (optimisation 2) ignored the regions whose lifts were postponed to the
   next round. This bug dates from the first PMTL.
+- PMTL could skip lifts in a region that started with a known tangle,
+  because it added the head twice.
 - Reading a solution file ignored the rest of a malformed line (so
   `1,2x,0` was read as `1`) and the moves of a vertex won by its opponent;
   both are now errors.
