@@ -65,6 +65,66 @@ Verifier::nextSuccessor(int v, char mode, long& pos) const
 }
 
 void
+Verifier::checkClosure(bool fullgame, bool even, bool odd)
+{
+    for (int v=0; v < game.vertexcount(); v++) {
+        // (for full solutions) check whether every vertex is won
+        if (!solution.is_solved(v)) {
+            if (fullgame) throw std::runtime_error("not every vertex is won");
+            else continue;
+        }
+
+        const int winner = getWinner(v);
+
+        if (winner == 0 and !even) continue; // whatever
+        if (winner == 1 and !odd) continue; // whatever
+
+        const bool owner_wins = winner == game.owner(v);
+        const auto check_move = [&](int to) {
+            if (getWinner(to) == winner) return;
+            const char* reason = owner_wins ? "strategy leaves dominion" : "loser can escape";
+            throw std::runtime_error(std::string(reason) + " on move from vertex " +
+                                     std::to_string(v) + " to vertex " + std::to_string(to));
+        };
+
+        if (owner_wins) {
+            int str = solution.strategy(v);
+            if (str != -1) {
+                // single strategy: check it stays in the dominion
+                if (!game.has_edge(v, str)) {
+                    throw std::runtime_error("strategy is not a valid move from vertex " +
+                                             std::to_string(v) + " to vertex " + std::to_string(str));
+                }
+                check_move(str);
+                n_strategies++; // number of checked strategies
+            } else {
+                // sentinel: -1 with winner==owner means the moves are in the
+                // multi-strategy (if one exists); a winner-owned vertex with
+                // neither a single strategy nor a multi-strategy is an error.
+                if (!solution.has_multi()) {
+                    throw std::runtime_error("winning vertex has no strategy at vertex " + std::to_string(v));
+                }
+                // check that *every* recorded edge stays in the dominion
+                const int* outbase = game.outedges();
+                int count = 0;
+                for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
+                    if (!solution.has_edge_index(curedge - outbase)) continue;
+                    check_move(*curedge);
+                    count++;
+                }
+                if (count == 0) throw std::runtime_error("winning vertex has no strategy at vertex " + std::to_string(v));
+                n_strategies++; // number of checked strategies
+            }
+        } else {
+            // if loser, check whether the loser can escape
+            for (int to : game.out_edges(v)) check_move(to);
+            // and of course check that no strategy is set
+            if (solution.strategy(v) != -1) throw std::runtime_error("losing vertex has strategy");
+        }
+    }
+}
+
+void
 Verifier::verify(bool fullgame, bool even, bool odd)
 {
     // The result does not depend on the order of the vertices, but the searches below
@@ -72,66 +132,7 @@ Verifier::verify(bool fullgame, bool even, bool odd)
     // outgoing edges, so no incoming-edge array is needed.
     const int n_vertices = game.vertexcount();
 
-    /**
-     * The first loop removes all edges from "won" vertices that are not the strategy.
-     * This turns each dominion into a single player game.
-     * Also some trivial checks are performed.
-     */
-    for (int v=0; v < n_vertices; v++) {
-        // (for full solutions) check whether every vertex is won
-        if (!solution.is_solved(v)) {
-            if (fullgame) throw std::runtime_error("not every vertex is won");
-            else continue;
-        }
-
-        const bool winner = getWinner(v) ;
-
-        if (winner == 0 and !even) continue; // whatever
-        if (winner == 1 and !odd) continue; // whatever
-
-        if (winner == game.owner(v)) {
-            int str = solution.strategy(v);
-            if (str != -1) {
-                // single strategy: check it stays in the dominion
-                if (!game.has_edge(v, str)) {
-                    throw std::runtime_error("strategy is not a valid move");
-                } else if (!solution.is_solved(str) or getWinner(str) != winner) {
-                    throw std::runtime_error("strategy leaves dominion");
-                }
-                n_strategies++; // number of checked strategies
-            } else {
-                // sentinel: -1 with winner==owner means the moves are in the
-                // multi-strategy (if one exists); a winner-owned vertex with
-                // neither a single strategy nor a multi-strategy is an error.
-                if (!solution.has_multi()) {
-                    throw std::runtime_error("winning vertex has no strategy");
-                }
-                // check that *every* recorded edge stays in the dominion
-                const int* outbase = game.outedges();
-                int count = 0;
-                for (auto curedge = game.outs(v); *curedge != -1; curedge++) {
-                    if (!solution.has_edge_index(curedge - outbase)) continue;
-                    const int to = *curedge;
-                    if (!solution.is_solved(to) or getWinner(to) != winner) {
-                        throw std::runtime_error("strategy leaves dominion");
-                    }
-                    count++;
-                }
-                if (count == 0) throw std::runtime_error("winning vertex has no strategy");
-                n_strategies++; // number of checked strategies
-            }
-        } else {
-            // if loser, check whether the loser can escape
-            for (int to : game.out_edges(v)) {
-                if (!solution.is_solved(to) or getWinner(to) != winner) {
-                    logger << "escape edge from " << game.label_vertex(v) << " to " << game.label_vertex(to) << std::endl;
-                    throw std::runtime_error("loser can escape");
-                }
-            }
-            // and of course check that no strategy is set
-            if (solution.strategy(v) != -1) throw std::runtime_error("losing vertex has strategy");
-        }
-    }
+    checkClosure(fullgame, even, odd);
 
     /**
      * The second part searches, for each priority <prio> of the loser's parity, the strongly

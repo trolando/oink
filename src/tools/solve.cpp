@@ -300,6 +300,13 @@ int main(int argc, char **argv)
             out << "parsing error: " << err.what() << std::endl;
             return -1;
         }
+        // Check closure before reindexing so errors use the input vertex numbers.
+        try {
+            Verifier(pg, presolution, out).checkClosure();
+        } catch (const std::runtime_error &err) {
+            out << "invalid solution: " << err.what() << std::endl;
+            return -1;
+        }
     }
 
     /**

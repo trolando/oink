@@ -34,6 +34,9 @@ public:
 
     // TODO: make a std::exception class for verification exceptions?
 
+    /** Check that the strategy of each selected winner stays in its region. */
+    void checkClosure(bool fullgame=false, bool even=true, bool odd=true);
+
     /**
      * Verify the game strategy.
      */

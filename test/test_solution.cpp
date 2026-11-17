@@ -153,6 +153,18 @@ test_solution()
         Oink controller(game, log);
         controller.setSolver("zlk");
         controller.setBottomSCC(scc);
+
+        controller.solution().solve(0, 0, 0);
+        controller.solution().solve(1, 0, -1);
+        bool rejected = false;
+        try {
+            controller.run();
+        } catch (const std::runtime_error& e) {
+            rejected = std::string(e.what()).find("loser can escape on move from vertex 1 to vertex 3") != std::string::npos;
+        }
+        check("library rejects an open partial solution", rejected);
+        controller.solution().reset();
+
         controller.solution().solve(0, 0, 0);
         bool verified = true;
         try {

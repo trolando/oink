@@ -136,6 +136,8 @@ public:
     /**
      * The solution being built (solved/winner/strategy). Owned by Oink; the game
      * it solves is pure input. Read it after run() to obtain the result.
+     * A partial solution installed here before run() must be closed under the
+     * strategy moves of the winners and all moves of the losers.
      */
     [[nodiscard]] Solution& solution() noexcept { return solution_; }
     [[nodiscard]] const Solution& solution() const noexcept { return solution_; }

@@ -301,7 +301,8 @@ add_multi_move(const Game& game, Solution& solution, int v, int to)
             return;
         }
     }
-    throw std::runtime_error("strategy is not a valid move");
+    throw std::runtime_error("strategy is not a valid move from vertex " +
+                             std::to_string(v) + " to vertex " + std::to_string(to));
 }
 
 void

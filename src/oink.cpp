@@ -25,6 +25,7 @@
 #include "oink/oink.hpp"
 #include "oink/solvers.hpp"
 #include "oink/solver.hpp"
+#include "verifier.hpp"
 #include "lace.h"
 
 namespace pg {
@@ -446,6 +447,9 @@ Oink::run()
     using namespace std::chrono;
     auto time_before = high_resolution_clock::now();
 
+    const bool has_partial_solution = solution_.solved().any();
+    if (has_partial_solution) Verifier(*game, solution_, logger).checkClosure();
+
     /**
      * Now inflate / compress / renumber...
      */
@@ -462,9 +466,8 @@ Oink::run()
 
     /**
      * Deal with partial solutions
-     * TODO: test this code, or maybe disable partial solutions and only accept full solutions for verification??
      */
-    if (solution_.solved().any()) {
+    if (has_partial_solution) {
         // Preprocessors must also exclude the installed partial solution.
         disabled = solution_.solved();
         for (int v=0; v<game->vertexcount(); v++) {
