@@ -33,6 +33,9 @@ Oink implements various modern algorithms.
 Several of the algorithms can be run with multiple threads.
 These parallel algorithms use the work-stealing framework Lace.
 
+Solvers marked (e) are for experimental purposes: they are not the state-of-the-art solvers of their family.
+The interactive solver chooser of the test tools hides them by default.
+
 ### Tangle learning family
 
 The tangle learning algorithms are a focus of research for finding a polynomial-time algorithm to solve parity games.
@@ -46,9 +49,9 @@ TL              | Tangle learning (standard variant)
 TLPAR           | (parallel) Tangle learning with parallel attraction
 TLJ             | Tangle learning with justifications (after Algorithm 7 of Lapauw, Bruynooghe and Denecker)
 RTL             | Recursive Tangle Learning (research variant)
-ORTL            | One-sided Recursive Tangle Learning (research variant)
-DTL             | Distance Tangle Learning (research variant based on 'good path length')
-IDTL            | Interleaved Distance Tangle Learning (interleaved variant of DTL)
+ORTL (e)        | One-sided Recursive Tangle Learning (research variant)
+DTL (e)         | Distance Tangle Learning (research variant based on 'good path length')
+IDTL (e)        | Interleaved Distance Tangle Learning (interleaved variant of DTL)
 TLQ             | Tangle Learning applied to the quasi-polynomial time recursive algorithm
 
 ### Fixpoint algorithms
@@ -85,10 +88,11 @@ Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
 NPP             | Priority promotion (implementation by authors BDM)
 PP              | Priority promotion (basic algorithm)
-PPP             | Priority promotion PP+ (better reset heuristic)
-RR              | Priority promotion RR (even better reset heuristic)
-DP              | Priority promotion PP+ with the delayed promotion strategy
-RRDP            | Priority promotion RR with the delayed promotion strategy
+PPJ             | Priority promotion with justifications
+PPP (e)         | Priority promotion PP+ (better reset heuristic)
+RR (e)          | Priority promotion RR (even better reset heuristic)
+DP (e)          | Priority promotion PP+ with the delayed promotion strategy
+RRDP (e)        | Priority promotion RR with the delayed promotion strategy
 PPQ             | Pawel Parys's QP recursive algorithm augmented with priority promotion
 
 ### Zielonka's recursive algorithm
@@ -109,11 +113,12 @@ See also:
 Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
 ZLK             | (parallel) Zielonka's recursive algorithm
-UZLK            | an unoptimized version of Zielonka for research purposes
+ZLKJ            | Zielonka with justifications
+UZLK (e)        | an unoptimized version of Zielonka for research purposes
 ZLKQ            | Quasi-polynomial time recursive algorithm (optimized implementation by TvD)
-ZLKPP-STD       | Zielonka's recursive algorithm (standard version, by Pawel Parys)
-ZLKPP-WAW       | Quasi-polynomial time recursive algorithm (Warsaw version, by Pawel Parys)
-ZLKPP-LIV       | Quasi-polynomial time recursive algorithm (Liverpool version, by Pawel Parys)
+ZLKPP-STD (e)   | Zielonka's recursive algorithm (standard version, by Pawel Parys)
+ZLKPP-WAW (e)   | Quasi-polynomial time recursive algorithm (Warsaw version, by Pawel Parys)
+ZLKPP-LIV (e)   | Quasi-polynomial time recursive algorithm (Liverpool version, by Pawel Parys)
 
 ### Strategy improvement
 
@@ -129,7 +134,7 @@ See also:
 Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
 PSI             | (parallel) strategy improvement
-SSI             | symmetric strategy improvement
+SSI (e)         | symmetric strategy improvement
 
 ### Progress measures
 
@@ -159,15 +164,16 @@ See also:
 
 Algorithm       | Description
 :-------------- | :-------------------------------------------------------------------------------------------------
-TSPM            | Traditional small progress measures (standard variant without cycle acceleration)
-SPM             | Accelerated version of small progress measures (cycle acceleration variant by TvD)
-MSPM            | Small progress measures with strategies for both players from one measure (Gazda and Willemse's algorithm)
-SSPM            | Quasi-polynomial time succinct progress measures
-BSSPM           | Quasi-polynomial time succinct progress measures (bounding variant by TvD and MJ, often faster)
-QPT             | Quasi-polynomial time ordered progress measures
-BQPT            | Quasi-polynomial time ordered progress measures (bounding variant by TvD and MJ, often faster)
-GPM             | Generic progress measures (small, ordered, succinct or Strahler measures)
-PMTL            | Progress measures with tangle learning (small, ordered, succinct or Strahler measures)
+TSPM (e)        | Traditional small progress measures (standard variant without cycle acceleration)
+SPM (e)         | Accelerated version of small progress measures (cycle acceleration variant by TvD)
+MSPM (e)        | Small progress measures with strategies for both players from one measure (Gazda and Willemse's algorithm)
+SSPM (e)        | Quasi-polynomial time succinct progress measures
+BSSPM (e)       | Quasi-polynomial time succinct progress measures (bounding variant by TvD and MJ, often faster)
+QPT (e)         | Quasi-polynomial time ordered progress measures
+BQPT (e)        | Quasi-polynomial time ordered progress measures (bounding variant by TvD and MJ, often faster)
+GPM (e)         | Generic progress measures (small, ordered, succinct or Strahler measures)
+PMTL (e)        | Progress measures with tangle learning (small, ordered, succinct or Strahler measures)
+PMA (e)         | Progress measures with attractors (small, ordered, succinct or Strahler measures)
 
 ### Preprocessing
 
@@ -329,6 +335,8 @@ paritysol <count>;            # optional header line, ignored on input
 <vertex> <winner> <strategy>; # include <strategy> only when the winner owns the vertex
 ```
 
-`<strategy>` is the successor the winning player moves to; it is required exactly when `<winner>` equals the vertex's owner, and omitted otherwise. Every vertex must appear (a full solution is expected).
+`<strategy>` is the successor the winning player moves to; it is required exactly when `<winner>` equals the vertex's owner, and omitted otherwise. Every vertex must appear in the solution from an external solver.
+
+With `oink --sol`, the solution can be partial and omit vertices, but the solved part must be closed: each strategy move, and each move of a vertex that its owner loses, must lead to a solved vertex with the same winner.
 
 A multi-strategy (as found by `--fpim` and `--fpjm`) lists all winning moves of a vertex, separated by commas, like the successors in a game: `<vertex> <winner> <move>,<move>,...;`. A duplicate move counts once. The verifier checks that every listed move stays in the winner's region and that every play with these moves is won. PGSolver itself reads only single moves.
