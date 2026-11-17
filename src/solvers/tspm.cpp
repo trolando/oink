@@ -259,11 +259,13 @@ TSPMSolver::lift(int node, int target)
     bool ch1 = best_ch1 != -1;
 
     if (ch0 or ch1) {
+#ifndef NDEBUG
         if (trace) {
             logger << "\033[1;32mupdated node " << node << "/" << d << (owner(node)?" (odd)":" (even)") << "\033[m to";
             pm_stream(logger, pm);
             logger << std::endl;
         }
+#endif
         // update counts if a changed pm is now Top, but only if priority has same parity as winner
         if (ch0 and pm[0] == -1 and (d&1) == 0) counts[d]--;
         if (ch1 and pm[1] == -1 and (d&1) == 1) counts[d]--;
@@ -323,11 +325,13 @@ TSPMSolver::update(int pl)
             pms[k*i + 1-pl] = -1;
             todo_push(i);
 
+#ifndef NDEBUG
             if (trace) {
                 logger << "\033[1;33mupdated* node " << i << "/" << priority(i) << (owner(i)?" (odd)":" (even)") << "\033[m to";
                 pm_stream(logger, pms + i*k);
                 logger << std::endl;
             }
+#endif
         }
     }
 }

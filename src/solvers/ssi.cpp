@@ -438,12 +438,16 @@ SSISolver::run()
 
     for (;;) {
         ++major;
+#ifndef NDEBUG
         if (trace) {
             logger << "\033[1;38;5;208mMajor iteration " << major << "\033[m" << std::endl;
         }
+#endif
         {
             // First compute Odd's best response for Even's strategy
+#ifndef NDEBUG
             if (trace) logger << "Computing Odd's best response..." << std::endl;
+#endif
             for (;;) {
                 ++minor;
                 compute_vals_ll(0);
@@ -459,7 +463,9 @@ SSISolver::run()
         }
         {
             // Now compute Even's best response for Odd's strategy
+#ifndef NDEBUG
             if (trace) logger << "Computing Even's best response..." << std::endl;
+#endif
             for (;;) {
                 ++minor;
                 compute_vals_ll(1);
@@ -473,21 +479,29 @@ SSISolver::run()
                 continue; // restart major loop
             }
         }
+#ifndef NDEBUG
         if (trace) logger << "Improving Odd's strategy..." << std::endl;
+#endif
         if (switch_sym_strategy(1) == 0) {
             // Now all vertices not in a winning region are won by Even with strategy str1
+#ifndef NDEBUG
             if (trace) logger << "No (possible) improvements - Even wins remainder." << std::endl;
+#endif
             W0 |= G;
             for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
                 str0[v] = str1[v];
             }
             break;
         }
+#ifndef NDEBUG
         if (trace) logger << "Improving Even's strategy..." << std::endl;
+#endif
         compute_vals_ll(0);
         if (switch_sym_strategy(0) == 0) {
             // Now all vertices not in a winning region are won by Odd with strategy str0
+#ifndef NDEBUG
             if (trace) logger << "No (possible) improvements - Odd wins remainder." << std::endl;
+#endif
             W1 |= G;
             for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
                 str1[v] = str0[v];

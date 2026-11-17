@@ -613,7 +613,7 @@ ZLKSolver::run()
                 else count = -1;
             }
 
-#ifndef DEBUG
+#if !defined(NDEBUG) && !defined(DEBUG)
             if (trace) {
                 if (count > 0) fmt::printf(logger, "%d nodes are attracted to losing region\n", count);
                 else if (count == 0) fmt::printf(logger, "no nodes are attracted to losing region\n");

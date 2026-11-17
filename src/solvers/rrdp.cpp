@@ -166,7 +166,9 @@ RRDPSolver::run()
             if (max == -1) break; // done
 
             // perform delayed promotions of highest player
+#ifndef NDEBUG
             if (trace) logger << "performing delayed promotions of player " << (max&1) << std::endl;
+#endif
             performances++;
             for (int i=0; i<nodecount(); i++) {
                 if (region[i] == -2) continue;
@@ -189,7 +191,9 @@ RRDPSolver::run()
                 promotions += del0;
                 discarded += del1;
             }
+#ifndef NDEBUG
             if (trace) logger << "finished performing delayed promotions" << std::endl;
+#endif
             i = inverse[max];
             del1 = del0 = 0;
             continue;
@@ -225,7 +229,9 @@ RRDPSolver::run()
         if (setupRegion(i, p, reset && !checkRegion(p))) {
             // region not empty, maybe promote
             while (true) {
+#ifndef NDEBUG
                 if (trace >= 2) reportRegion(p);
+#endif
                 int res = getRegionStatus(i, p);
                 if (res == -2) {
                     // not closed, skip to next priority and break inner loop
@@ -268,6 +274,7 @@ RRDPSolver::run()
                     }
                     if (locked) {
                         // found delayed promotion
+#ifndef NDEBUG
                         if (trace >= 2) {
                             logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m:";
                             for (int n : regions[p]) {
@@ -277,6 +284,7 @@ RRDPSolver::run()
                         } else if (trace) {
                             logger << "\033[1;33mdelayed \033[36m" << p << " \033[37mto \033[36m" << res << "\033[m" << std::endl;
                         }
+#endif
                         delayed++;
                         if (p&1) del1++;
                         else del0++;

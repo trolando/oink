@@ -152,7 +152,9 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
 
     if (best_r == INT_MAX && best_u == INT_MAX) {
         // dominion
+#ifndef NDEBUG
         if (trace) logger << "\033[1;38;5;201mdominion \033[36m" << pr << "\033[m" << std::endl;
+#endif
 
         // the idea is to add R to the winning region, then attract more from G to the winning region
         // and remove won vertices from G, and from r, and from u.
@@ -177,7 +179,9 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
         finishSeeds(pl, W, w_seeds);
         Q.clear();
     } else if (best_u < best_r) {
+#ifndef NDEBUG
         if (trace) logger << "\033[1;33mpromoted \033[36m" << pr << " \033[37mto \033[36mu " << best_u << "\033[m" << std::endl;
+#endif
 
         // attract R to u, then continue attracting...
         for (auto v = R.find_first(); v != bitset::npos; v = R.find_next(v)) {
@@ -208,7 +212,9 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
         finishSeeds(pl, R, r_seeds);
         Q.clear();
     } else {
+#ifndef NDEBUG
         if (trace) logger << "\033[1;33mpromoted \033[36m" << pr << " \033[37mto \033[36mr " << best_r << "\033[m" << std::endl;
+#endif
 
         // attract R to r, then continue attracting...
         for (auto v = R.find_first(); v != bitset::npos; v = R.find_next(v)) {

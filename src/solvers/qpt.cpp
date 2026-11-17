@@ -435,6 +435,7 @@ QPTSolver::liftloop()
         }
     }
 
+#ifndef NDEBUG
     /**
      * Report final state.
      */
@@ -456,6 +457,7 @@ QPTSolver::liftloop()
             logger << std::endl;
         }
     }
+#endif
 
     /**
      * Derive strategies, mark as solved (only for opponent).

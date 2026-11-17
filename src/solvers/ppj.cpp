@@ -213,7 +213,9 @@ PPJSolver::grow(int p)
     if (target == SOLVED) {
         solveDominion(p, attract);
     } else {
+#ifndef NDEBUG
         if (trace) logger << "promoting " << p << " to " << target << " (" << work.size() << " vertices)" << std::endl;
+#endif
         const unsigned promoted = work.size();
         // Filter the target snapshot before moving: a stale entry can refer
         // to a member currently being promoted, and must not be added twice.
@@ -240,7 +242,9 @@ PPJSolver::solveDominion(int p, bool attract)
     const int pl = p&1;
     dominions++;
     length[p] = 0;
+#ifndef NDEBUG
     if (trace) logger << "dominion " << p << " (" << work.size() << " vertices before attraction)" << std::endl;
+#endif
     // Solve each vertex when it is attracted, and attract in stack order, as Oink::flush
     // does: the vertex attracted last is expanded next, while its data is still in the cache.
     for (unsigned i = 0; i < work.size(); ++i) {

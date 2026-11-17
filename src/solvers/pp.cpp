@@ -135,11 +135,10 @@ PPSolver::promote(int from, int to)
             logger << " \033[37m" << label_vertex(n) << "\033[m";
         }
         logger << std::endl;
-    } else
-#endif
-    if (trace) {
+    } else if (trace) {
         logger << "\033[1;33mpromoted \033[36m" << from << " \033[37mto \033[36m" << to << "\033[m" << std::endl;
     }
+#endif
 
     // Promote and append the new attraction seeds to the target region.
     for (int i : regions[from]) region[i] = to;
@@ -283,7 +282,9 @@ PPSolver::setDominion(int p)
     // Without higher regions, the region was attracted in the whole remaining game, so the
     // flush would attract nothing. The solved vertices stay in the queue of the next flush.
     const bool topmost = isTopmost(p);
+#ifndef NDEBUG
     if (trace) logger << "\033[1;38;5;201mdominion \033[36m" << p << "\033[m";
+#endif
     for (int i : regions[p]) {
         assert(region[i] == p);
         assert(owner(i) != pl or (strategy[i] != -1 and region[strategy[i]] == p));
@@ -292,7 +293,9 @@ PPSolver::setDominion(int p)
 #endif
         Solver::solve(i, pl, owner(i) == pl ? strategy[i] : -1);
     }
+#ifndef NDEBUG
     if (trace) logger << std::endl;
+#endif
     if (!topmost) Solver::flush();
 }
 

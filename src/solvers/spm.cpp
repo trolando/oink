@@ -267,11 +267,13 @@ SPMSolver::lift(int node, int target)
     }
 
     if (best_ch0 != -1 or best_ch1 != -1) {
+#ifndef NDEBUG
         if (trace) {
             logger << "\033[1;32mupdated node " << node << "/" << d << (owner(node)?" (odd)":" (even)") << "\033[m to";
             pm_stream(logger, pm);
             logger << std::endl;
         }
+#endif
         // increase count and return true
         lift_count++;
         return true;
@@ -386,11 +388,13 @@ SPMSolver::update(int pl)
             pms[k*i + 1-pl] = -1;
             todo_push(i);
 
+#ifndef NDEBUG
             if (trace) {
                 logger << "\033[1;33mupdated node " << i << "/" << priority(i) << (owner(i)?" (odd)":" (even)") << "\033[m to";
                 pm_stream(logger, pms + i*k);
                 logger << std::endl;
             }
+#endif
         }
     }
 }
@@ -528,11 +532,13 @@ SPMSolver::run()
                     const int d = priority(n);
                     if ((d&1) == pl) counts[d]--;
 
+#ifndef NDEBUG
                     if (trace) {
                         logger << "\033[1;36mupdated node " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m to";
                         pm_stream(logger, pms + n*k);
                         logger << std::endl;
                     }
+#endif
 
                     continue;
                 }
@@ -612,11 +618,13 @@ SPMSolver::run()
                     const int d = priority(n);
                     if ((d&1) == pl) counts[d]--;
 
+#ifndef NDEBUG
                     if (trace) {
                         logger << "\033[1;36mupdated node " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m to";
                         pm_stream(logger, pms + n*k);
                         logger << std::endl;
                     }
+#endif
                 }
             }
             for (int n : cycles) cm[n] = 0;
@@ -634,17 +642,21 @@ SPMSolver::run()
                         const int d = priority(n);
                         if ((d&1) == pl) counts[d]--;
                     }
+#ifndef NDEBUG
                     if (trace) {
                         logger << "\033[1;36mupdated node " << n << "/" << priority(n) << (owner(n)?" (odd)":" (even)") << "\033[m to";
                         pm_stream(logger, pms + n*k);
                         logger << std::endl;
                     }
+#endif
                 }
             }
             cycles.clear();
 
             if (max >= 0 and counts[max] == 0) {
+#ifndef NDEBUG
                 if (trace >= 2) logger << "\033[1mlowering max\033[m for player " << (pl == 0 ? "even" : "odd") << std::endl;
+#endif
                 if (pl == 0) { while (max0 > 0 and counts[max0] == 0) max0 -= 2; }
                 else { while (max1 > 0 and counts[max1] == 0) max1 -= 2; }
             }

@@ -347,8 +347,10 @@ pearce_again:
         if (tangleto.empty()) {
             // dominion
             if (trace) {
+#ifndef NDEBUG
                 logger << "\033[1;38;5;201mdominion \033[36m" << pr << "\033[m";
                 logger << " (depth " << cur_depth <<")";
+#endif
                 if (cur_depth != 0) {
                     LOGIC_ERROR;
                     exit(-1);
@@ -360,8 +362,8 @@ pearce_again:
                         if (str[v] != -1) logger << "->" << label_vertex(str[v]);
                     }
                 }
-#endif
                 logger << std::endl;
+#endif
             }
             for (const int v : tangle) {
                 // if not yet added to solve queue, mark and add it
@@ -405,24 +407,25 @@ pearce_again:
             if (already_exists) break;
         }
         if (already_exists) {
+#ifndef NDEBUG
             if (trace >= 1) {
                 logger << "\033[1;38;5;198mduplicate tangle\033[m";
-#ifndef NDEBUG
                 if (trace >= 2) {
                     for (int &v : tangle) {
                         logger << " \033[1;36m" << label_vertex(v) << "\033[m";
                         if (str[v] != -1) logger << "->" << label_vertex(str[v]);
                     }
                 }
-#endif
                 logger << std::endl;
             }
+#endif
             tangle.clear();
             tangleto.clear();
             continue;
         }
 #endif
 
+#ifndef NDEBUG
         if (trace >= 1) {
             logger << "\033[1;38;5;198mnew tangle " << pr << "\033[m (" << tpr.size() << ")";
             logger << " (depth " << cur_depth <<")";
@@ -435,6 +438,7 @@ pearce_again:
             logger << " with " << tangleto.size() << " escape vertices.";
             logger << std::endl;
         }
+#endif
 
         // new tangle idx
         const int tidx = tpr.size();
@@ -750,15 +754,19 @@ DTLSolver::best_vertices(bitset &V, bitset &R, const int player)
             const int u = Candidates[x];
             if (u == -1) continue;
             V[u] = false;
+#ifndef NDEBUG
             if (trace >= 2) {
                 if (!changed_V) {
                     logger << "\033[1;38;5;202mdistance " << curdist << "\033[m:";
                 }
                 logger << " \033[1;36m" << label_vertex(u) << "\033[m";
             }
+#endif
             changed_V = true;
         }
+#ifndef NDEBUG
         if (changed_V and trace >= 1) logger << std::endl;
+#endif
 
         Z.reset();
 
@@ -839,6 +847,7 @@ DTLSolver::search_rec(bitset &R, const int player, const int depth)
     bitset Z(nodecount()); // holds various subregions
     bitset Z2(nodecount()); // holds various subregions
 
+#ifndef NDEBUG
     if (trace >= 2) {
         logger << "\033[1;38;5;202mcurrent region:\033[m";
         for (auto v = R.find_first(); v != bitset::npos; v = R.find_next(v)) {
@@ -846,6 +855,7 @@ DTLSolver::search_rec(bitset &R, const int player, const int depth)
         }
         logger << std::endl;
     }
+#endif
 
     while (true) {
         // Compute the best vertices V
@@ -853,6 +863,7 @@ DTLSolver::search_rec(bitset &R, const int player, const int depth)
         int result = best_vertices(V, R, player);
         if (result == 0) return; // done
 
+#ifndef NDEBUG
         if (trace >= 1) {
             logger << "\033[1;38;5;202mbest vertices:\033[m";
             for (auto v = V.find_first(); v != bitset::npos; v = V.find_next(v)) {
@@ -861,6 +872,7 @@ DTLSolver::search_rec(bitset &R, const int player, const int depth)
             if (result == 1) logger << " (stable)";
             logger << std::endl;
         }
+#endif
 
         // If the best vertices are stable, run SPTL to learn local dominions and add them to X
 
@@ -1107,14 +1119,18 @@ DTLSolver::run()
         // First solve for player Odd, then solve for player Even
 
         while (G.any()) {
+#ifndef NDEBUG
             if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-even\033[m\n";
+#endif
             iterations++;
             even_iterations++;
             if (!search(0)) break;
         }
 
         while (G.any()) {
+#ifndef NDEBUG
             if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "-odd\033[m\n";
+#endif
             iterations++;
             odd_iterations++;
             if (!search(1)) break;
@@ -1126,11 +1142,15 @@ DTLSolver::run()
             iterations++;
 
             if (!G.any()) break;
+#ifndef NDEBUG
             if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "-even\033[m\n";
+#endif
             bool found0 = search(0);
 
             if (!G.any()) break;
+#ifndef NDEBUG
             if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations-1 << "-odd\033[m\n";
+#endif
             bool found1 = search(1);
 
             if (!found0 and !found1) THROW_ERROR("solver stuck");

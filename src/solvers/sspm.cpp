@@ -594,6 +594,7 @@ SSPMSolver::run(int n_bits, int depth, int player)
         }
     }
 
+#ifndef NDEBUG
     if (trace) {
         for (int v=0; v<nodecount(); v++) {
             if (disabled[v]) continue;
@@ -610,6 +611,7 @@ SSPMSolver::run(int n_bits, int depth, int player)
             logger << std::endl;
         }
     }
+#endif
 
     /**
      * Mark solved.

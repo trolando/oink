@@ -548,9 +548,11 @@ RTLSolver::rtl(bitset &SG, int only_player, int depth)
             if (RECURSIVE_CLOSED_REGIONS) {
                 for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
                     if (Z[v]) {
+#ifndef NDEBUG
                         if (trace >= 2) {
                             logger << "\033[1;37mattracting to top vertex \033[36m" << label_vertex(v) << "\033[m" << std::endl;
                         }
+#endif
                         W[v] = true;
                         Z[v] = false;
                         Q.push(v);

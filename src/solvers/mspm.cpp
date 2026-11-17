@@ -233,7 +233,9 @@ MSPMSolver::run()
     double size[2] = {0, 0};
     for (int i=0; i<k; i++) size[i&1] += std::log((double)counts[i]+1);
     P = force_player >= 0 ? force_player : (size[0] < size[1] ? 0 : 1);
+#ifndef NDEBUG
     if (trace) logger << "lifting the measure of player " << P << std::endl;
+#endif
 
     std::vector<Frame> stack;
     stack.push_back(Frame{0, std::move(all), {}, {}, false});
@@ -274,7 +276,9 @@ MSPMSolver::run()
         }
 
         const int pr = priority(v);
+#ifndef NDEBUG
         if (trace) logger << "Top in context " << F.D << ": " << label_vertex(v) << "/" << pr << std::endl;
+#endif
 
         if (owner(v) == P) {
             // play to the successor in the context with the highest measure up to <pr>

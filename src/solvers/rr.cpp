@@ -122,7 +122,9 @@ RRSolver::run()
         if (setupRegion(i, p, !checkRegion(p))) {
             // region not empty, maybe promote
             while (true) {
+#ifndef NDEBUG
                 if (trace >= 2) reportRegion(p);
+#endif
                 int res = getRegionStatus(i, p);
                 if (res == -2) {
                     // not closed, skip to next priority and break inner loop
@@ -136,9 +138,13 @@ RRSolver::run()
                     break;
                 } else {
                     // found promotion, promote
+#ifndef NDEBUG
                     if (trace >= 2) printState();
+#endif
                     promote(p, res);
+#ifndef NDEBUG
                     if (trace >= 2) printState();
+#endif
                     // continue inner loop with the higher priority
                     i = inverse[res];
                     p = res;

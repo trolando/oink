@@ -341,18 +341,18 @@ pearce_again:
 
         if (tangleto.empty()) {
             // dominion
+#ifndef NDEBUG
             if (trace) {
                 logger << "\033[1;38;5;201mdominion \033[36m" << pr << "\033[m";
-#ifndef NDEBUG
                 if (trace >= 2) {
                     for (const int v : tangle) {
                         logger << " \033[1;36m" << label_vertex(v) << "\033[m";
                         if (str[v] != -1) logger << "->" << label_vertex(str[v]);
                     }
                 }
-#endif
                 logger << std::endl;
             }
+#endif
             for (const int v : tangle) {
                 // if not yet added to solve queue, mark and add it
                 if (S[v] == false) {
@@ -394,24 +394,25 @@ pearce_again:
             if (already_exists) break;
         }
         if (already_exists) {
+#ifndef NDEBUG
             if (trace >= 1) {
                 logger << "\033[1;38;5;198mduplicate tangle\033[m";
-#ifndef NDEBUG
                 if (trace >= 2) {
                     for (int &v : tangle) {
                         logger << " \033[1;36m" << label_vertex(v) << "\033[m";
                         if (str[v] != -1) logger << "->" << label_vertex(str[v]);
                     }
                 }
-#endif
                 logger << std::endl;
             }
+#endif
             tangle.clear();
             tangleto.clear();
             continue;
         }
 #endif
 
+#ifndef NDEBUG
         if (trace >= 1) {
             logger << "\033[1;38;5;198mnew tangle " << pr << "\033[m (" << tpr.size() << ")";
             if (trace >= 2) {
@@ -423,6 +424,7 @@ pearce_again:
             logger << " with " << tangleto.size() << " escape vertices.";
             logger << std::endl;
         }
+#endif
 
         // new tangle idx
         const int tidx = tpr.size();
@@ -756,7 +758,9 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
                     if (!dominion) break;
                 }
                 if (dominion) {
+#ifndef NDEBUG
                     if (trace) logger << "\033[1;38;5;201mdominion (closed region) \033[36m" << priority(top) << "\033[m" << std::endl;
+#endif
                     for (const int v : Zlist) {
                         if (Z[v] and !S[v]) {
                             S[v] = true;
@@ -1198,6 +1202,7 @@ PMTLSolver::parseOptions(std::string& opts) {
         }
     } while (!remaining.empty());
 
+#ifndef NDEBUG
     if (trace) {
         logger << "selected ";
         stream_measure_kind(logger, measure_kind);
@@ -1216,6 +1221,7 @@ PMTLSolver::parseOptions(std::string& opts) {
             logger << "disabled shortcuts for PMTL" << std::endl;
         }
     }
+#endif
 
     return true;
 }
@@ -1286,11 +1292,15 @@ PMTLSolver::run()
     std::uint64_t oddlifts = 0;
 
     while (true) {
+#ifndef NDEBUG
         if (trace) logger << "\033[1;38;5;196miteration\033[m \033[1;36m" << iterations << "\033[m" << std::endl;
+#endif
         iterations++;
 
         if (c0) {
+#ifndef NDEBUG
             if (trace) logger << "\033[1;38;5;196mfor player Even\033[m" << std::endl;
+#endif
             const auto previous_lifts = lifts;
             if (go_up) {
                 if (use_tangles) {
@@ -1316,7 +1326,9 @@ PMTLSolver::run()
         }
 
         if (c1) {
+#ifndef NDEBUG
             if (trace) logger << "\033[1;38;5;196mfor player Odd\033[m" << std::endl;
+#endif
             const auto previous_lifts = lifts;
             if (go_up) {
                 if (use_tangles) {

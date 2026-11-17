@@ -70,7 +70,9 @@ protected:
         int node = todo.front();
         todo.pop_front();
         dirty[node] = 0;
+#ifndef NDEBUG
         if (trace >= 2) logger << "pop() => " << node << std::endl;
+#endif
         return node;
     }
 };

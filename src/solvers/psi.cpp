@@ -471,7 +471,9 @@ PSISolver::run_par(lace_worker* lace)
 {
     for (;;) {
         ++this->major;
+#ifndef NDEBUG
         if (this->trace) fmt::printf(this->logger, "\033[1;38;5;208mMajor iteration %d\033[m\n", this->major);
+#endif
         for (;;) {
             ++this->minor;
             compute_all_val_CALL(lace, this);                            // update valuation
@@ -479,9 +481,12 @@ PSISolver::run_par(lace_worker* lace)
             if (this->trace >= 3) this->print_debug();
 #endif
             int count = switch_strategy_CALL(lace, this, 1, 0, this->nodecount()); // switch strategies
+#ifndef NDEBUG
             if (this->trace) fmt::printf(this->logger, "%d changed strategies for Odd\n", count);
+#endif
             if (count == 0) break;                                  // if nothing left, done
         }
+#ifndef NDEBUG
         /* print selected strategies for the odd player */
         if (this->trace) {
             for (int n=0; n<this->nodecount(); n++) {
@@ -493,11 +498,16 @@ PSISolver::run_par(lace_worker* lace)
                 this->logger << ")" << std::endl;
             }
         }
-        int solved = mark_solved_rec_CALL(lace, this, 0, this->nodecount());       // mark nodes won by Even
+#endif
+        [[maybe_unused]] const int solved = mark_solved_rec_CALL(lace, this, 0, this->nodecount());       // mark nodes won by Even
+#ifndef NDEBUG
         if (this->trace) fmt::printf(this->logger, "%d nodes marked as won by Even\n", solved);
+#endif
         int count = switch_strategy_CALL(lace, this, 0, 0, this->nodecount());     // switch strategies
         count += switch_halting_CALL(lace, this, 0, this->nodecount());     // switch halting strategies
+#ifndef NDEBUG
         if (this->trace) fmt::printf(this->logger, "%d changed strategies for Even\n", count);
+#endif
         if (count == 0) break;                                      // if nothing left, done
     }
 }
@@ -587,7 +597,9 @@ PSISolver::run()
     if (!parallel()) {
         for (;;) {
             ++major;
+#ifndef NDEBUG
             if (trace) fmt::printf(logger, "\033[1;38;5;208mMajor iteration %d\033[m\n", major);
+#endif
             for (;;) {
                 ++minor;
                 compute_vals_seq();
@@ -595,9 +607,12 @@ PSISolver::run()
                 if (trace >= 3) print_debug();
 #endif
                 int count = switch_strategy_seq(1);
+#ifndef NDEBUG
                 if (trace) fmt::printf(logger, "%d changed strategies for Odd\n", count);
+#endif
                 if (count == 0) break;                                  // if nothing left, done
             }
+#ifndef NDEBUG
             /* print selected strategies for the odd player */
             if (trace) {
                 for (int n=0; n<nodecount(); n++) {
@@ -609,10 +624,15 @@ PSISolver::run()
                     logger << ")" << std::endl;
                 }
             }
-            int solved = mark_solved_seq(); // mark nodes won by Even
+#endif
+            [[maybe_unused]] const int solved = mark_solved_seq(); // mark nodes won by Even
+#ifndef NDEBUG
             if (trace) fmt::printf(logger, "%d nodes marked as won by Even\n", solved);
+#endif
             int count = switch_strategy_seq(0);
+#ifndef NDEBUG
             if (trace) fmt::printf(logger, "%d changed strategies for Even\n", count);
+#endif
             if (count == 0) break;                                      // if nothing left, done
         }
     } else {

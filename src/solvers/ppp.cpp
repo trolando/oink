@@ -90,7 +90,9 @@ PPPSolver::run()
         if (setupRegion(i, p, reset)) {
             // region not empty, maybe promote
             while (true) {
+#ifndef NDEBUG
                 if (trace >= 2) reportRegion(p);
+#endif
                 int res = getRegionStatus(i, p);
                 if (res == -2) {
                     // not closed, skip to next priority and break inner loop

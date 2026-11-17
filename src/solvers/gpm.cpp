@@ -1715,6 +1715,7 @@ GPMSolver::parseOptions(std::string& opts)
         }
     } while (!remaining.empty());
 
+#ifndef NDEBUG
     if (trace) {
         logger << "selected ";
         stream_measure_kind(logger, measure_kind);
@@ -1723,6 +1724,7 @@ GPMSolver::parseOptions(std::string& opts)
             logger << "disabled shortcuts for GPM" << std::endl;
         }
     }
+#endif
 
     return true;
 }

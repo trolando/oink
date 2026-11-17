@@ -41,6 +41,8 @@ All notable changes to Oink will be documented in this file.
 - `oink --solvers` shows the available solver options. Oink validates
   options before loading the game. Library callers can catch invalid
   solver options as exceptions.
+- Per-step solver traces with `-t` are available in Debug builds. Release
+  builds still print the solver summaries.
 
 ### Removed
 
