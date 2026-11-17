@@ -784,9 +784,12 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
      */
 
     bool opponent_attracted_from_us = false;
-    for (int v=0; v<=vtop; v++) {
-        if (SG[v] and Wo[v]) {
-            Q.push(v);
+    // SG only shrinks, so the last word has no subgame vertices above vtop.
+    for (int k=0; k<=vtop/64; k++) {
+        uint64_t seeds = SG.data()[k] & Wo.data()[k];
+        while (seeds) {
+            Q.push(k*64 + intrinsics::countr_zero64(seeds));
+            seeds &= seeds - 1;
         }
     }
     if (Q.nonempty()) {
