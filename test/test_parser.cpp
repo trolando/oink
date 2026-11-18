@@ -100,8 +100,6 @@ test_repeated_edges()
         expect_accept("wide list with distinct targets", "parity 33;\n0 0 0 0,32,1,33,2,3,4,5,6;\n" + bucket_rest, parse);
         expect_reject("wide list with repeated target 32", "parity 33;\n0 0 0 0,32,1,33,2,3,4,5,6,32;\n" + bucket_rest,
                       parse, false, "repeated edge from vertex 0 to successor 32");
-        expect_reject("successor of missing last vertex", "parity 1;\n0 0 0 1;\n", parse);
-
         // Split the second occurrence of 10 between the reader's blocks.
         const std::string prefix = long_header + "11 0 0 10, 0,";
         const std::string split = prefix + std::string((1 << 20) - prefix.size() - 1, ' ');
@@ -313,7 +311,7 @@ test_numeric_limits()
         expect_reject("smallest invalid ID with parity 1", "parity 1;\n2 0 0 0;",
                       parse, false, renumber ? "invalid id (too high)" : "invalid id");
         expect_reject("smallest invalid successor with parity 1", "parity 1;\n0 0 0 2;",
-                      parse);
+                      parse, false, "invalid successor 2 for vertex 0");
         expect_reject("smallest invalid owner", "parity 0;\n0 0 2 0;",
                       parse, false, renumber ? "invalid owner (must be 0 or 1)" : "invalid owner");
 
@@ -367,6 +365,12 @@ test_record_endings()
                       parse, false, "invalid start vertex ID");
         expect_reject("overflowing start ID", "parity 0;\nstart 18446744073709551616; 0 1 0 0;",
                       parse, false, "start vertex ID exceeds UINT64_MAX");
+        expect_reject("successor of missing last vertex", "parity 1;\n0 0 0 1;\n",
+                      parse, false, "invalid successor 1 for vertex 0");
+        expect_reject("missing last vertex with records out of order",
+                      "parity 2;\n1 5 0 0,2;\n0 0 0 0;\n",
+                      parse, false, "invalid successor 2 for vertex 1");
+
         std::istringstream same_line("parity 0;\nstart 0; 0 1 0 0;\n");
         expect_game("start followed by a vertex on the same line", same_line, parse,
                     {{1, 0, nullptr, {0}}});

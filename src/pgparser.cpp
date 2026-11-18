@@ -169,12 +169,24 @@ read_start(Reader &rd, int vertices)
     return static_cast<int>(start);
 }
 
+[[noreturn]] void
+invalid_successor(uint64_t source, uint64_t target)
+{
+    throw std::runtime_error("invalid successor " + std::to_string(target) +
+                             " for vertex " + std::to_string(source));
+}
+
 void
 check_omitted_vertex(const Game& game, int omitted, int start)
 {
+    // Scan the packed array first. Look up the source only when reporting an error.
     const auto* edges = game.outedges();
     const auto* end = edges + game.edgeArraySize();
-    if (std::find(edges, end, omitted) != end) throw std::runtime_error("invalid successor");
+    if (std::find(edges, end, omitted) != end) {
+        for (int v = 0; v < omitted; v++) {
+            if (game.has_edge(v, omitted)) invalid_successor(v, omitted);
+        }
+    }
     if (start == omitted) throw std::runtime_error("invalid start vertex ID");
 }
 
@@ -270,10 +282,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         for (;;) {
             rd.skip_whitespace();
             if (!rd.read_uint64(&n, "successor")) throw std::runtime_error("missing successor");
-            if (n >= (uint64_t)res.n_vertices) {
-                std::cout << "id " << id << " with successor " << n << std::endl;
-                throw std::runtime_error("invalid successor");
-            }
+            if (n >= (uint64_t)res.n_vertices) invalid_successor(id, n);
 
             if (remove_self and id == n) {
                 if (has_self) throw std::runtime_error(detail::repeated_edge_message(id, n));
@@ -513,11 +522,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         for (;;) {
             rd.skip_whitespace();
             if (!rd.read_uint64(&n, "successor")) throw std::runtime_error("missing successor");
-            if (n >= (uint64_t)n_vertices) {
-                std::stringstream err;
-                err << "invalid successor for id " << id;
-                throw std::runtime_error(err.str());
-            }
+            if (n >= (uint64_t)n_vertices) invalid_successor(id, n);
 
             if (remove_self and id == n) {
                 if (has_self) throw std::runtime_error(detail::repeated_edge_message(id, n));
