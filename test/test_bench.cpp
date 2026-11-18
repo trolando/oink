@@ -247,6 +247,7 @@ test_command_line()
         check("default sampling", o.repeats == 7 && o.warmups == 1 && near(o.min_solve_time, 0.001) && o.max_repeats == 10000);
         check("inputs", o.inputs == std::vector<std::string>({"some/dir"}));
         check("isolation by default", o.isolate == Worker::supported() && (o.isolate ? near(o.timeout, 30) : o.timeout == 0));
+        check("setup and verification safety limit by default", o.safety_timeout == (o.isolate ? 300 : 0));
         check("series seed from the schedule seed", o.game_seed == series_seed(o.seed));
     }
     {
@@ -263,7 +264,7 @@ test_command_line()
         std::vector<SolverRun> solvers;
         parse({"--tlpar", "-c", "parmin=2,chunk=4", "--in-process", "--quick", "--repeat=3"}, o, solvers);
         check("-c configures the single solver", solvers.size() == 1 && solvers[0].name == "tlpar[parmin=2,chunk=4]");
-        check("in-process has no timeout", !o.isolate && o.timeout == 0);
+        check("in-process has no timeout", !o.isolate && o.timeout == 0 && o.safety_timeout == 0);
         check("explicit setting overrides quick", o.repeats == 3);
     }
     {
@@ -378,29 +379,45 @@ test_trials()
     volatile std::sig_atomic_t quit = 0;
     ui::InterruptGuard guard(&quit);
     int calls = 0;
-    Worker worker([&](size_t solver, uint32_t seed) {
+    Worker worker([&](size_t solver, uint32_t seed, const PhaseUpdate& update) {
         calls++; // counted in the child only
-        if (solver == 1) std::raise(SIGKILL);
-        if (solver == 2) std::this_thread::sleep_for(std::chrono::seconds(10));
-        Trial trial = execute(*prepared, SolverRun("tl", ""), o, seed);
-        trial.message = "seed " + std::to_string(seed);
+        if (solver == 4) std::this_thread::sleep_for(std::chrono::seconds(10));
+        Trial trial = execute(*prepared, SolverRun("tl", ""), o, seed, [&](Phase phase, const Trial& progress) {
+            update(phase, progress);
+            if ((solver == 2 || solver == 3) && phase == Phase::Setup) std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            if (solver == 1 && phase == Phase::Solve) std::raise(SIGKILL);
+            if (solver == 2 && phase == Phase::Solve) std::this_thread::sleep_for(std::chrono::seconds(10));
+            if (solver == 3 && phase == Phase::Verify) std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            if (solver == 5 && phase == Phase::Verify) std::this_thread::sleep_for(std::chrono::seconds(10));
+            if (solver == 6 && phase == Phase::Verify) throw std::bad_alloc();
+        });
+        if (trial.status == Status::Ok) trial.message = "seed " + std::to_string(seed);
         return trial;
     });
-    const Trial ok = worker.run(0, 12, 5, &quit);
+    const Trial ok = worker.run(0, 12, 5, 5, &quit);
     check("worker trial", ok.status == Status::Ok && ok.message == "seed 12" && ok.effective_solver == "tl");
-    const Trial again = worker.run(0, 13, 5, &quit);
+    const Trial again = worker.run(0, 13, 5, 5, &quit);
     check("worker serves several trials", again.status == Status::Ok && worker.generation() == 1);
     check("trials run in the child", calls == 0);
-    const Trial crash = worker.run(1, 0, 5, &quit);
-    check("worker crash", crash.status == Status::Crash && crash.message.find("signal") != std::string::npos && !worker.running());
+    const Trial crash = worker.run(1, 0, 5, 5, &quit);
+    check("worker crash", crash.status == Status::Crash && crash.failure_phase == Phase::Solve && crash.message.find("signal") != std::string::npos && !worker.running());
     const auto start = std::chrono::steady_clock::now();
-    const Trial slow = worker.run(2, 0, 0.3, &quit);
+    const Trial slow = worker.run(2, 0, 0.2, 3, &quit);
     const double waited = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-    check("worker timeout", slow.status == Status::Timeout && waited < 5 && worker.generation() == 2);
-    const Trial after = worker.run(0, 14, 5, &quit);
-    check("fresh worker after a failure", after.status == Status::Ok && worker.generation() == 3);
+    check("solve timeout after slow setup", slow.status == Status::Timeout && slow.failure_phase == Phase::Solve &&
+          slow.setup >= 0.3 && slow.solve < 0 && waited < 5 && worker.generation() == 2);
+    const Trial after = worker.run(3, 14, 0.2, 3, &quit);
+    check("fresh worker accepts slow setup and verification", after.status == Status::Ok && after.setup >= 0.3 && after.verify >= 0.3 &&
+          after.solve < 0.2 && worker.generation() == 3);
+    const Trial setup = worker.run(4, 0, 0, 0.2, &quit);
+    check("setup safety limit", setup.status == Status::SafetyTimeout && setup.failure_phase == Phase::Setup && !worker.running());
+    const Trial verify = worker.run(5, 0, 0, 0.2, &quit);
+    check("verification safety limit", verify.status == Status::SafetyTimeout && verify.failure_phase == Phase::Verify &&
+          verify.setup >= 0 && verify.solve >= 0 && verify.verify < 0 && !worker.running());
+    const Trial memory = worker.run(6, 0, 0, 3, &quit);
+    check("verification allocation failure", memory.status == Status::MemoryFailure && memory.failure_phase == Phase::Verify);
     quit = 1;
-    const Trial stopped = worker.run(0, 15, 5, &quit);
+    const Trial stopped = worker.run(0, 15, 5, 5, &quit);
     check("interrupted worker", stopped.status == Status::Interrupted);
     worker.stop();
 #endif
@@ -559,6 +576,7 @@ test_experiment_records()
     game.cells[0].values = {1e-6, 2.5e-6, 1.0 / 7.0};
     game.cells[0].warmups = 1;
     game.cells[1].failure = Status::Timeout;
+    game.cells[1].failure_phase = Phase::Solve;
     game.cells[2].required = 40;
     game.cells[2].pilots = {0.1, 0.2, 0.3};
     game.cells[2].values.assign(40, 0.25);
@@ -569,7 +587,7 @@ test_experiment_records()
     check("decoded sizes and times", back.vertices == 10 && back.edges == 22 && back.load == game.load && back.parse == game.parse);
     check("decoded preparation", back.prep.residual_vertices == 8 && back.prep.solved_vertices == 2 && back.prep.residual_hash == game.prep.residual_hash);
     check("decoded cells", back.cells.size() == 3 && back.cells[0].values == game.cells[0].values && back.cells[0].warmups == 1);
-    check("decoded failure", back.cells[1].failure == Status::Timeout);
+    check("decoded failure", back.cells[1].failure == Status::Timeout && back.cells[1].failure_phase == Phase::Solve);
     check("decoded calibration", back.cells[2].required == 40 && back.cells[2].pilots == game.cells[2].pilots && back.cells[2].values.size() == 40);
     check("a cut line is rejected", !decode_case(line.substr(0, line.size() - 10), back));
     game.seed.reset();
@@ -582,6 +600,7 @@ test_experiment_records()
     o.min_solve_time = 0.0123;
     o.max_repeats = 77;
     o.timeout = 12.5;
+    o.safety_timeout = 91.25;
     o.seed = 18446744073709551000ULL;
     o.vary_solver_seed = true;
     o.preprocess = true;
@@ -606,6 +625,7 @@ test_experiment_records()
     parse(words, parsed, solvers);
     check("saved sampling", parsed.repeats == 5 && parsed.warmups == 2 && parsed.min_solve_time == o.min_solve_time && parsed.max_repeats == 77);
     check("saved timeout and seeds", parsed.timeout == 12.5 && parsed.seed == o.seed && parsed.vary_solver_seed && parsed.game_seed == 4242 && parsed.game_seed_given);
+    check("saved safety timeout", parsed.safety_timeout == o.safety_timeout);
     check("saved recipe", parsed.preprocess && parsed.single && !parsed.loops && parsed.wcwc && !parsed.inflate && !parsed.compress);
     check("saved solving", parsed.scc && parsed.workers == 3 && parsed.force_parallel && parsed.trace == 1);
     check("saved reference and label", parsed.reference && *parsed.reference == "tl" && parsed.label == o.label);

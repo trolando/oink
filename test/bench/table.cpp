@@ -222,7 +222,12 @@ cell(const Case& game, size_t s, int repeats, bool heatmap, int color, double be
         text = "prep error";
         code = style::bad;
     } else if (c.failure) {
-        text = status_name(*c.failure);
+        if (c.failure_phase == Phase::Setup) text = "setup ";
+        if (c.failure_phase == Phase::Solve) text = "solve ";
+        if (c.failure_phase == Phase::Verify) text = "verify ";
+        if (*c.failure == Status::SafetyTimeout) text += "safety";
+        else if (*c.failure == Status::MemoryFailure) text += "memory";
+        else text += status_name(*c.failure);
         code = style::bad;
     } else if (c.values.empty()) {
         if (!c.pilots.empty()) text = "pilot " + std::to_string(c.pilots.size());

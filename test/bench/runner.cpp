@@ -390,7 +390,7 @@ Runner::save_failure(const Case& game, size_t solver, pg::Game& original, const 
         std::ofstream graph(stem + ".pg");
         original.write_pgsolver(graph);
         std::ofstream log(stem + ".log");
-        log << solvers[solver].name << ": " << status_name(trial.status) << '\n' << trial.message << '\n';
+        log << solvers[solver].name << ": " << failure_label(trial.status, trial.failure_phase) << '\n' << trial.message << '\n';
         if (!graph || !log) return "";
         return stem + ".pg";
     } catch (const std::exception&) {
@@ -443,7 +443,7 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
 {
     const uint64_t hash = std::stoull(game.hash, nullptr, 16);
     // the worker is forked with the prepared game; Lace runs in the worker
-    Worker worker([&](size_t s, uint32_t seed) { return execute(prepared, solvers[s], o, seed); },
+    Worker worker([&](size_t s, uint32_t seed, const PhaseUpdate& update) { return execute(prepared, solvers[s], o, seed, update); },
                   [&] {
                       if (o.workers >= 0) lace_start((unsigned)o.workers, 10000000UL, 0);
                   },
@@ -480,6 +480,7 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
                 // a failed cell is not run again
                 Trial skipped;
                 skipped.status = *cell.failure;
+                skipped.failure_phase = cell.failure_phase;
                 report->sample(game, s, position++, repetition, phase, seed, worker.generation(), skipped, false, "");
                 if (slot) done++;
                 continue;
@@ -492,7 +493,7 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
 
             Trial trial;
             if (o.isolate) {
-                trial = worker.run(s, seed, o.timeout, &quit);
+                trial = worker.run(s, seed, o.timeout, o.safety_timeout, &quit);
             } else {
                 trial = execute(prepared, solvers[s], o, seed);
             }
@@ -516,6 +517,7 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
                 }
             } else {
                 cell.failure = trial.status;
+                cell.failure_phase = trial.failure_phase;
                 if (trial.status != Status::Interrupted) {
                     failures = true;
                     artifact = save_failure(game, s, original, trial);

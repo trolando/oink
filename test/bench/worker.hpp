@@ -47,7 +47,7 @@ namespace bench {
 class Worker
 {
 public:
-    using Body = std::function<Trial(size_t solver, uint32_t seed)>;
+    using Body = std::function<Trial(size_t solver, uint32_t seed, const PhaseUpdate& update)>;
     using Hook = std::function<void()>;
 
     /** Whether this platform can isolate trials in a worker process. */
@@ -65,10 +65,11 @@ public:
 
     /**
      * Run the trial of solver <solver> with seed <seed> in the child, starting
-     * a child if none runs. Waits at most <timeout> seconds (0: no limit) and
-     * stops early when <*quit> is set (if given).
+     * a child if none runs. Limits the solve to <timeout> seconds (0: no
+     * limit) and setup and verification to <safety_timeout> seconds each.
+     * Stops early when <*quit> is set (if given).
      */
-    Trial run(size_t solver, uint32_t seed, double timeout, volatile std::sig_atomic_t* quit);
+    Trial run(size_t solver, uint32_t seed, double timeout, double safety_timeout, volatile std::sig_atomic_t* quit);
 
     /** Stop the child and every process in its group. */
     void stop();
@@ -93,7 +94,8 @@ private:
     void start();
     void kill(bool force);
     void drain_output();
-    Trial crashed();
+    Trial crashed(Trial trial, Phase phase);
+    Trial timed_out(Trial trial, Phase phase);
 };
 
 }

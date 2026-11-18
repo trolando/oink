@@ -281,7 +281,7 @@ Report::metadata(size_t planned, const std::string& executable, const std::strin
     const Options& o = options;
     Json json;
     json.add("event", "metadata");
-    json.add("schema_version", 5);
+    json.add("schema_version", 6);
     json.add("tool", "bench_solvers");
     json.add("started_utc", utc_now());
     json.add("oink_version", pg::version());
@@ -311,8 +311,10 @@ Report::metadata(size_t planned, const std::string& executable, const std::strin
     json.add("cpu_metric", "process CPU time of the trial process during the solve; excludes external subprocesses");
     json.add("random_series_seed", o.game_seed);
     json.add("games_planned", planned);
-    if (o.timeout > 0) json.add("trial_wall_limit_seconds", o.timeout);
-    else json.null("trial_wall_limit_seconds");
+    if (o.timeout > 0) json.add("solve_wall_limit_seconds", o.timeout);
+    else json.null("solve_wall_limit_seconds");
+    if (o.isolate) json.add("safety_wall_limit_seconds", o.safety_timeout);
+    else json.null("safety_wall_limit_seconds");
     json.add("isolation", o.isolate ? "worker process per game, restarted after a failure" : "in_process");
     json.add("solver_logging", o.trace >= 0 ? "captured at trace level " + std::to_string(o.trace) : std::string("disabled"));
     json.add("workers_requested", o.workers);
@@ -373,8 +375,6 @@ void
 Report::sample(const Case& game, size_t solver, size_t position, int round, const char* phase, uint32_t seed, int generation, const Trial& trial, bool executed, const std::string& artifact)
 {
     if (!jsonl.is_open() && copy == nullptr) return;
-    // timings exist when the trial reported them; a timeout or crash has none
-    const bool timed = executed && (trial.status == Status::Ok || trial.status == Status::SolverError || trial.status == Status::InvalidSolution || trial.status == Status::SetupError);
     Json json;
     json.add("event", "sample");
     json.add("game_index", game.index);
@@ -386,18 +386,17 @@ Report::sample(const Case& game, size_t solver, size_t position, int round, cons
     json.add("game_rng_seed", seed);
     json.add("worker_generation", generation);
     json.add("status", executed ? status_name(trial.status) : "skipped");
+    if (trial.failure_phase != Phase::None) json.add("failure_phase", phase_name(trial.failure_phase));
+    else json.null("failure_phase");
     json.add("executed", executed);
-    if (timed) {
-        json.add("setup_seconds", trial.setup);
-        json.add("solve_seconds", trial.solve);
-        json.add("verification_seconds", trial.verify);
-        json.add("cpu_seconds", trial.cpu);
-    } else {
-        json.null("setup_seconds");
-        json.null("solve_seconds");
-        json.null("verification_seconds");
-        json.null("cpu_seconds");
-    }
+    auto timing = [&](const char* name, double seconds) {
+        if (executed && seconds >= 0) json.add(name, seconds);
+        else json.null(name);
+    };
+    timing("setup_seconds", trial.setup);
+    timing("solve_seconds", trial.solve);
+    timing("verification_seconds", trial.verify);
+    timing("cpu_seconds", trial.cpu);
     json.add("parallel", trial.parallel);
     json.add("effective_solver", trial.effective_solver);
     json.add("effective_configuration", trial.effective_config);
@@ -423,7 +422,7 @@ Report::calibration(const Case& game, size_t solver, double pilot, int target, b
 std::string
 csv_header()
 {
-    return "game,graph_fnv1a64,vertices,edges,game_seed,solver,configuration,status,samples,median_seconds,q1_seconds,q3_seconds,mad_seconds,target_samples,residual_vertices,residual_edges,residual_fnv1a64,preprocessing_seconds\n";
+    return "game,graph_fnv1a64,vertices,edges,game_seed,solver,configuration,status,samples,median_seconds,q1_seconds,q3_seconds,mad_seconds,target_samples,residual_vertices,residual_edges,residual_fnv1a64,preprocessing_seconds,failure_phase\n";
 }
 
 std::string
@@ -446,7 +445,7 @@ csv_rows(const Case& game, const std::vector<SolverRun>& solvers, int repeats)
         } else {
             out << ",,,";
         }
-        out << '\n';
+        out << ',' << phase_name(cell.failure_phase) << '\n';
     }
     return out.str();
 }
@@ -464,6 +463,8 @@ result_events(const Case& game, const std::vector<SolverRun>& solvers, int repea
         json.add("game_index", game.index);
         json.add("solver", solvers[s].name);
         json.add("status", game.status(s, repeats));
+        if (cell.failure_phase != Phase::None) json.add("failure_phase", phase_name(cell.failure_phase));
+        else json.null("failure_phase");
         json.add("samples", st.samples);
         json.add("target_samples", game.timed() ? cell.target(repeats) : 0);
         json.add("accumulated_solve_seconds", std::accumulate(cell.values.begin(), cell.values.end(), 0.0));

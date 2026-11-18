@@ -73,7 +73,7 @@ compute_totals(const std::vector<Case>& games, size_t planned, size_t solver_cou
             if (leaders.size() == 1) totals.solvers[s].vbs_wins++;
             else totals.solvers[s].vbs_ties++;
         }
-        // the ratio to the virtual best solver; a timeout counts as the time limit
+        // the ratio to the virtual best solver; a solve timeout counts as the time limit
         if (best > 0 && best < std::numeric_limits<double>::infinity()) {
             totals.vbs_games++;
             for (size_t s = 0; s < solver_count; s++) {
@@ -203,7 +203,7 @@ print_summary(std::ostream& out, const Totals& totals, const std::vector<SolverR
     out << "  Sum medians    Sum of the per-game medians of the solve time, in seconds.\n";
     out << "  Geom. VBS      Geometric mean of the median over the fastest median of each game (the\n";
     out << "                 virtual best solver); 1x is always the fastest, lower is better.\n";
-    if (totals.timeout > 0) out << "                 A timeout counts as the time limit.\n";
+    if (totals.timeout > 0) out << "                 A solve timeout counts as the time limit.\n";
     if (reference) {
         out << "  Geom. speedup  Geometric mean of the paired ratios against the reference (>1x is faster).\n";
         out << "  W/T/L          Wins/ties/losses against the reference, with a 1% tie band.\n";

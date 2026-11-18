@@ -110,8 +110,8 @@ setup_config(Options& o)
     ui::Setting timeout;
     timeout.key = 't';
     timeout.label = "Timeout";
-    timeout.title = "TRIAL TIMEOUT";
-    timeout.hint = "Wall seconds per trial (setup, solve and verification); 0 disables the timeout.";
+    timeout.title = "SOLVE TIMEOUT";
+    timeout.hint = "Wall seconds per Oink::run; 0 disables the solve limit.";
     timeout.show = [&o] { return seconds_setting(o.timeout); };
     timeout.text = [&o] { return number(o.timeout); };
     timeout.apply = [&o](const std::string& text, std::string& error) {

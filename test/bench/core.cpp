@@ -23,6 +23,7 @@
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 
 #include "common/chooser.hpp"
 #include "oink/game.hpp"
@@ -77,6 +78,9 @@ validate(const Options& o, const std::vector<SolverRun>& solvers)
     if (o.repeats < 1) throw std::runtime_error("the number of repetitions must be positive");
     if (o.warmups < 0) throw std::runtime_error("the number of warm-up rounds cannot be negative");
     if (!std::isfinite(o.timeout) || o.timeout < 0) throw std::runtime_error("the timeout must be zero (no limit) or positive");
+    if (!std::isfinite(o.safety_timeout) || (o.isolate ? o.safety_timeout <= 0 : o.safety_timeout != 0)) {
+        throw std::runtime_error("isolated trials need a positive --safety-timeout; in-process trials have no limits");
+    }
     if (!std::isfinite(o.min_solve_time) || o.min_solve_time < 0) throw std::runtime_error("the sampling target must be zero (off) or positive");
     if (o.max_repeats < 1 || (o.calibrated() && o.max_repeats < o.repeats)) throw std::runtime_error("the repetition cap must be at least the number of repetitions");
     const int rounds = o.calibrated() ? o.max_repeats : o.repeats;
@@ -97,10 +101,46 @@ status_name(Status status)
         case Status::InvalidSolution: return "invalid_solution";
         case Status::SetupError: return "setup_error";
         case Status::Timeout: return "timeout";
+        case Status::SafetyTimeout: return "safety_timeout";
+        case Status::MemoryFailure: return "memory_failure";
         case Status::Crash: return "crash";
         case Status::Interrupted: return "interrupted";
     }
     return "unknown";
+}
+
+const char*
+phase_name(Phase phase)
+{
+    switch (phase) {
+        case Phase::None: return "";
+        case Phase::Setup: return "setup";
+        case Phase::Solve: return "solve";
+        case Phase::Verify: return "verification";
+    }
+    return "";
+}
+
+std::string
+failure_label(Status status, Phase phase)
+{
+    std::string label = status_name(status);
+    if (phase != Phase::None) label += std::string(" (") + phase_name(phase) + ')';
+    return label;
+}
+
+void
+record_failure(Trial& trial, Phase phase, const std::exception& error)
+{
+    trial.failure_phase = phase;
+    trial.status = phase == Phase::Solve ? Status::SolverError :
+                   phase == Phase::Verify ? Status::InvalidSolution : Status::SetupError;
+    const auto* system = dynamic_cast<const std::system_error*>(&error);
+    if (dynamic_cast<const std::bad_alloc*>(&error) ||
+        (system && system->code() == std::errc::not_enough_memory)) {
+        trial.status = Status::MemoryFailure;
+    }
+    trial.message = error.what();
 }
 
 Stats

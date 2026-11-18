@@ -2,6 +2,15 @@
 
 All notable changes to Oink will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+- `bench_solvers` applies its timeout to `Oink::run`, with separate safety
+  limits for trial setup and verification. Reports identify the phase of
+  a failure, distinguish safety timeouts and allocation failures, and
+  preserve phase timings received before a worker fails.
+
 ## [1.2.0] - 2026-11-18
 
 ### Added

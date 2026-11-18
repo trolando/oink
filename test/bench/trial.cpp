@@ -194,9 +194,10 @@ add_log(Trial& trial, const std::ostringstream& log)
 }
 
 Trial
-execute(const Prepared& prepared, const SolverRun& run, const Options& options, uint32_t seed)
+execute(const Prepared& prepared, const SolverRun& run, const Options& options, uint32_t seed, const PhaseUpdate& update)
 {
     Trial result;
+    Phase phase = Phase::Setup;
     // The solver log is captured only with --trace; otherwise it is discarded.
     std::ostringstream captured;
     std::ostream muted(nullptr);
@@ -204,6 +205,7 @@ execute(const Prepared& prepared, const SolverRun& run, const Options& options, 
 
     auto start = Clock::now();
     try {
+        if (update) update(phase, result);
         // a fresh copy, with the in-edges built by Oink's constructor: not timed
         pg::Game game(*prepared.residual);
         game.set_random_seed(seed);
@@ -221,53 +223,43 @@ execute(const Prepared& prepared, const SolverRun& run, const Options& options, 
         result.setup = seconds_since(start);
 
         // the measurement: Oink::run, including SCC decomposition and lazy in-edges
+        phase = Phase::Solve;
+        if (update) update(phase, result);
         const std::clock_t cpu_start = std::clock();
         start = Clock::now();
-        try {
-            solver.run();
-        } catch (const std::exception& error) {
-            result.solve = seconds_since(start);
-            result.status = Status::SolverError;
-            result.message = error.what();
-            add_log(result, captured);
-            return result;
-        }
+        solver.run();
         result.solve = seconds_since(start);
         const std::clock_t cpu_end = std::clock();
         if (cpu_start != (std::clock_t)-1 && cpu_end != (std::clock_t)-1) {
             result.cpu = (double)(cpu_end - cpu_start) / CLOCKS_PER_SEC;
         }
+        phase = Phase::Verify;
+        start = Clock::now();
+        if (update) update(phase, result);
         result.effective_solver = solver.effectiveSolver().value_or("none");
         result.effective_config = solver.effectiveSolver() ? solver.effectiveSolverOptions() : "";
         result.parallel = solver.parallel();
         result.workers = options.workers < 0 ? -1 : (int)lace_worker_count();
 
         // verify every strategy of the solution, outside the measurement
-        start = Clock::now();
-        try {
-            std::ostringstream verify_log;
-            if (prepared.identity()) {
-                pg::Verifier verifier(game, solver.solution(), verify_log);
-                verifier.verify(true, true, true);
-            } else {
-                // against the original game, with what preprocessing solved
-                const pg::Solution full = lift(prepared, game, solver.solution());
-                pg::Verifier verifier(*prepared.original, full, verify_log);
-                verifier.verify(true, true, true);
-            }
-        } catch (const std::exception& error) {
-            result.verify = seconds_since(start);
-            result.status = Status::InvalidSolution;
-            result.message = error.what();
-            add_log(result, captured);
-            return result;
+        std::ostringstream verify_log;
+        if (prepared.identity()) {
+            pg::Verifier verifier(game, solver.solution(), verify_log);
+            verifier.verify(true, true, true);
+        } else {
+            // against the original game, with what preprocessing solved
+            const pg::Solution full = lift(prepared, game, solver.solution());
+            pg::Verifier verifier(*prepared.original, full, verify_log);
+            verifier.verify(true, true, true);
         }
         result.verify = seconds_since(start);
         result.status = Status::Ok;
     } catch (const std::exception& error) {
-        result.setup = seconds_since(start);
-        result.status = Status::SetupError;
-        result.message = error.what();
+        const double elapsed = seconds_since(start);
+        if (phase == Phase::Setup) result.setup = elapsed;
+        else if (phase == Phase::Solve) result.solve = elapsed;
+        else if (result.verify < 0) result.verify = elapsed;
+        record_failure(result, phase, error);
         add_log(result, captured);
     }
     return result;

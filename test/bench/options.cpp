@@ -99,7 +99,8 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("min-solve-time", "Calibrate the sample count to about this many seconds of solving per game and solver; 0 disables", cxxopts::value<double>()->default_value("0.001"))
         ("max-repeat", "The maximum calibrated sample count", cxxopts::value<int>()->default_value("10000"))
         ("quick", "One repetition, no warm-up and no calibration (for testing)")
-        ("timeout", "Wall seconds per trial (setup, solve and verification) in the worker process; 0 disables (default 30)", cxxopts::value<double>())
+        ("timeout", "Wall seconds per solve in the worker process; 0 disables (default 30)", cxxopts::value<double>())
+        ("safety-timeout", "Wall seconds each for worker setup and verification (default 300)", cxxopts::value<double>())
         ("in-process", "Run the trials in this process: no crash isolation and no timeout")
         ("bench-seed", "Seed of the schedule: file order, solver order per round and solver seeds (default: random, reported)", cxxopts::value<uint64_t>())
         ("vary-solver-seed", "Vary the solver RNG seed between rounds (default: fixed per game)")
@@ -210,11 +211,9 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
 
     // isolation: worker processes where the platform has them
     o.isolate = Worker::supported() && !given(result, "in-process");
-    o.timeout = o.isolate ? 30 : 0;
-    if (given(result, "timeout")) {
-        o.timeout = result["timeout"].as<double>();
-        if (o.timeout > 0 && !Worker::supported()) throw std::runtime_error("timeouts need worker processes, which this platform does not have");
-    }
+    if (!o.isolate) o.timeout = o.safety_timeout = 0;
+    if (given(result, "timeout")) o.timeout = result["timeout"].as<double>();
+    if (given(result, "safety-timeout")) o.safety_timeout = result["safety-timeout"].as<double>();
 
     if (given(result, "bench-seed")) {
         o.seed = result["bench-seed"].as<uint64_t>();

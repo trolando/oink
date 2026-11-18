@@ -61,8 +61,12 @@ settings_arguments(const Options& o)
     args.push_back("--warmup=" + std::to_string(o.warmups));
     args.push_back("--min-solve-time=" + exact(o.min_solve_time));
     args.push_back("--max-repeat=" + std::to_string(o.max_repeats));
-    if (o.isolate) args.push_back("--timeout=" + exact(o.timeout));
-    else args.push_back("--in-process");
+    if (o.isolate) {
+        args.push_back("--timeout=" + exact(o.timeout));
+        args.push_back("--safety-timeout=" + exact(o.safety_timeout));
+    } else {
+        args.push_back("--in-process");
+    }
     args.push_back("--bench-seed=" + std::to_string(o.seed));
     if (o.vary_solver_seed) args.push_back("--vary-solver-seed");
     if (!o.preprocess) {
@@ -105,7 +109,7 @@ encode_case(const Case& g)
     out << ' ' << g.prep.residual_vertices << ' ' << g.prep.residual_edges << ' ' << g.prep.solved_vertices << ' ' << g.prep.seconds << ' ' << std::quoted(g.prep.residual_hash);
     out << ' ' << g.cells.size();
     for (const auto& cell : g.cells) {
-        out << ' ' << cell.required << ' ' << cell.warmups << ' ' << (cell.failure ? (int)*cell.failure : -1);
+        out << ' ' << cell.required << ' ' << cell.warmups << ' ' << (cell.failure ? (int)*cell.failure : -1) << ' ' << (int)cell.failure_phase;
         out << ' ' << cell.values.size();
         for (double v : cell.values) out << ' ' << v;
         out << ' ' << cell.pilots.size();
@@ -135,10 +139,12 @@ decode_case(const std::string& line, Case& g)
     g.cells.assign(cells, Cell());
     for (auto& cell : g.cells) {
         int failure = -1;
+        int phase = 0;
         size_t count = 0;
-        in >> cell.required >> cell.warmups >> failure >> count;
-        if (!in || failure < -1 || failure > (int)Status::Interrupted || count > 100000000) return false;
+        in >> cell.required >> cell.warmups >> failure >> phase >> count;
+        if (!in || failure < -1 || failure > (int)Status::Interrupted || phase < 0 || phase > (int)Phase::Verify || count > 100000000) return false;
         if (failure >= 0) cell.failure = (Status)failure;
+        cell.failure_phase = (Phase)phase;
         cell.values.resize(count);
         for (double& v : cell.values) in >> v;
         in >> count;
@@ -247,7 +253,7 @@ Experiment::create(const std::string& directory, const Options& o, const std::ve
 
     const auto binary = file_fingerprint(executable);
     std::ostringstream plan;
-    plan << "bench_solvers experiment 1\n";
+    plan << "bench_solvers experiment 2\n";
     plan << "created " << std::quoted(utc_now()) << '\n';
     plan << "binary " << std::quoted(executable) << ' ' << (binary ? hex64(*binary) : std::string("unavailable")) << '\n';
     plan << "host " << std::quoted(host_name()) << '\n';
@@ -284,7 +290,7 @@ Experiment::resume(const std::string& directory, Options& options, std::vector<S
     std::istringstream plan(read_file(root / "plan.txt"));
     std::string line;
     std::getline(plan, line);
-    if (line != "bench_solvers experiment 1") throw std::runtime_error("unknown experiment format: " + (root / "plan.txt").string());
+    if (line != "bench_solvers experiment 2") throw std::runtime_error("unknown experiment format: " + (root / "plan.txt").string());
     std::vector<std::string> args = {"bench_solvers"};
     std::vector<SolverRun> roster;
     std::vector<PlannedGame> planned;

@@ -46,7 +46,7 @@ PlainDisplay::completed(const Case& game, size_t)
         } else if (game.prep_failed) {
             std::cerr << "preparation_error";
         } else if (cell.failure) {
-            std::cerr << status_name(*cell.failure);
+            std::cerr << failure_label(*cell.failure, cell.failure_phase);
         } else if (cell.complete(options.repeats)) {
             const Stats& st = cell.stats();
             std::cerr << duration(st.median) << " [IQR " << duration(st.q3 - st.q1) << ']';

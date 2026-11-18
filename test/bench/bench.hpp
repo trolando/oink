@@ -25,6 +25,8 @@
 #define OINK_BENCH_HPP
 
 #include <cstdint>
+#include <exception>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -61,7 +63,8 @@ struct Options
     int warmups = 1;                // warm-up rounds per game
     int max_repeats = 10000;        // the cap of the calibrated repetitions
     double min_solve_time = 0.001;  // accumulated solve time per cell; 0: no calibration
-    double timeout = 30;            // wall seconds per trial; 0: no limit
+    double timeout = 30;            // wall seconds per solve; 0: no solve limit
+    double safety_timeout = 300;    // wall seconds each for worker setup and verification
     bool isolate = true;            // run the trials in a worker process
     uint64_t seed = 0;              // the schedule seed (--bench-seed)
     bool vary_solver_seed = false;  // vary the solver RNG seed between rounds
@@ -122,24 +125,32 @@ void validate(const Options& options, const std::vector<SolverRun>& solvers);
 /**
  * The outcome of one trial.
  */
-enum class Status { Ok, SolverError, InvalidSolution, SetupError, Timeout, Crash, Interrupted };
+enum class Status { Ok, SolverError, InvalidSolution, SetupError, Timeout, SafetyTimeout, MemoryFailure, Crash, Interrupted };
+enum class Phase { None, Setup, Solve, Verify };
 
 const char* status_name(Status status);
+const char* phase_name(Phase phase);
+std::string failure_label(Status status, Phase phase);
 
 /** One solver call: the measured times and what actually ran. */
 struct Trial
 {
     Status status = Status::SetupError;
-    double setup = 0;               // copy the game and construct Oink, with the in-edges
-    double solve = 0;               // Oink::run, the measured time
-    double verify = 0;              // map the solution back and verify it
-    double cpu = 0;                 // CPU seconds of the process during the solve
+    Phase failure_phase = Phase::None;
+    // A negative time means the measurement was unavailable.
+    double setup = -1;              // copy the game and construct Oink, with the in-edges
+    double solve = -1;              // Oink::run, the measured time
+    double verify = -1;             // map the solution back and verify it
+    double cpu = -1;                // CPU seconds of the process during the solve
     bool parallel = false;          // whether the solver ran in parallel
     int workers = -1;               // Lace workers, -1 when sequential
     std::string effective_solver;   // the solver that ran, after a sequential fallback
     std::string effective_config;
     std::string message;            // the error, and the captured log of a failure
 };
+
+using PhaseUpdate = std::function<void(Phase, const Trial&)>;
+void record_failure(Trial& trial, Phase phase, const std::exception& error);
 
 /** Median, quartiles and median absolute deviation of a sample. */
 struct Stats
@@ -164,6 +175,7 @@ struct Cell
     int warmups = 0;                // successful warm-up trials
     int required = 0;               // the calibrated sample count; 0: the repetitions
     std::optional<Status> failure;  // the first failure; later trials are skipped
+    Phase failure_phase = Phase::None;
 
     int target(int repeats) const { return required ? required : repeats; }
     bool complete(int repeats) const { return !failure && (int)values.size() == target(repeats); }

@@ -51,20 +51,36 @@ For every game:
    `--repeat` defaults to 7. `--quick` means one repetition, no warm-up and no
    calibration.
 4. Every trial copies the residual game and constructs Oink (with the
-   in-edges) outside the timing, times `Oink::run` (including `--scc` and
-   in-edges built lazily by the solver), and then verifies the solution: with
-   preprocessing, the solution and all moves of a multi-strategy are mapped
+   eager in-edges) outside the solve interval. The solve interval runs from
+   immediately before calling `Oink::run` to its return. It includes Oink's
+   solver selection, construction and bookkeeping, `--scc`, and any
+   incoming edges built inside the call, including lazy construction. The
+   same boundary applies to every solver. With preprocessing, the solution
+   and all moves of a multi-strategy are mapped
    back and verified against the original game. A failed trial (solver
    error, invalid solution, timeout, crash) fails the solver on that game;
    its later trials are reported as skipped, and the game and log are saved
    in `--artifacts` (default `benchmark-artifacts`).
 
 On POSIX systems the trials of a game run in a forked worker process in its
-own process group, which serves all trials of the game. A crash is caught, and
-`--timeout` (default 30 seconds, for setup, solve and verification together;
-0 disables it) stops the solver and its subprocesses; after a failure the next
-trial gets a new worker. `--in-process` runs the trials in the tool itself,
+own process group, which serves all trials of the game. `--timeout` limits
+each solve to 30 wall seconds by default. Use 0 to disable the solve limit.
+`--safety-timeout` gives setup and verification 300 wall seconds each by
+default. The first setup watchdog includes worker and Lace startup. The
+reported setup time measures the per-trial copy and configuration. The
+verification phase includes collecting solver details and checking the
+solution. Input loading and once-per-game preprocessing precede the
+worker's deadlines.
+Either timeout stops the worker and its subprocesses. After a failure the
+next trial gets a new worker. `--in-process` runs the trials in the tool itself,
 without crash isolation or timeouts; this is the only mode on Windows.
+
+Trial and result records give the failure phase (`setup`, `solve` or
+`verification`). A solve deadline gives `timeout`, and a safety deadline
+gives `safety_timeout`. Allocation failures with explicit evidence give
+`memory_failure`; unexplained worker exits and signals give `crash`.
+Trial records retain the timings already reported by the worker and use
+null for unavailable timings. CSV includes the failed cell's phase.
 
 The schedule seed (`--bench-seed`, random by default and always reported)
 reproduces the file order, the solver order of every round and the solver
@@ -79,7 +95,7 @@ range of every solver. At the end, stdout gets the summary: per solver the
 coverage (verified games out of the games that need a solver; `!N` counts
 failures), the sum of the per-game medians, `geom. VBS`, the geometric mean
 of its median over the fastest median of each game (the virtual best
-solver; a timeout counts as the time limit), and `VBS W/T`, the games where
+solver; a solve timeout counts as the time limit), and `VBS W/T`, the games where
 it is uniquely fastest or within 1% of the fastest median. With `--reference`
 (a selected name, its id if it has one variant, or `first`), the summary adds
 the geometric mean speedup against the reference over the games both

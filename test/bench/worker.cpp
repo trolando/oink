@@ -21,6 +21,7 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <system_error>
 #include <thread>
 
 #ifndef _WIN32
@@ -42,6 +43,7 @@ using Clock = std::chrono::steady_clock;
 
 // The end of the child's output kept for the message of a crash.
 const size_t MAX_OUTPUT = 16384;
+const int MEMORY_EXIT = 5;
 
 /** A request from the benchmark to the child: run one trial. */
 struct Request
@@ -50,10 +52,13 @@ struct Request
     uint32_t seed;
 };
 
-/** The fixed part of a reply; the three strings of the trial follow it. */
+/** A phase update or the final reply; the three trial strings follow it. */
 struct ReplyHeader
 {
+    Clock::duration::rep stamp;
     int32_t status;
+    int32_t entering;
+    int32_t failure_phase;
     int32_t parallel;
     int32_t workers;
     uint32_t sizes[3];
@@ -89,11 +94,13 @@ read_all(int fd, void* data, size_t size)
 }
 
 void
-send_reply(int fd, const Trial& trial)
+send_reply(int fd, const Trial& trial, Phase entering = Phase::None)
 {
     ReplyHeader header;
     std::memset(&header, 0, sizeof(header));
     header.status = (int32_t)trial.status;
+    header.entering = (int32_t)entering;
+    header.failure_phase = (int32_t)trial.failure_phase;
     header.parallel = trial.parallel ? 1 : 0;
     header.workers = trial.workers;
     header.sizes[0] = (uint32_t)trial.effective_solver.size();
@@ -103,16 +110,16 @@ send_reply(int fd, const Trial& trial)
     header.times[1] = trial.solve;
     header.times[2] = trial.verify;
     header.times[3] = trial.cpu;
-    std::string data((const char*)&header, sizeof(header));
-    data += trial.effective_solver;
-    data += trial.effective_config;
-    data += trial.message;
-    if (!write_all(fd, data.data(), data.size())) _exit(4);
+    header.stamp = Clock::now().time_since_epoch().count();
+    if (!write_all(fd, &header, sizeof(header)) ||
+        !write_all(fd, trial.effective_solver.data(), header.sizes[0]) ||
+        !write_all(fd, trial.effective_config.data(), header.sizes[1]) ||
+        !write_all(fd, trial.message.data(), header.sizes[2])) _exit(4);
 }
 
 /** Decode a complete reply from <data>; false if more bytes are needed. */
 bool
-parse_reply(const std::string& data, Trial& trial)
+parse_reply(std::string& data, Trial& trial, Phase& entering, Clock::time_point& stamp)
 {
     if (data.size() < sizeof(ReplyHeader)) return false;
     ReplyHeader header;
@@ -120,6 +127,9 @@ parse_reply(const std::string& data, Trial& trial)
     const size_t total = sizeof(header) + (size_t)header.sizes[0] + header.sizes[1] + header.sizes[2];
     if (data.size() < total) return false;
     trial.status = (Status)header.status;
+    entering = (Phase)header.entering;
+    stamp = Clock::time_point(Clock::duration(header.stamp));
+    trial.failure_phase = (Phase)header.failure_phase;
     trial.parallel = header.parallel != 0;
     trial.workers = header.workers;
     trial.setup = header.times[0];
@@ -132,6 +142,7 @@ parse_reply(const std::string& data, Trial& trial)
     trial.effective_config = data.substr(at, header.sizes[1]);
     at += header.sizes[1];
     trial.message = data.substr(at, header.sizes[2]);
+    data.erase(0, total);
     return true;
 }
 
@@ -191,8 +202,9 @@ Worker::start()
 
     const pid_t child = fork();
     if (child < 0) {
+        const int error = errno;
         for (int fd : {requests[0], requests[1], replies[0], replies[1], out[0], out[1]}) ::close(fd);
-        throw std::runtime_error("cannot start a worker process");
+        throw std::system_error(error, std::generic_category(), "cannot start a worker process");
     }
 
     if (child == 0) {
@@ -202,20 +214,37 @@ Worker::start()
         signal(SIGTERM, SIG_DFL);
         signal(SIGPIPE, SIG_DFL);
         const int null = open("/dev/null", O_RDONLY);
-        if (null >= 0) dup2(null, STDIN_FILENO);
+        if (null > STDIN_FILENO) {
+            dup2(null, STDIN_FILENO);
+            ::close(null);
+        }
         dup2(out[1], STDOUT_FILENO);
         dup2(out[1], STDERR_FILENO);
         ::close(requests[1]);
         ::close(replies[0]);
         ::close(out[0]);
         try {
-            if (begin) begin();
+            bool first = true;
             Request request;
             while (read_all(requests[0], &request, sizeof(request))) {
-                const Trial trial = body((size_t)request.solver, request.seed);
+                Trial trial;
+                Phase phase = Phase::Setup;
+                try {
+                    if (first && begin) begin();
+                    first = false;
+                    trial = body((size_t)request.solver, request.seed, [&](Phase next, const Trial& progress) {
+                        if (next == phase) return;
+                        send_reply(replies[1], progress, next);
+                        phase = next;
+                    });
+                } catch (const std::exception& error) {
+                    record_failure(trial, phase, error);
+                }
                 send_reply(replies[1], trial);
             }
-            if (end) end();
+            if (!first && end) end();
+        } catch (const std::bad_alloc&) {
+            _exit(MEMORY_EXIT); // the reply itself could not be built
         } catch (const std::exception& error) {
             std::fprintf(stderr, "worker error: %s\n", error.what());
             _exit(3);
@@ -243,10 +272,12 @@ void
 Worker::drain_output()
 {
     char data[4096];
-    for (;;) {
+    // Continuous output must not keep the parent from checking deadlines.
+    for (size_t bytes = 0; bytes < MAX_OUTPUT; ) {
         const ssize_t n = ::read(output_fd, data, sizeof(data));
         if (n <= 0) break;
         output.append(data, (size_t)n);
+        bytes += (size_t)n;
     }
     if (output.size() > MAX_OUTPUT) output.erase(0, output.size() - MAX_OUTPUT);
 }
@@ -293,10 +324,10 @@ Worker::stop()
 
 /** The child ended without a reply: collect its status and output. */
 Trial
-Worker::crashed()
+Worker::crashed(Trial trial, Phase phase)
 {
-    Trial trial;
     trial.status = Status::Crash;
+    trial.failure_phase = phase;
     int status = 0;
     pid_t r = 0;
     for (int i = 0; i < 500; i++) {
@@ -309,13 +340,26 @@ Worker::crashed()
         const int sig = WTERMSIG(status);
         trial.message = "worker terminated by signal " + std::to_string(sig) + " (" + strsignal(sig) + ")";
     } else if (r == (pid_t)pid && WIFEXITED(status)) {
-        trial.message = "worker exited with status " + std::to_string(WEXITSTATUS(status)) + " without a result";
+        if (WEXITSTATUS(status) == MEMORY_EXIT) {
+            trial.status = Status::MemoryFailure;
+            trial.message = "worker ran out of memory while reporting the trial";
+        } else {
+            trial.message = "worker exited with status " + std::to_string(WEXITSTATUS(status)) + " without a result";
+        }
     } else {
         trial.message = "worker closed its output without a result";
     }
+    if (output.find("Lace error: unable to allocate memory for the workers") != std::string::npos ||
+        output.find("Lace error: unable to allocate memory for the idle flags") != std::string::npos ||
+        output.find("Lace error: unable to allocate scratch arena array") != std::string::npos ||
+        output.find("Lace error: unable to allocate stack pointer array") != std::string::npos ||
+        output.find("AddressSanitizer: allocator is out of memory") != std::string::npos) {
+        trial.status = Status::MemoryFailure;
+    }
     if (!output.empty()) trial.message += "\n" + output;
     if (r == (pid_t)pid) {
-        // reaped: only close our ends, the process group is gone with it
+        // The worker was reaped, but external solvers can still be in its group.
+        ::kill(-(pid_t)pid, SIGKILL);
         close_fd(request_fd);
         close_fd(reply_fd);
         close_fd(output_fd);
@@ -327,61 +371,91 @@ Worker::crashed()
 }
 
 Trial
-Worker::run(size_t solver, uint32_t seed, double timeout, volatile std::sig_atomic_t* quit)
+Worker::timed_out(Trial trial, Phase phase)
 {
-    if (!running()) start();
+    drain_output();
+    kill(true);
+    trial.status = phase == Phase::Solve ? Status::Timeout : Status::SafetyTimeout;
+    trial.failure_phase = phase;
+    trial.message = std::string(phase_name(phase)) + " exceeded its wall-clock limit";
+    if (!output.empty()) trial.message += "\n" + output;
+    return trial;
+}
+
+Trial
+Worker::run(size_t solver, uint32_t seed, double timeout, double safety_timeout, volatile std::sig_atomic_t* quit)
+{
+    auto started = Clock::now();
+    Trial progress;
+    Phase phase = Phase::Setup;
+    try {
+        if (!running()) start();
+    } catch (const std::exception& error) {
+        record_failure(progress, phase, error);
+        return progress;
+    }
     reply.clear();
     Request request;
     std::memset(&request, 0, sizeof(request));
     request.solver = solver;
     request.seed = seed;
-    if (!write_all(request_fd, &request, sizeof(request))) return crashed();
+    if (!write_all(request_fd, &request, sizeof(request))) return crashed(progress, phase);
 
-    const auto begin_time = Clock::now();
     for (;;) {
         if (quit != nullptr && *quit) {
             kill(true);
             Trial trial;
             trial.status = Status::Interrupted;
+            trial.failure_phase = phase;
             trial.message = "interrupted";
             return trial;
         }
-        const double elapsed = std::chrono::duration<double>(Clock::now() - begin_time).count();
-        if (timeout > 0 && elapsed >= timeout) {
-            kill(true);
-            Trial trial;
-            trial.status = Status::Timeout;
-            trial.message = "the trial exceeded the wall-clock limit (setup, solve and verification)";
-            return trial;
-        }
-        // wake up regularly to check the limit and the interrupt flag
-        double wait = 0.2;
-        if (timeout > 0 && timeout - elapsed < wait) wait = timeout - elapsed;
-        pollfd fds[2] = {{reply_fd, POLLIN, 0}, {output_fd, POLLIN, 0}};
-        const int ready = poll(fds, 2, (int)(wait * 1000) + 1);
-        if (ready < 0 && errno != EINTR) return crashed();
-        if (ready <= 0) continue;
-        if (fds[1].revents) drain_output();
-        if (fds[0].revents) {
-            char data[65536];
-            bool closed = false;
-            for (;;) {
-                const ssize_t n = ::read(reply_fd, data, sizeof(data));
-                if (n > 0) {
-                    reply.append(data, (size_t)n);
-                    continue;
-                }
-                if (n == 0) closed = true;
-                break;
+        // Consume queued transitions before deciding which phase is still running.
+        // A completed solve's own clock reading excludes the progress messages.
+        char data[65536];
+        const ssize_t n = ::read(reply_fd, data, sizeof(data));
+        const int read_error = n < 0 ? errno : 0;
+        if (n > 0) reply.append(data, (size_t)n);
+        Trial trial;
+        Phase entering;
+        Clock::time_point stamp;
+        while (parse_reply(reply, trial, entering, stamp)) {
+            const double limit = phase == Phase::Solve ? timeout : safety_timeout;
+            const double elapsed = phase == Phase::Solve && trial.solve >= 0 ? trial.solve :
+                                   std::chrono::duration<double>(stamp - started).count();
+            if (limit > 0 && elapsed >= limit) {
+                // The next phase may already have started; report the first overrun.
+                if (phase != Phase::Verify) trial.verify = -1;
+                if (phase == Phase::Setup) trial.solve = trial.cpu = -1;
+                return timed_out(trial, phase);
             }
-            Trial trial;
-            if (parse_reply(reply, trial)) {
+            if (entering == Phase::None) {
                 drain_output();
                 output.clear();
                 return trial;
             }
-            if (closed) return crashed();
+            progress = std::move(trial);
+            phase = entering;
+            started = stamp;
         }
+        if (n == 0 || (read_error != 0 && read_error != EAGAIN && read_error != EWOULDBLOCK && read_error != EINTR)) {
+            return crashed(progress, phase);
+        }
+
+        // wake up regularly to check the limit and the interrupt flag
+        const double limit = phase == Phase::Solve ? timeout : safety_timeout;
+        const double elapsed = std::chrono::duration<double>(Clock::now() - started).count();
+        if (limit > 0 && elapsed >= limit) {
+            if (n > 0 || read_error == EINTR) continue; // there may be one more reply ready
+            return timed_out(progress, phase);
+        }
+        double wait = 0.2;
+        if (limit > 0 && limit - elapsed < wait) wait = limit - elapsed;
+        pollfd fds[2] = {{reply_fd, POLLIN, 0}, {output_fd, POLLIN, 0}};
+        const int ready = poll(fds, 2, (int)(wait * 1000) + 1);
+        if (ready < 0 && errno != EINTR) return crashed(progress, phase);
+        if (ready <= 0) continue;
+        if (fds[1].revents) drain_output();
     }
 }
 
@@ -429,16 +503,17 @@ Worker::drain_output()
 }
 
 Trial
-Worker::crashed()
+Worker::crashed(Trial, Phase)
 {
     return Trial();
 }
 
 Trial
-Worker::run(size_t, uint32_t, double, volatile std::sig_atomic_t*)
+Worker::run(size_t, uint32_t, double, double, volatile std::sig_atomic_t*)
 {
     Trial trial;
     trial.status = Status::SetupError;
+    trial.failure_phase = Phase::Setup;
     trial.message = "worker processes are not available on this platform; use --in-process";
     return trial;
 }
