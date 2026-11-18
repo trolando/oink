@@ -24,6 +24,8 @@ All notable changes to Oink will be documented in this file.
 - Report both input vertex IDs for an edge to an omitted vertex.
 - Keep outgoing edges and their counts consistent when shrinking and
   permuting a streamed game.
+- Count strategies once per verifier call, including when verifying
+  after a closure check.
 
 ## [1.2.0] - 2026-11-18
 

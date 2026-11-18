@@ -413,6 +413,33 @@ test_verifier()
         expect_accept("single/good even cycle", g, s);
     }
 
+    // Each invocation counts the strategies it checks, even on a reused verifier.
+    {
+        Game g = make_game({
+            {0, Player::Even, {0, 1}},
+            {0, Player::Even, {0}},
+            {1, Player::Odd, {2}},
+        });
+        Solution s(g.nodecount());
+        s.init_multi(g.edgeArraySize());
+        s.solve(0, 0, -1);
+        add_strat(g, s, 0, 0);
+        add_strat(g, s, 0, 1);
+        s.solve(1, 0, 0);
+        s.solve(2, 1, 2);
+        std::stringstream log;
+        Verifier ver(g, s, log);
+        ver.checkClosure();
+        const int closure = ver.numberOfStrategies();
+        ver.verify();
+        const int full = ver.numberOfStrategies();
+        ver.verify(true, false, true);
+        if (closure != 3 or full != 3 or ver.numberOfStrategies() != 1) {
+            std::cerr << "FAIL [verifier reuse]: wrong strategy count" << std::endl;
+            failures++;
+        }
+    }
+
     // BAD: a winning (owner == winner) vertex with no strategy.
     {
         Game g = make_game({

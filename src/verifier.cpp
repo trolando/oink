@@ -67,6 +67,7 @@ Verifier::nextSuccessor(int v, char mode, long& pos) const
 void
 Verifier::checkClosure(bool fullgame, bool even, bool odd)
 {
+    n_strategies = 0;
     for (int v=0; v < game.vertexcount(); v++) {
         // (for full solutions) check whether every vertex is won
         if (!solution.is_solved(v)) {
