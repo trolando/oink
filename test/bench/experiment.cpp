@@ -110,10 +110,8 @@ encode_case(const Case& g)
     out << ' ' << g.cells.size();
     for (const auto& cell : g.cells) {
         out << ' ' << cell.required << ' ' << cell.warmups << ' ' << (cell.failure ? (int)*cell.failure : -1) << ' ' << (int)cell.failure_phase;
-        out << ' ' << cell.values.size();
-        for (double v : cell.values) out << ' ' << v;
-        out << ' ' << cell.pilots.size();
-        for (double v : cell.pilots) out << ' ' << v;
+        out << ' ' << cell.samples().size();
+        for (double v : cell.samples()) out << ' ' << v;
     }
     out << " end";
     return out.str();
@@ -145,12 +143,11 @@ decode_case(const std::string& line, Case& g)
         if (!in || failure < -1 || failure > (int)Status::Interrupted || phase < 0 || phase > (int)Phase::Verify || count > 100000000) return false;
         if (failure >= 0) cell.failure = (Status)failure;
         cell.failure_phase = (Phase)phase;
-        cell.values.resize(count);
-        for (double& v : cell.values) in >> v;
-        in >> count;
-        if (!in || count > 100) return false;
-        cell.pilots.resize(count);
-        for (double& v : cell.pilots) in >> v;
+        for (size_t i = 0; i < count; i++) {
+            double v;
+            if (!(in >> v)) return false;
+            cell.add_sample(v);
+        }
     }
     in >> word;
     return (bool)in && word == "end";
@@ -253,7 +250,7 @@ Experiment::create(const std::string& directory, const Options& o, const std::ve
 
     const auto binary = file_fingerprint(executable);
     std::ostringstream plan;
-    plan << "bench_solvers experiment 2\n";
+    plan << "bench_solvers experiment 3\n";
     plan << "created " << std::quoted(utc_now()) << '\n';
     plan << "binary " << std::quoted(executable) << ' ' << (binary ? hex64(*binary) : std::string("unavailable")) << '\n';
     plan << "host " << std::quoted(host_name()) << '\n';
@@ -290,7 +287,7 @@ Experiment::resume(const std::string& directory, Options& options, std::vector<S
     std::istringstream plan(read_file(root / "plan.txt"));
     std::string line;
     std::getline(plan, line);
-    if (line != "bench_solvers experiment 2") throw std::runtime_error("unknown experiment format: " + (root / "plan.txt").string());
+    if (line != "bench_solvers experiment 3") throw std::runtime_error("unknown experiment format: " + (root / "plan.txt").string());
     std::vector<std::string> args = {"bench_solvers"};
     std::vector<SolverRun> roster;
     std::vector<PlannedGame> planned;
@@ -447,7 +444,7 @@ Experiment::publish(const Options& options, const std::vector<SolverRun>& solver
     replace_file(aggregate.jsonl, root_path / "results.jsonl");
 
     std::string csv = csv_header();
-    for (const auto& game : finished_games) csv += csv_rows(game, solvers, options.repeats);
+    for (const auto& game : finished_games) csv += csv_rows(game, solvers, options);
     write_file(root_path / "results.csv", csv);
 
     Json status;

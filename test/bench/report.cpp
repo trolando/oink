@@ -22,7 +22,6 @@
 #include <ctime>
 #include <filesystem>
 #include <iomanip>
-#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -281,7 +280,7 @@ Report::metadata(size_t planned, const std::string& executable, const std::strin
     const Options& o = options;
     Json json;
     json.add("event", "metadata");
-    json.add("schema_version", 6);
+    json.add("schema_version", 7);
     json.add("tool", "bench_solvers");
     json.add("started_utc", utc_now());
     json.add("oink_version", pg::version());
@@ -299,11 +298,10 @@ Report::metadata(size_t planned, const std::string& executable, const std::strin
     json.add("metric", "wall seconds of Oink::run on a fresh copy of the residual game; SCC solving and lazy in-edges included; reading, preparation, copying, Oink construction with in-edges and verification excluded");
     json.add("clock", "steady_clock");
     json.add("clock_period_seconds", (double)std::chrono::steady_clock::period::num / std::chrono::steady_clock::period::den);
-    Json calibration;
-    calibration.add("target_solve_seconds", o.min_solve_time);
-    calibration.add("max_repetitions", o.max_repeats);
-    calibration.add("pilot_trials", o.pilots());
-    json.raw("calibration", calibration.str());
+    Json sampling;
+    sampling.add("target_solve_seconds", o.min_solve_time);
+    sampling.add("max_repetitions", o.adaptive_sampling() ? o.max_repeats : o.repeats);
+    json.raw("sampling", sampling.str());
     json.add("repetitions", o.repeats);
     json.add("warmup_rounds", o.warmups);
     json.add("order_seed", o.seed);
@@ -406,28 +404,16 @@ Report::sample(const Case& game, size_t solver, size_t position, int round, cons
     event(json.str());
 }
 
-void
-Report::calibration(const Case& game, size_t solver, double pilot, int target, bool capped)
-{
-    Json json;
-    json.add("event", "calibration");
-    json.add("game_index", game.index);
-    json.add("solver", solvers[solver].name);
-    json.add("pilot_median_seconds", pilot);
-    json.add("target_samples", target);
-    json.add("capped", capped);
-    event(json.str());
-}
-
 std::string
 csv_header()
 {
-    return "game,graph_fnv1a64,vertices,edges,game_seed,solver,configuration,status,samples,median_seconds,q1_seconds,q3_seconds,mad_seconds,target_samples,residual_vertices,residual_edges,residual_fnv1a64,preprocessing_seconds,failure_phase\n";
+    return "game,graph_fnv1a64,vertices,edges,game_seed,solver,configuration,status,samples,median_seconds,q1_seconds,q3_seconds,mad_seconds,target_samples,residual_vertices,residual_edges,residual_fnv1a64,preprocessing_seconds,mean_seconds,accumulated_solve_seconds,sampling_capped,failure_phase\n";
 }
 
 std::string
-csv_rows(const Case& game, const std::vector<SolverRun>& solvers, int repeats)
+csv_rows(const Case& game, const std::vector<SolverRun>& solvers, const Options& options)
 {
+    const int repeats = options.repeats;
     std::ostringstream out;
     out << std::setprecision(17);
     for (size_t s = 0; s < solvers.size(); s++) {
@@ -445,14 +431,18 @@ csv_rows(const Case& game, const std::vector<SolverRun>& solvers, int repeats)
         } else {
             out << ",,,";
         }
+        out << ',';
+        if (complete) out << st.mean;
+        out << ',' << cell.accumulated_solve() << ',' << (complete && cell.capped(options) ? "true" : "false");
         out << ',' << phase_name(cell.failure_phase) << '\n';
     }
     return out.str();
 }
 
 std::vector<std::string>
-result_events(const Case& game, const std::vector<SolverRun>& solvers, int repeats)
+result_events(const Case& game, const std::vector<SolverRun>& solvers, const Options& options)
 {
+    const int repeats = options.repeats;
     std::vector<std::string> events;
     for (size_t s = 0; s < solvers.size(); s++) {
         const Cell& cell = game.cells[s];
@@ -467,13 +457,16 @@ result_events(const Case& game, const std::vector<SolverRun>& solvers, int repea
         else json.null("failure_phase");
         json.add("samples", st.samples);
         json.add("target_samples", game.timed() ? cell.target(repeats) : 0);
-        json.add("accumulated_solve_seconds", std::accumulate(cell.values.begin(), cell.values.end(), 0.0));
+        json.add("accumulated_solve_seconds", cell.accumulated_solve());
+        json.add("sampling_capped", complete && cell.capped(options));
         if (complete) {
+            json.add("mean_seconds", st.mean);
             json.add("median_seconds", st.median);
             json.add("q1_seconds", st.q1);
             json.add("q3_seconds", st.q3);
             json.add("mad_seconds", st.mad);
         } else {
+            json.null("mean_seconds");
             json.null("median_seconds");
             json.null("q1_seconds");
             json.null("q3_seconds");
@@ -487,9 +480,9 @@ result_events(const Case& game, const std::vector<SolverRun>& solvers, int repea
 void
 Report::results(const Case& game)
 {
-    for (const auto& line : result_events(game, solvers, options.repeats)) event(line);
+    for (const auto& line : result_events(game, solvers, options)) event(line);
     if (csv.is_open()) {
-        csv << csv_rows(game, solvers, options.repeats);
+        csv << csv_rows(game, solvers, options);
         csv.flush();
         if (!csv) throw std::runtime_error("cannot write the CSV report " + csv_path_);
     }

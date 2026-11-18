@@ -25,7 +25,9 @@ namespace bench {
 
 PlainDisplay::PlainDisplay(const Options& options, const std::vector<SolverRun>& solvers) : options(options), solvers(solvers)
 {
-    std::cerr << "Oink benchmark | " << options.repeats << (options.calibrated() ? "+ calibrated" : "") << " measured, ";
+    std::cerr << "Oink benchmark | " << options.repeats << " measured";
+    if (options.adaptive_sampling()) std::cerr << " minimum, " << seconds_setting(options.min_solve_time) << " solve target";
+    std::cerr << ", ";
     std::cerr << options.warmups << " warm-up rounds | order seed " << options.seed << '\n';
     std::cerr << "game";
     for (const auto& solver : solvers) std::cerr << '\t' << ui::clean(solver.name);
@@ -49,7 +51,8 @@ PlainDisplay::completed(const Case& game, size_t)
             std::cerr << failure_label(*cell.failure, cell.failure_phase);
         } else if (cell.complete(options.repeats)) {
             const Stats& st = cell.stats();
-            std::cerr << duration(st.median) << " [IQR " << duration(st.q3 - st.q1) << ']';
+            std::cerr << duration(st.median) << " [IQR " << duration(st.q3 - st.q1)
+                      << ", mean " << duration(st.mean) << ", n=" << st.samples << ']';
         } else {
             std::cerr << "incomplete";
         }

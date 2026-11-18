@@ -35,9 +35,10 @@ static const char* const GUIDE = R"(
 Benchmark the selected solvers (default: tl, tlj, tlq, npp, fpi, fpj, zlk) on
 the given parity game files and directories, or on random games without them.
 Every trial solves a fresh copy of the game and its solution is verified; the
-metric is the wall time of Oink::run. The trials of a game are interleaved in
-a shuffled order per round: warm-up rounds, three pilot trials that choose the
-sample count for --min-solve-time, then the measured rounds. Preprocessing is
+metric is the wall time of Oink::run. After warm-ups, measured rounds continue
+for each solver until it reaches both the minimum sample count and the
+accumulated solve-time target, or the repetition cap. Every round runs the
+solvers in a shuffled order. Preprocessing is
 off unless --preprocess: then it runs once per game, outside the timing, the
 solvers solve what it leaves, and their solutions are mapped back and verified
 against the whole game. On POSIX systems the trials run in a worker process,
@@ -94,11 +95,11 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("help", "Print the help")
         ;
     opts.add_options("Benchmark")
-        ("repeat", "Measured repetitions per game and solver (the minimum, with calibration)", cxxopts::value<int>()->default_value("7"))
+        ("repeat", "Minimum measured repetitions per game and solver", cxxopts::value<int>()->default_value("7"))
         ("warmup", "Warm-up rounds per game, not part of the results", cxxopts::value<int>()->default_value("1"))
-        ("min-solve-time", "Calibrate the sample count to about this many seconds of solving per game and solver; 0 disables", cxxopts::value<double>()->default_value("0.001"))
-        ("max-repeat", "The maximum calibrated sample count", cxxopts::value<int>()->default_value("10000"))
-        ("quick", "One repetition, no warm-up and no calibration (for testing)")
+        ("min-solve-time", "Accumulate at least this many measured solve seconds per game and solver; 0 uses a fixed count", cxxopts::value<double>()->default_value("0.001"))
+        ("max-repeat", "Maximum measured repetitions when using an accumulated solve-time target", cxxopts::value<int>()->default_value("10000"))
+        ("quick", "One repetition, no warm-up and a fixed count (for testing)")
         ("timeout", "Wall seconds per solve in the worker process; 0 disables (default 30)", cxxopts::value<double>())
         ("safety-timeout", "Wall seconds each for worker setup and verification (default 300)", cxxopts::value<double>())
         ("in-process", "Run the trials in this process: no crash isolation and no timeout")

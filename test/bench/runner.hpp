@@ -21,9 +21,9 @@
  * (shuffled with the schedule seed unless --sort). For every game:
  *
  *   1. it is read, parsed and sorted (outside any timing) and prepared once;
- *   2. the rounds run: warm-ups, three pilot trials when calibrating, and the
- *      measured repetitions; every round runs the solvers in a shuffled order,
- *      each trial on a fresh copy of the game, verified;
+ *   2. the rounds run: warm-ups, then measured repetitions until each solver
+ *      reaches its sampling target or cap; every round runs the solvers in a
+ *      shuffled order, each trial on a fresh copy of the game, verified;
  *   3. its statistics are reported and shown.
  *
  * A failed trial (solver error, invalid solution, timeout, crash) fails the

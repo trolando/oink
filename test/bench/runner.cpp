@@ -194,8 +194,8 @@ private:
     size_t pauses = 0;
     double paused_seconds = 0;
 
-    /** Slots of a cell: one with calibration, else one per repetition. */
-    size_t per_cell() const { return o.calibrated() ? 1 : (size_t)o.repeats; }
+    /** One progress slot per cell with a solve-time target, else one per trial. */
+    size_t per_cell() const { return o.adaptive_sampling() ? 1 : (size_t)o.repeats; }
 
     Progress progress(const std::string& activity) const { return Progress{games, plan.size(), done, slots, activity}; }
     std::unique_ptr<pg::Game> load(Case& game, const PlannedGame& planned);
@@ -362,7 +362,7 @@ Runner::extract_game(size_t index)
     std::vector<std::string> times;
     for (size_t s = 0; s < solvers.size(); s++) {
         std::vector<std::string> values;
-        for (double v : game.cells[s].values) values.push_back(json_number(v));
+        for (double v : game.cells[s].samples()) values.push_back(json_number(v));
         Json entry;
         entry.add("solver", solvers[s].name);
         entry.raw("seconds", json_array(values));
@@ -451,17 +451,12 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
                       if (o.workers >= 0) lace_stop();
                   });
 
-    const int pilots = o.pilots();
-    int rounds = o.warmups + pilots + o.repeats; // grows when a cell is calibrated
+    int rounds = o.warmups + o.repeats;
     bool first = true;
     for (int round = 0; round < rounds && !quit; round++) {
         const bool warmup = round < o.warmups;
-        const bool pilot = !warmup && round < o.warmups + pilots;
-        const bool measured = !warmup && !pilot;
-        const char* phase = warmup ? "warmup" : pilot ? "calibration" : "measured";
-        int repetition = round - o.warmups - pilots + 1;
-        if (warmup) repetition = round + 1;
-        else if (pilot) repetition = round - o.warmups + 1;
+        const char* phase = warmup ? "warmup" : "measured";
+        const int repetition = (warmup ? round : round - o.warmups) + 1;
 
         // the solvers of a round run in a shuffled order
         std::vector<size_t> order(solvers.size());
@@ -472,9 +467,8 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
         for (size_t s : order) {
             if (quit) break;
             Cell& cell = game.cells[s];
-            if (measured && repetition > cell.target(o.repeats)) continue;
+            if (!warmup && repetition > cell.target(o.repeats)) continue;
             const uint32_t seed = trial_seed(o.seed, hash, o.vary_solver_seed ? round : 0);
-            const bool slot = measured && (!o.calibrated() || repetition == cell.target(o.repeats));
 
             if (cell.failure) {
                 // a failed cell is not run again
@@ -482,12 +476,13 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
                 skipped.status = *cell.failure;
                 skipped.failure_phase = cell.failure_phase;
                 report->sample(game, s, position++, repetition, phase, seed, worker.generation(), skipped, false, "");
-                if (slot) done++;
+                if (!warmup && (!o.adaptive_sampling() || repetition == cell.target(o.repeats))) done++;
                 continue;
             }
 
-            const int total = warmup ? o.warmups : pilot ? pilots : cell.target(o.repeats);
-            const std::string activity = game.name + " | " + solvers[s].name + " | " + (warmup ? "warm-up " : pilot ? "pilot " : "repeat ") + std::to_string(repetition) + "/" + std::to_string(total);
+            const int total = warmup ? o.warmups : o.repeats;
+            std::string activity = game.name + " | " + solvers[s].name + " | " + (warmup ? "warm-up " : "repeat ") + std::to_string(repetition);
+            if (repetition <= total) activity += "/" + std::to_string(total);
             if (!service(activity, first)) break;
             first = false;
 
@@ -500,20 +495,12 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
 
             std::string artifact;
             if (trial.status == Status::Ok) {
-                if (pilot) {
-                    cell.pilots.push_back(trial.solve);
-                    if ((int)cell.pilots.size() == pilots) {
-                        // the pilots fix the sample count of this cell
-                        const double estimate = summarize(cell.pilots).median;
-                        cell.required = calibrated_repetitions(o.min_solve_time, estimate, o.repeats, o.max_repeats);
-                        rounds = std::max(rounds, o.warmups + pilots + cell.required);
-                        const bool capped = o.min_solve_time / std::max(estimate, 1e-9) > o.max_repeats;
-                        report->calibration(game, s, estimate, cell.required, capped);
-                    }
-                } else if (warmup) {
+                if (warmup) {
                     cell.warmups++;
                 } else {
-                    cell.values.push_back(trial.solve);
+                    cell.add_sample(trial.solve);
+                    cell.extend_sampling(o);
+                    rounds = std::max(rounds, o.warmups + cell.target(o.repeats));
                 }
             } else {
                 cell.failure = trial.status;
@@ -525,7 +512,7 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
                 worker.stop(); // the next trial gets a fresh worker
             }
             report->sample(game, s, position++, repetition, phase, seed, worker.generation(), trial, true, artifact);
-            if (slot) done++;
+            if (!warmup && (!o.adaptive_sampling() || repetition == cell.target(o.repeats))) done++;
         }
     }
 }

@@ -53,7 +53,7 @@ game(const std::string& name, const std::vector<double>& medians)
         if (std::isnan(medians[s])) {
             result.cells[s].failure = Status::Timeout;
         } else {
-            result.cells[s].values = {medians[s]};
+            result.cells[s].add_sample(medians[s]);
         }
     }
     return result;
@@ -99,9 +99,13 @@ test_render()
     const size_t sums = find_row(lines, "SUM MEDIANS");
     check("sums of the complete cells", sums < lines.size() && ui::strip(lines[sums]).find("5.00 ms") != std::string::npos);
     check("coverage", find_row(lines, "verified games") == sums + 1 && ui::strip(lines[sums + 1]).find("1/4") != std::string::npos);
-    check("progress", ui::strip(lines[sums + 2]).find("50%  6/12") != std::string::npos);
-    check("activity", ui::strip(lines[sums + 3]).find("beta | s1 | repeat 1/1") == 0);
-    check("keys", ui::strip(lines[sums + 4]).find("Space pause/resume") == 0);
+    check("selected row mean", ui::strip(lines[sums + 2]).find("selected mean") == 0 &&
+          ui::strip(lines[sums + 2]).find("|3.00 ms") != std::string::npos);
+    check("selected row sample count", ui::strip(lines[sums + 3]).find("selected solves") == 0 &&
+          ui::strip(lines[sums + 3]).find("|1") != std::string::npos);
+    check("progress", ui::strip(lines[sums + 4]).find("50%  6/12") != std::string::npos);
+    check("activity", ui::strip(lines[sums + 5]).find("beta | s1 | repeat 1/1") == 0);
+    check("keys", ui::strip(lines[sums + 6]).find("Space pause/resume") == 0);
 
     view.heatmap = true;
     const auto heat = render_table(view, data, 100, 30);
@@ -111,18 +115,17 @@ test_render()
 
     // a running game shows its phase
     Case running = game("gamma", {0.001, 0.001, 0.001});
-    running.cells[0].values.clear();
+    running.cells[0] = Cell();
     running.cells[0].warmups = 1;
-    running.cells[1].values.clear();
-    running.cells[1].pilots = {0.001, 0.001};
+    running.cells[1] = Cell();
     running.cells[2].required = 5;
     games.push_back(running);
     TableView live;
     const TableData more{o, solvers, games, 4, 7, 12, 1.5, ""};
     const auto partial = render_table(live, more, 100, 30);
     const size_t gamma = find_row(partial, "gamma");
-    check("warm-up and pilot cells", ui::strip(partial[gamma]).find("warm 1") != std::string::npos && ui::strip(partial[gamma]).find("pilot 2") != std::string::npos);
-    check("incomplete cell counts", ui::strip(partial[gamma]).find("1.00 ms 1/5") != std::string::npos);
+    check("warm-up cell", ui::strip(partial[gamma]).find("warm 1") != std::string::npos);
+    check("incomplete cell count", ui::strip(partial[gamma]).find("1.00 ms (1)") != std::string::npos);
 }
 
 static void
@@ -171,9 +174,10 @@ test_review()
     games.push_back(game("d", std::vector<double>(12, 0.001)));
     games.push_back(game("a", std::vector<double>(12, 0.002)));
     games.push_back(game("c", std::vector<double>(12, 0.004)));
-    games[1].cells[5].values.clear();
+    games[1].cells[5] = Cell();
     games[1].cells[5].failure = Status::Crash;
-    games[3].cells[5].values = {0.0005};
+    games[3].cells[5] = Cell();
+    games[3].cells[5].add_sample(0.0005);
     TableView view;
     view.review = true;
     const TableData data{o, solvers, games, 4, 12, 12, 1, ""};

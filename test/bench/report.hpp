@@ -18,7 +18,7 @@
  * The reports of a benchmark.
  *
  * JSON Lines: one event per line, written and flushed as it happens: the
- * metadata of the run, every game, every warm-up, calibration and measured
+ * metadata of the run, every game, every warm-up and measured
  * trial, the statistics per game and solver, the summary and an end marker.
  * A run that is killed still leaves complete lines.
  *
@@ -68,7 +68,6 @@ public:
 
     void game(const Case& game);
     void sample(const Case& game, size_t solver, size_t position, int round, const char* phase, uint32_t seed, int generation, const Trial& trial, bool executed, const std::string& artifact);
-    void calibration(const Case& game, size_t solver, double pilot, int target, bool capped);
 
     /** The result per solver of a finished game (JSON and CSV). */
     void results(const Case& game);
@@ -97,10 +96,10 @@ private:
 
 /** The CSV header and the rows of a finished game. */
 std::string csv_header();
-std::string csv_rows(const Case& game, const std::vector<SolverRun>& solvers, int repeats);
+std::string csv_rows(const Case& game, const std::vector<SolverRun>& solvers, const Options& options);
 
 /** The result events of a finished game. */
-std::vector<std::string> result_events(const Case& game, const std::vector<SolverRun>& solvers, int repeats);
+std::vector<std::string> result_events(const Case& game, const std::vector<SolverRun>& solvers, const Options& options);
 
 }
 

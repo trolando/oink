@@ -80,20 +80,38 @@ test_statistics()
     check("empty sample", empty.samples == 0 && empty.median == 0);
 
     Cell cell;
-    cell.values = {3, 1, 2};
+    for (double v : {3, 1, 2}) cell.add_sample(v);
     check("cell statistics", near(cell.stats().median, 2));
-    cell.values.push_back(10);
-    check("cell statistics follow new values", near(cell.stats().median, 2.5));
+    cell.add_sample(10);
+    check("cell statistics follow new values", near(cell.stats().median, 2.5) && near(cell.stats().mean, 4));
     check("cell target", cell.target(7) == 7 && !cell.complete(7) && cell.complete(4));
-    cell.required = 4;
-    check("calibrated target", cell.target(7) == 4 && cell.complete(7));
     cell.failure = Status::Timeout;
-    check("failed cell is not complete", !cell.complete(7));
+    check("failed cell is not complete", !cell.complete(4));
 
-    check("calibration rounds up", calibrated_repetitions(0.001, 0.0003, 7, 100) == 7);
-    check("calibration target", calibrated_repetitions(0.001, 0.00001, 7, 1000) == 100);
-    check("calibration cap", calibrated_repetitions(0.001, 1e-9, 7, 50) == 50);
-    check("calibration of a slow game", calibrated_repetitions(0.001, 2.0, 3, 50) == 3);
+    Options sampling;
+    sampling.repeats = 2;
+    sampling.max_repeats = 3;
+    sampling.min_solve_time = 0.5;
+    Cell fast;
+    fast.add_sample(0.25);
+    fast.extend_sampling(sampling);
+    check("minimum count", fast.target(sampling.repeats) == 2 && !fast.complete(sampling.repeats));
+    fast.add_sample(0.125);
+    fast.extend_sampling(sampling);
+    check("a short accumulated solve time adds a repetition", fast.target(sampling.repeats) == 3 && !fast.complete(sampling.repeats));
+    fast.add_sample(0.125);
+    fast.extend_sampling(sampling);
+    check("sampling stops once measured time reaches the target", fast.complete(sampling.repeats) &&
+          !fast.capped(sampling) && near(fast.stats().mean, 0.5 / 3));
+    sampling.min_solve_time = 1;
+    fast.extend_sampling(sampling);
+    check("sampling stops at the repetition cap", fast.complete(sampling.repeats) && fast.capped(sampling));
+    Cell slow;
+    for (double v : {1.0, 0.125}) {
+        slow.add_sample(v);
+        slow.extend_sampling(sampling);
+    }
+    check("a long solve needs only the minimum count", slow.complete(sampling.repeats) && !slow.capped(sampling));
 
     check("duration us", duration(0.0000123) == "12.3 us");
     check("duration small us", duration(0.00000123) == "1.23 us");
@@ -156,7 +174,7 @@ game_with(size_t index, const std::vector<double>& medians)
         if (std::isnan(medians[s])) {
             game.cells[s].failure = Status::Timeout;
         } else {
-            game.cells[s].values = {medians[s]};
+            game.cells[s].add_sample(medians[s]);
         }
     }
     return game;
@@ -573,22 +591,22 @@ test_experiment_records()
     game.prep.seconds = 0.1;
     game.prep.residual_hash = "fedcba9876543210";
     game.cells.resize(3);
-    game.cells[0].values = {1e-6, 2.5e-6, 1.0 / 7.0};
+    for (double v : {1e-6, 2.5e-6, 1.0 / 7.0}) game.cells[0].add_sample(v);
     game.cells[0].warmups = 1;
     game.cells[1].failure = Status::Timeout;
     game.cells[1].failure_phase = Phase::Solve;
     game.cells[2].required = 40;
-    game.cells[2].pilots = {0.1, 0.2, 0.3};
-    game.cells[2].values.assign(40, 0.25);
+    for (int i = 0; i < 40; i++) game.cells[2].add_sample(0.25);
     const std::string line = encode_case(game);
     Case back;
     check("decode", decode_case(line, back));
     check("decoded game", back.index == 7 && back.name == game.name && back.path == game.path && back.seed == game.seed && back.hash == game.hash);
     check("decoded sizes and times", back.vertices == 10 && back.edges == 22 && back.load == game.load && back.parse == game.parse);
     check("decoded preparation", back.prep.residual_vertices == 8 && back.prep.solved_vertices == 2 && back.prep.residual_hash == game.prep.residual_hash);
-    check("decoded cells", back.cells.size() == 3 && back.cells[0].values == game.cells[0].values && back.cells[0].warmups == 1);
+    check("decoded cells", back.cells.size() == 3 && back.cells[0].samples() == game.cells[0].samples() && back.cells[0].warmups == 1);
     check("decoded failure", back.cells[1].failure == Status::Timeout && back.cells[1].failure_phase == Phase::Solve);
-    check("decoded calibration", back.cells[2].required == 40 && back.cells[2].pilots == game.cells[2].pilots && back.cells[2].values.size() == 40);
+    check("decoded sampling", back.cells[2].required == 40 && back.cells[2].samples().size() == 40 &&
+          back.cells[2].accumulated_solve() == 10);
     check("a cut line is rejected", !decode_case(line.substr(0, line.size() - 10), back));
     game.seed.reset();
     check("no seed", decode_case(encode_case(game), back) && !back.seed);

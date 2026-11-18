@@ -531,7 +531,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
                     -DWORK=${CMAKE_CURRENT_BINARY_DIR}/multisol
                     -P ${CMAKE_CURRENT_SOURCE_DIR}/test/test_multisol.cmake)
             # short headless runs of bench_solvers (see test/bench/smoke.cmake)
-            set(BENCH_MODES basic calibrated reference random errors preprocess live experiment)
+            set(BENCH_MODES basic sampling reference random errors preprocess live experiment)
             if(NOT WIN32)
                 list(APPEND BENCH_MODES timeout) # worker processes
                 # the interactive screens on a pseudo terminal

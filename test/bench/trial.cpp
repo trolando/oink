@@ -244,7 +244,7 @@ execute(const Prepared& prepared, const SolverRun& run, const Options& options, 
         // verify every strategy of the solution, outside the measurement
         std::ostringstream verify_log;
         if (prepared.identity()) {
-            pg::Verifier verifier(game, solver.solution(), verify_log);
+            pg::Verifier verifier(*prepared.original, solver.solution(), verify_log);
             verifier.verify(true, true, true);
         } else {
             // against the original game, with what preprocessing solved

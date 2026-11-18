@@ -37,7 +37,7 @@ struct Progress
 {
     const std::vector<Case>& games; // the games so far; the last one may be running
     size_t planned;                 // games planned
-    size_t done;                    // finished slots (cells, or trials without calibration)
+    size_t done;                    // finished slots (cells with adaptive sampling, else trials)
     size_t slots;                   // planned slots
     std::string activity;           // what runs next
 };

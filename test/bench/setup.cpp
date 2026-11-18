@@ -146,7 +146,7 @@ setup_config(Options& o)
     sampling.key = 'p';
     sampling.label = "Sampling";
     sampling.title = "SOLVE-TIME SAMPLING TARGET";
-    sampling.hint = "Accumulated solve seconds per game and solver; 0 disables the calibration. Three pilot trials fix the sample count, at most --max-repeat.";
+    sampling.hint = "Accumulate this many measured solve seconds per game and solver, up to --max-repeat; 0 uses a fixed count.";
     sampling.show = [&o] { return seconds_setting(o.min_solve_time); };
     sampling.text = [&o] { return number(o.min_solve_time); };
     sampling.apply = [&o](const std::string& text, std::string& error) {

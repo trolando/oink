@@ -10,6 +10,9 @@ All notable changes to Oink will be documented in this file.
   limits for trial setup and verification. Reports identify the phase of
   a failure, distinguish safety timeouts and allocation failures, and
   preserve phase timings received before a worker fails.
+- Fast benchmark cases repeat until the measured solves reach the
+  configured cumulative time or repetition cap. Reports include the
+  mean solve time and measured repetition count.
 
 ## [1.2.0] - 2026-11-18
 

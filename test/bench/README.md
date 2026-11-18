@@ -42,25 +42,26 @@ For every game:
    verified, and the solvers solve the residual game with all preprocessing of
    Oink disabled. A game that preprocessing solves completely has no trials.
    Preprocessing is off by default.
-3. The rounds run: `--warmup` warm-up rounds (default 1), then three pilot
-   trials when calibrating, then the measured repetitions. Every round runs
-   the solvers in a shuffled order. With `--min-solve-time` (default 0.001
-   seconds; 0 disables it) the median of the pilots fixes the sample count of
-   each solver on the game, max(`--repeat`, ceil(target/pilot)), at most
-   `--max-repeat` (default 10000), before the measured trials start.
-   `--repeat` defaults to 7. `--quick` means one repetition, no warm-up and no
-   calibration.
+3. After `--warmup` warm-up rounds (default 1), measured rounds continue
+   for each solver until it reaches both `--repeat` (default 7) and
+   `--min-solve-time` (default 1 ms of accumulated solve time), or reaches
+   `--max-repeat` (default 10000). A 1 ms target collects more observations
+   when an individual solve is close to the timer's resolution, while
+   keeping the requested amount of extra solve time small. Every round
+   shuffles the solver order and every solve is verified in full. Warm-ups
+   contribute neither solve time nor samples towards the target. Set
+   `--min-solve-time=0` to use exactly `--repeat` measured trials.
+   `--quick` sets one repetition, zero warm-up rounds and zero target.
 4. Every trial copies the residual game and constructs Oink (with the
    eager in-edges) outside the solve interval. The solve interval runs from
    immediately before calling `Oink::run` to its return. It includes Oink's
    solver selection, construction and bookkeeping, `--scc`, and any
    incoming edges built inside the call, including lazy construction. The
-   same boundary applies to every solver. With preprocessing, the solution
-   and all moves of a multi-strategy are mapped
-   back and verified against the original game. A failed trial (solver
-   error, invalid solution, timeout, crash) fails the solver on that game;
-   its later trials are reported as skipped, and the game and log are saved
-   in `--artifacts` (default `benchmark-artifacts`).
+   same boundary applies to every solver. The worker verifies the solution
+   and all moves of a multi-strategy against the original game, mapping the
+   solution back when preprocessing was used. A failed trial fails the
+   solver on that game. Later trials are reported as skipped, and the game
+   and log are saved in `--artifacts` (default `benchmark-artifacts`).
 
 On POSIX systems the trials of a game run in a forked worker process in its
 own process group, which serves all trials of the game. `--timeout` limits
@@ -90,8 +91,8 @@ given. The solver seed is fixed per game unless `--vary-solver-seed`. With
 
 ## Output
 
-As each game finishes, stderr gets a line with the median and interquartile
-range of every solver. At the end, stdout gets the summary: per solver the
+As each game finishes, stderr gets the median, interquartile range, mean and
+measured solve count of every solver. At the end, the stdout summary gives the
 coverage (verified games out of the games that need a solver; `!N` counts
 failures), the sum of the per-game medians, `geom. VBS`, the geometric mean
 of its median over the fastest median of each game (the virtual best
@@ -104,19 +105,22 @@ come first, by their sum; on a terminal the sums and `geom. VBS` are coloured
 green (fastest) to red. These are point estimates, not significance tests.
 
 `--jsonl=FILE` writes JSON Lines, flushed as they happen: the metadata (build,
-machine, settings, solvers, a clock probe), every game, preparation, warm-up,
-pilot and measured trial (status, setup, solve, verification and CPU seconds,
-the solver that actually ran), the calibration decisions, the result per game
-and solver (median, quartiles, MAD), pauses, extractions, the summary and an
-end marker. `--csv=FILE` writes one row per game and solver with the same
-statistics and the residual size. Existing reports are only replaced with
+machine, settings, solvers, a clock probe), every game, preparation, warm-up
+and measured trial (status, setup, solve, verification and CPU seconds and
+the solver that actually ran), the result per game and solver, pauses,
+extractions, the summary and an end marker. `--csv=FILE` writes one row per
+game and solver. Both formats give the mean per solve, sample count, total
+measured solve time, median, quartiles and MAD. `sampling_capped` marks a
+completed cell whose solve time stayed below the target at the repetition
+cap. CSV also includes the residual size. Existing reports are only replaced with
 `--overwrite`. The exit status is 0 on success, 1 if a trial failed, 130 when
 interrupted, and 3 for a bad command line.
 
 ## Live table and review
 
 `--live` shows a table of the medians that updates as the trials finish, with
-the sums, the coverage, a progress bar and the current trial below it. A cyan
+the sums, coverage, mean and sample count for the selected game, a progress
+bar and the current trial below it. A cyan
 `>` marks the selected game, the fastest complete median of a row is green,
 failures are red. `h` or `--heatmap` colours every timing by its rank in the
 row instead (green for the fastest 5%, red for the slowest 5%).

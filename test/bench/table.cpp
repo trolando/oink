@@ -229,16 +229,15 @@ cell(const Case& game, size_t s, int repeats, bool heatmap, int color, double be
         else if (*c.failure == Status::MemoryFailure) text += "memory";
         else text += status_name(*c.failure);
         code = style::bad;
-    } else if (c.values.empty()) {
-        if (!c.pilots.empty()) text = "pilot " + std::to_string(c.pilots.size());
-        else if (c.warmups) text = "warm " + std::to_string(c.warmups);
+    } else if (c.samples().empty()) {
+        if (c.warmups) text = "warm " + std::to_string(c.warmups);
         else text = "-";
         code = style::dim;
     } else {
         const Stats& st = c.stats();
         text = duration(st.median);
         if (!c.complete(repeats)) {
-            text += " " + std::to_string(c.values.size()) + "/" + std::to_string(c.target(repeats));
+            text += " (" + std::to_string(st.samples) + ")";
         } else if (heatmap) {
             code = style::color256(color);
         } else if (st.median == best) {
@@ -273,7 +272,9 @@ render_table(TableView& view, const TableData& data, int width, int height)
     auto line = [&](const std::string& text) { lines.push_back(text); };
 
     line(std::string(style::title) + "OINK  /  SOLVER BENCHMARK" + style::reset + "  " + fit(o.label, std::max(0, width - 27)));
-    std::string mode = "median Oink::run | " + std::to_string(o.repeats) + (o.calibrated() ? "+ calibrated" : "") + " repeats | " + std::to_string(o.warmups) + " warm-ups | ";
+    std::string mode = "median Oink::run | " + std::to_string(o.repeats) + " repeats";
+    if (o.adaptive_sampling()) mode += " minimum / solve target " + seconds_setting(o.min_solve_time);
+    mode += " | " + std::to_string(o.warmups) + " warm-ups | ";
     mode += view.heatmap ? "heatmap: per-game ranks (green/red 5% tails)" : "verified";
     line(fit(mode, width));
     const std::string rule((size_t)width, '-');
@@ -292,7 +293,7 @@ render_table(TableView& view, const TableData& data, int width, int height)
     line(style::bold + header + style::reset);
 
     // the games
-    const size_t body = (size_t)std::max(1, height - 11);
+    const size_t body = (size_t)std::max(1, height - (games.empty() ? 11 : 13));
     view.body = body;
     view.first = ui::keep_visible(view.first, view.selected, games.size(), body);
     for (size_t i = 0; i < body; i++) {
@@ -351,6 +352,20 @@ render_table(TableView& view, const TableData& data, int width, int height)
     }
     line(style::bold + sums + style::reset);
     line(counts);
+
+    if (!games.empty()) {
+        const Case& selected = games[view.order[view.selected]];
+        std::string means = fit("selected mean", name_width) + " |";
+        std::string samples = fit("selected solves", name_width) + " |";
+        for (size_t s = first_column; s < last_column; s++) {
+            const Cell& c = selected.cells[s];
+            const Stats& st = c.stats();
+            means += fit(st.samples && !c.failure ? duration(st.mean) : "-", cell_width - 1) + " ";
+            samples += fit(st.samples ? std::to_string(st.samples) : "-", cell_width - 1) + " ";
+        }
+        line(means);
+        line(samples);
+    }
 
     // progress, activity and keys
     const double fraction = data.slots ? std::min(1.0, (double)data.done / (double)data.slots) : 0;

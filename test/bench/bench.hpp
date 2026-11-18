@@ -59,10 +59,10 @@ struct Options
     bool wcwc = true;
 
     // Sampling
-    int repeats = 7;                // measured repetitions (the minimum, with calibration)
+    int repeats = 7;                // minimum measured repetitions per cell
     int warmups = 1;                // warm-up rounds per game
-    int max_repeats = 10000;        // the cap of the calibrated repetitions
-    double min_solve_time = 0.001;  // accumulated solve time per cell; 0: no calibration
+    int max_repeats = 10000;        // cap when sampling has a solve-time target
+    double min_solve_time = 0.001;  // accumulated solve time per cell; 0: fixed count
     double timeout = 30;            // wall seconds per solve; 0: no solve limit
     double safety_timeout = 300;    // wall seconds each for worker setup and verification
     bool isolate = true;            // run the trials in a worker process
@@ -105,8 +105,7 @@ struct Options
 
     std::vector<std::string> argv;  // the command line, for the metadata
 
-    bool calibrated() const { return min_solve_time > 0; }
-    int pilots() const { return calibrated() ? 3 : 0; }
+    bool adaptive_sampling() const { return min_solve_time > 0; }
 };
 
 /** The solvers benchmarked when none are selected. */
@@ -152,10 +151,11 @@ struct Trial
 using PhaseUpdate = std::function<void(Phase, const Trial&)>;
 void record_failure(Trial& trial, Phase phase, const std::exception& error);
 
-/** Median, quartiles and median absolute deviation of a sample. */
+/** Mean, median, quartiles and median absolute deviation of a sample. */
 struct Stats
 {
     size_t samples = 0;
+    double mean = 0;
     double median = 0;
     double q1 = 0;
     double q3 = 0;
@@ -170,20 +170,26 @@ Stats summarize(std::vector<double> values);
  */
 struct Cell
 {
-    std::vector<double> values;     // measured solve times
-    std::vector<double> pilots;     // calibration trials, not part of the results
     int warmups = 0;                // successful warm-up trials
-    int required = 0;               // the calibrated sample count; 0: the repetitions
+    int required = 0;               // the current target if extended beyond --repeat
     std::optional<Status> failure;  // the first failure; later trials are skipped
     Phase failure_phase = Phase::None;
 
     int target(int repeats) const { return required ? required : repeats; }
     bool complete(int repeats) const { return !failure && (int)values.size() == target(repeats); }
+    bool capped(const Options& o) const { return complete(o.repeats) && solve_total < o.min_solve_time; }
+
+    void add_sample(double seconds);
+    void extend_sampling(const Options& o);
+    const std::vector<double>& samples() const { return values; }
+    double accumulated_solve() const { return solve_total; }
 
     /** The statistics of the measured values (cached; values are only appended). */
     const Stats& stats() const;
 
 private:
+    std::vector<double> values;
+    double solve_total = 0;
     mutable Stats cache;
 };
 
@@ -238,9 +244,6 @@ std::string seconds_setting(double seconds);
  * values get -1 (no colour).
  */
 std::vector<int> heatmap_colors(const std::vector<double>& values);
-
-/** The calibrated sample count: max(minimum, ceil(target/pilot)), at most maximum. */
-int calibrated_repetitions(double target, double pilot, int minimum, int maximum);
 
 /** FNV-1a fingerprint of a game: its size, priorities, owners and edges. */
 uint64_t fingerprint(const pg::Game& game);

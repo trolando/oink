@@ -21,6 +21,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
@@ -82,9 +83,9 @@ validate(const Options& o, const std::vector<SolverRun>& solvers)
         throw std::runtime_error("isolated trials need a positive --safety-timeout; in-process trials have no limits");
     }
     if (!std::isfinite(o.min_solve_time) || o.min_solve_time < 0) throw std::runtime_error("the sampling target must be zero (off) or positive");
-    if (o.max_repeats < 1 || (o.calibrated() && o.max_repeats < o.repeats)) throw std::runtime_error("the repetition cap must be at least the number of repetitions");
-    const int rounds = o.calibrated() ? o.max_repeats : o.repeats;
-    if (o.warmups > std::numeric_limits<int>::max() - rounds - o.pilots()) throw std::runtime_error("too many sampling rounds");
+    if (o.max_repeats < 1 || (o.adaptive_sampling() && o.max_repeats < o.repeats)) throw std::runtime_error("the repetition cap must be at least the number of repetitions");
+    const int rounds = o.adaptive_sampling() ? o.max_repeats : o.repeats;
+    if (o.warmups > std::numeric_limits<int>::max() - rounds) throw std::runtime_error("too many sampling rounds");
     if (o.timeout > 0 && !o.isolate) throw std::runtime_error("a timeout needs isolated trials; use --timeout=0 with --in-process");
     if (o.count < 1 || o.size < 1 || o.maxp < 0 || o.maxe < o.size) throw std::runtime_error("invalid random game parameters (count, size > 0, maxp >= 0, maxe >= size)");
     if (!o.preprocess && (o.inflate || o.compress)) throw std::runtime_error("--inflate and --compress are preprocessing steps; they need --preprocess");
@@ -149,6 +150,7 @@ summarize(std::vector<double> values)
     Stats result;
     result.samples = values.size();
     if (values.empty()) return result;
+    result.mean = std::accumulate(values.begin(), values.end(), 0.0) / (double)values.size();
     std::sort(values.begin(), values.end());
     auto quantile = [&](double p) {
         const double position = p * (double)(values.size() - 1);
@@ -163,6 +165,21 @@ summarize(std::vector<double> values)
     std::sort(values.begin(), values.end());
     result.mad = quantile(0.5);
     return result;
+}
+
+void
+Cell::add_sample(double seconds)
+{
+    values.push_back(seconds);
+    solve_total += seconds;
+}
+
+void
+Cell::extend_sampling(const Options& o)
+{
+    if (complete(o.repeats) && solve_total < o.min_solve_time && (int)values.size() < o.max_repeats) {
+        required = (int)values.size() + 1;
+    }
 }
 
 const Stats&
@@ -240,13 +257,6 @@ heatmap_colors(const std::vector<double>& values)
         first = last;
     }
     return colors;
-}
-
-int
-calibrated_repetitions(double target, double pilot, int minimum, int maximum)
-{
-    const double count = std::ceil(target / std::max(pilot, 1e-9));
-    return (int)std::max((double)minimum, std::min((double)maximum, count));
 }
 
 namespace {
