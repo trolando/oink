@@ -38,6 +38,8 @@ All notable changes to Oink will be documented in this file.
   tangle learning scan fewer edges or revisit fewer regions. The fixpoint
   solvers reuse evaluations and process updates in batches. GPM and PMTL
   do fewer measure operations.
+- FPJM keeps the justifications of the new winner within a batch. Its
+  multi-strategies can differ from before, and usually have more moves.
 - `oink --solvers` shows the available solver options. Oink validates
   options before loading the game. Library callers can catch invalid
   solver options as exceptions.
