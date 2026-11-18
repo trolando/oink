@@ -22,6 +22,7 @@
 
 #include "oink/game.hpp"
 #include "oink/subgame_view.hpp"
+#include "game_limits.hpp"
 #include "successor_check.hpp"
 
 #define USE_MMAP 1
@@ -692,8 +693,9 @@ Game::swap(Game &other)
 void
 Game::e_sizeup(void)
 {
-    e_allocated = grown_edge_capacity(e_allocated);
-    _outedges.resize(e_allocated);
+    const auto capacity = detail::checked_edge_capacity(e_allocated, grown_edge_capacity(e_allocated));
+    _outedges.resize(capacity);
+    e_allocated = capacity;
 }
 
 void

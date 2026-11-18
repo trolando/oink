@@ -26,6 +26,7 @@
 #include <string>
 #include <vector>
 
+#include "game_limits.hpp"
 #include "oink/io.hpp"
 #include "oink/pgparser.hpp"
 
@@ -257,6 +258,95 @@ test_reader_boundaries()
                 PGParser::parse_pgsolver_renumber, {{0, 0, nullptr, {1}}, {1, 1, nullptr, {0, 1}}});
 }
 
+static void
+test_numeric_limits()
+{
+    constexpr auto max_slots = detail::max_edge_slots;
+    const auto max_header = max_slots / 2;
+    // Test the same capacity checks used by the parsers without allocating
+    // billions of vertices or edges.
+    if (detail::pgsolver_vertex_capacity(max_header) != static_cast<int>(max_header) + 1
+        or detail::checked_edge_capacity(max_slots - 1, max_slots + 1) != max_slots) {
+        std::cerr << "FAIL [parser capacity]: largest representable sizes should fit" << std::endl;
+        failures++;
+    }
+    try {
+        detail::checked_edge_capacity(max_slots, max_slots + 1);
+        std::cerr << "FAIL [edge slots]: expected rejection of one more slot" << std::endl;
+        failures++;
+    } catch (const std::runtime_error& e) {
+        if (std::string(e.what()) != "too many edges for int edge offsets") {
+            std::cerr << "FAIL [edge slots]: " << e.what() << std::endl;
+            failures++;
+        }
+    }
+
+    constexpr char max_u64[] = "18446744073709551615";
+    constexpr char overflow[] = "18446744073709551616";
+    constexpr size_t block_size = 1 << 20;
+    const std::string prefix = "parity 1;\n0 ";
+    const std::string tail = " 0 1;\n1 1 1 0;\n";
+    const std::string int_max = std::to_string(INT_MAX);
+    const std::string above_int_max = std::to_string(uint64_t(INT_MAX) + 1);
+    for (Parser parse : {PGParser::parse_pgsolver, PGParser::parse_pgsolver_renumber}) {
+        const bool renumber = parse == PGParser::parse_pgsolver_renumber;
+        expect_reject("priority overflow changes the winner", prefix + overflow + tail,
+                      parse, false, "priority exceeds UINT64_MAX");
+        expect_reject("successor overflow wraps to vertex zero",
+                      std::string("parity 0;\n0 0 0 ") + overflow + ";\n",
+                      parse, false, "successor exceeds UINT64_MAX");
+        expect_reject("vertex ID overflow wraps to vertex zero",
+                      std::string("parity 0;\n") + overflow + " 0 0 0;",
+                      parse, false, "vertex ID exceeds UINT64_MAX");
+        expect_reject("owner overflow wraps to player zero",
+                      std::string("parity 0;\n0 0 ") + overflow + " 0;",
+                      parse, false, "owner exceeds UINT64_MAX");
+        expect_reject("header overflow wraps to zero", std::string("parity ") + overflow + ";\n",
+                      parse, false, "number of nodes exceeds UINT64_MAX");
+        expect_reject("header narrows to zero", "parity 4294967296;\n0 0 0 0;\n",
+                      parse, false, "number of nodes too high");
+        expect_reject("smallest unrepresentable header",
+                      "parity " + std::to_string(max_header + 1) + ";",
+                      parse, false, "number of nodes too high");
+        expect_reject("maximum UINT64 header", std::string("parity ") + max_u64 + ";",
+                      parse, false, "number of nodes too high");
+        expect_reject("smallest invalid ID with parity 1", "parity 1;\n2 0 0 0;",
+                      parse, false, renumber ? "invalid id (too high)" : "invalid id");
+        expect_reject("smallest invalid successor with parity 1", "parity 1;\n0 0 0 2;",
+                      parse);
+        expect_reject("smallest invalid owner", "parity 0;\n0 0 2 0;",
+                      parse, false, renumber ? "invalid owner (must be 0 or 1)" : "invalid owner");
+
+        std::istringstream game("parity 1;\n0 0 0 1;\n1 " + int_max + " 1 1;");
+        expect_game("maximum ID and successor for this header, maximum owner and int priority",
+                    game, parse, {{0, 0, nullptr, {1}}, {renumber ? 1 : INT_MAX, 1, nullptr, {1}}});
+        if (!renumber) {
+            expect_reject("smallest priority above INT_MAX", "parity 0;\n0 " + above_int_max + " 0 0;",
+                          parse, false, "priority too high");
+            expect_reject("maximum UINT64 priority in the fast parser", prefix + max_u64 + tail,
+                          parse, false, "priority too high");
+        }
+
+        for (size_t digits_before_boundary : {0, 1, 19, 20}) {
+            const auto padded = prefix + std::string(block_size - prefix.size() - digits_before_boundary, ' ');
+            expect_reject("overflow at a reader block boundary", padded + overflow + tail,
+                          parse, false, "priority exceeds UINT64_MAX");
+            if (renumber) {
+                std::istringstream maximum(padded + max_u64 + tail);
+                expect_game("maximum UINT64 priority at a reader block boundary", maximum, parse,
+                            {{3, 0, nullptr, {1}}, {1, 1, nullptr, {0}}});
+            }
+        }
+
+        const auto zeros = std::string(block_size + 20, '0');
+        std::istringstream leading_zeros("parity 0;\n0 " + zeros + "1 0 0;");
+        expect_game("arbitrary leading zeros across reader blocks", leading_zeros, parse,
+                    {{1, 0, nullptr, {0}}});
+        expect_reject("overflow after arbitrary leading zeros", prefix + zeros + overflow + tail,
+                      parse, false, "priority exceeds UINT64_MAX");
+    }
+}
+
 int
 test_parser()
 {
@@ -294,6 +384,7 @@ test_parser()
     expect_reject("missing nodes", "parity 3;\n0 0 0 0;\n");
 
     test_reader_boundaries();
+    test_numeric_limits();
     test_repeated_edges();
     test_bundled_games();
 

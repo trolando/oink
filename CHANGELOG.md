@@ -2,7 +2,7 @@
 
 All notable changes to Oink will be documented in this file.
 
-## Unreleased
+## [Unreleased]
 
 ### Changed
 
@@ -15,6 +15,11 @@ All notable changes to Oink will be documented in this file.
   mean solve time and measured repetition count.
 - Sequential benchmarks omit solvers whose registry entry redirects
   sequential execution to a different solver.
+
+### Fixed
+
+- Reject out-of-range numbers and games whose edge arrays would overflow
+  integer offsets in both PGSolver parsers.
 
 ## [1.2.0] - 2026-11-18
 

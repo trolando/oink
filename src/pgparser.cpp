@@ -24,6 +24,7 @@
 #include <set>
 #include <vector>
 #include "oink/pgparser.hpp"
+#include "game_limits.hpp"
 #include "printf.hpp"
 #include "successor_check.hpp"
 
@@ -74,22 +75,22 @@ public:
         }
     }
 
-    inline bool read_uint64(uint64_t *res)
+    inline bool read_uint64(uint64_t *res, const char *field)
     {
         if (p == end and !fill()) return false;
+        const char *start = p;
         unsigned digit = *p - '0';
         if (digit > 9) return false;
         uint64_t r = 0;
         // A non-digit at end lets the digit loop scan each block without
         // checking the buffer boundary after every digit.
-        do {
-            while (digit <= 9) {
-                r = (10*r) + digit;
-                digit = *++p - '0';
-            }
-            if (p != end or !fill()) break;
-            digit = *p - '0';
-        } while (digit <= 9);
+        while (digit <= 9) {
+            r = (10*r) + digit;
+            digit = *++p - '0';
+        }
+        // Up to 19 decimal digits always fit. Check longer tokens and
+        // tokens that might continue in the next block out of line.
+        if (__builtin_expect(p == end or p - start >= 20, false)) r = read_long_uint64(start, r, field);
         *res = r;
         return true;
     }
@@ -114,6 +115,24 @@ public:
     }
 
 private:
+    [[gnu::noinline]] uint64_t read_long_uint64(const char *start, uint64_t r, const char *field)
+    {
+        if (p - start >= 20) {
+            // Re-read a possibly wrapped prefix. Allow arbitrary leading zeros.
+            p = start;
+            r = 0;
+        }
+        for (;;) {
+            const unsigned digit = peek() - '0';
+            if (digit > 9) return r;
+            if (r > UINT64_MAX / 10 or (r == UINT64_MAX / 10 and digit > UINT64_MAX % 10)) {
+                throw std::runtime_error(std::string(field) + " exceeds UINT64_MAX");
+            }
+            r = 10*r + digit;
+            ++p;
+        }
+    }
+
     bool fill()
     {
         const std::streamsize k = rd->sgetn(buf.data(), (std::streamsize)buf.size() - 1);
@@ -180,7 +199,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
     read_parity_keyword(rd);
 
     rd.skip_whitespace();
-    if (!rd.read_uint64(&n)) throw std::runtime_error("missing number of nodes");
+    if (!rd.read_uint64(&n, "number of nodes")) throw std::runtime_error("missing number of nodes");
 
     rd.skip_whitespace();
     if (rd.get() != ';') throw std::runtime_error("missing ';'");
@@ -198,10 +217,10 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 
     // Skip the first few allocations while keeping the same growth sequence
     // for larger edge arrays. The initial array includes the terminators.
-    const auto vertices = n+1;
+    const int vertices = detail::pgsolver_vertex_capacity(n);
     size_t capacity = vertices + 2;
     for (int growth = 0; growth < 3; growth++) capacity = Game::grown_edge_capacity(capacity);
-    Game res(vertices, capacity <= INT_MAX ? capacity - vertices - 1 : 1);
+    Game res(vertices, capacity <= detail::max_edge_slots ? capacity - vertices - 1 : 1);
 
     /**
      * Parse the nodes...
@@ -214,7 +233,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
     while (node_count < res.n_vertices) {
         uint64_t id;
         rd.skip_whitespace();
-        if (!rd.read_uint64(&id)) {
+        if (!rd.read_uint64(&id, "vertex ID")) {
             // we expect maybe one more node...
             if (node_count == res.n_vertices-1 and !seen[res.n_vertices-1]) {
                 if (std::find(res._outedges.begin(), res._outedges.begin() + res.e_size, node_count)
@@ -233,12 +252,12 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         node_count++;
 
         rd.skip_whitespace();
-        if (!rd.read_uint64(&n)) throw std::runtime_error("missing priority");
+        if (!rd.read_uint64(&n, "priority")) throw std::runtime_error("missing priority");
         if (n > INT_MAX) throw std::runtime_error("priority too high"); // don't be ridiculous
         res._priority[id] = n;
 
         rd.skip_whitespace();
-        if (!rd.read_uint64(&n)) throw std::runtime_error("missing owner");
+        if (!rd.read_uint64(&n, "owner")) throw std::runtime_error("missing owner");
 
         if (n == 0) { /* nothing */ }
         else if (n == 1) { res._owner[id] = true; }
@@ -253,7 +272,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         // parse successors and optional label
         for (;;) {
             rd.skip_whitespace();
-            if (!rd.read_uint64(&n)) throw std::runtime_error("missing successor");
+            if (!rd.read_uint64(&n, "successor")) throw std::runtime_error("missing successor");
             if (n >= (uint64_t)res.n_vertices) {
                 std::cout << "id " << id << " with successor " << n << std::endl;
                 throw std::runtime_error("invalid successor");
@@ -454,7 +473,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
     read_parity_keyword(rd);
 
     rd.skip_whitespace();
-    if (!rd.read_uint64(&n)) throw std::runtime_error("missing number of nodes");
+    if (!rd.read_uint64(&n, "number of nodes")) throw std::runtime_error("missing number of nodes");
 
     rd.skip_whitespace();
     if (rd.get() != ';') throw std::runtime_error("missing ';'");
@@ -474,8 +493,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
 
     // the given number is either the number of vertices, or the highest vertex
     // so, we expect n or n+1 nodes
-    unsigned long n_vertices = n+1;
-    if (n_vertices == 0) return Game();
+    int n_vertices = detail::pgsolver_vertex_capacity(n);
 
     // Store each outgoing list directly. The priorities are kept separately
     // until they have been compressed to fit in a Game.
@@ -489,14 +507,14 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
      * Parse the nodes...
      */
 
-    size_t node_count = 0; // number of read nodes
+    int node_count = 0; // number of read nodes
     bool in_vertex_order = true;
 
     while (node_count < n_vertices) {
         uint64_t id;
         rd.skip_whitespace();
         // TODO: assume size is n, not n+1
-        if (!rd.read_uint64(&id)) {
+        if (!rd.read_uint64(&id, "vertex ID")) {
             // we expect maybe one more node...
             if (node_count == n_vertices - 1 && !seen[n_vertices - 1]) {
                 if (std::find(res._outedges.begin(), res._outedges.begin() + res.e_size, node_count)
@@ -510,18 +528,18 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
                 throw std::runtime_error("unable to read id");
             }
         }
-        if (id >= n_vertices) throw std::runtime_error("invalid id (too high)");
+        if (id >= (uint64_t)n_vertices) throw std::runtime_error("invalid id (too high)");
         if (seen[id]) throw std::runtime_error("duplicate id");
         seen[id] = true;
         in_vertex_order &= id == node_count;
         node_count++;
 
         rd.skip_whitespace();
-        if (!rd.read_uint64(&n)) throw std::runtime_error("missing priority");
+        if (!rd.read_uint64(&n, "priority")) throw std::runtime_error("missing priority");
         priority[id] = n;
 
         rd.skip_whitespace();
-        if (!rd.read_uint64(&n)) throw std::runtime_error("missing owner");
+        if (!rd.read_uint64(&n, "owner")) throw std::runtime_error("missing owner");
         if (n != 0 and n != 1) throw std::runtime_error("invalid owner (must be 0 or 1)");
         res._owner[id] = n != 0;
 
@@ -533,7 +551,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         // parse successors and optional label
         for (;;) {
             rd.skip_whitespace();
-            if (!rd.read_uint64(&n)) throw std::runtime_error("missing successor");
+            if (!rd.read_uint64(&n, "successor")) throw std::runtime_error("missing successor");
             if (n >= (uint64_t)n_vertices) {
                 std::stringstream err;
                 err << "invalid successor for id " << id;
