@@ -25,6 +25,7 @@
 #include <vector>
 #include "oink/pgparser.hpp"
 #include "printf.hpp"
+#include "successor_check.hpp"
 
 namespace pg {
 
@@ -137,6 +138,23 @@ read_parity_keyword(Reader &rd)
     }
 }
 
+// Keep validation out of line so the renumbering parser's hot path stays small.
+[[gnu::noinline]] void
+check_successors(const int* successors, int count, int source, int vertices,
+                 std::vector<int>& stamps)
+{
+    const int repeated = detail::repeated_successor(successors, count, source, vertices, stamps);
+    if (repeated != -1) throw std::runtime_error(detail::repeated_edge_message(source, repeated));
+}
+
+void
+check_successors(const int* successors, int count, int source, int vertices,
+                 std::vector<uint64_t>& stamps)
+{
+    const int repeated = detail::repeated_successor(successors, count, source, vertices, stamps);
+    if (repeated != -1) throw std::runtime_error(detail::repeated_edge_message(source, repeated));
+}
+
 int
 initial_edge_count(uint64_t vertices)
 {
@@ -191,13 +209,16 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 
     int node_count = 0; // number of read nodes
     bitset seen(res.n_vertices); // tracks which nodes have been read
+    std::vector<uint64_t> stamps;
 
     while (node_count < res.n_vertices) {
         uint64_t id;
         rd.skip_whitespace();
         if (!rd.read_uint64(&id)) {
             // we expect maybe one more node...
-            if (node_count == res.n_vertices-1) {
+            if (node_count == res.n_vertices-1 and !seen[res.n_vertices-1]) {
+                if (std::find(res._outedges.begin(), res._outedges.begin() + res.e_size, node_count)
+                    != res._outedges.begin() + res.e_size) throw std::runtime_error("invalid successor");
                 res.v_resize(node_count);
                 seen.resize(node_count);
                 // ignore rest, they can be bigger
@@ -239,6 +260,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
             }
 
             if (remove_self and id == n) {
+                if (has_self) throw std::runtime_error(detail::repeated_edge_message(id, n));
                 has_self = true;
             } else {
                 res.append_out(n);
@@ -258,6 +280,7 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 
         if (has_self and res.e_size == first) res.append_out(id);
         const int count = res.e_size - first;
+        if (count > 1) check_successors(res.outs(id), count, id, res.n_vertices, stamps);
         res._outcount[id] = count;
         res.n_edges += count;
         res.append_out(-1);
@@ -460,6 +483,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
     res.e_size = 0;
     bitset seen(n_vertices);
     std::vector<uint64_t> priority(n_vertices);
+    std::vector<int> stamps;
 
     /**
      * Parse the nodes...
@@ -475,6 +499,8 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         if (!rd.read_uint64(&id)) {
             // we expect maybe one more node...
             if (node_count == n_vertices - 1 && !seen[n_vertices - 1]) {
+                if (std::find(res._outedges.begin(), res._outedges.begin() + res.e_size, node_count)
+                    != res._outedges.begin() + res.e_size) throw std::runtime_error("invalid successor");
                 n_vertices -= 1;
                 seen.resize(n_vertices);
                 res.v_resize(n_vertices);
@@ -515,6 +541,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
             }
 
             if (remove_self and id == n) {
+                if (has_self) throw std::runtime_error(detail::repeated_edge_message(id, n));
                 has_self = true;
             } else {
                 res.append_out(n);
@@ -534,6 +561,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
 
         if (has_self and res.e_size == first) res.append_out(id);
         const int count = res.e_size - first;
+        if (count > 1) check_successors(res.outs(id), count, id, res.n_vertices, stamps);
         res._outcount[id] = count;
         res.n_edges += count;
         res.append_out(-1);

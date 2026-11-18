@@ -19,6 +19,7 @@
  */
 
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -57,15 +58,97 @@ expect_reject(const std::string& name, const std::string& input,
 
 /** A valid input must parse without throwing. */
 static void
-expect_accept(const std::string& name, const std::string& input)
+expect_accept(const std::string& name, const std::string& input, Parser parse = PGParser::parse_pgsolver)
 {
     std::istringstream in(input);
     try {
-        PGParser::parse_pgsolver(in, false);
+        parse(in, false);
     } catch (const std::exception& e) {
         std::cerr << "FAIL [" << name << "]: expected acceptance, got: " << e.what() << std::endl;
         failures++;
     }
+}
+
+static void
+test_repeated_edges()
+{
+    const std::string header = "parity 6;\r\nstart 2;\r\n\r\n";
+    const std::string rest = "0 0 0 0;\n1 0 0 1;\n3 0 0 3;\n4 0 0 4;\n5 0 0 5;\n";
+    const std::string long_header = "parity 12;\n";
+    const std::string long_rest = "10 0 0 0,1,2,3,4,5,6,7,8;\n"
+        "9 0 0 9;\n8 0 0 8;\n7 0 0 7;\n6 0 0 6;\n5 0 0 5;\n4 0 0 4;\n"
+        "3 0 0 3;\n2 0 0 2;\n1 0 0 1;\n0 0 0 0;\n";
+    for (Parser parse : {PGParser::parse_pgsolver, PGParser::parse_pgsolver_renumber}) {
+        for (bool remove_loops : {false, true}) {
+            expect_reject("adjacent repeated successor", header + "2 3 1 5,0,0;\n" + rest,
+                          parse, remove_loops, "repeated edge from vertex 2 to successor 0");
+            expect_reject("nonadjacent repeated successor", header + "2 3 1 5,0,3,0;\n" + rest,
+                          parse, remove_loops, "repeated edge from vertex 2 to successor 0");
+            expect_reject("repeated self-loop loss", header + "2 3 0 2,1,2;\n" + rest,
+                          parse, remove_loops, "repeated edge from vertex 2 to successor 2");
+            expect_reject("repeated self-loop win", header + "2 3 1 2,1,2;\n" + rest,
+                          parse, remove_loops, "repeated edge from vertex 2 to successor 2");
+        }
+        expect_reject("CR-only line endings", "parity 1;\rstart 0;\r0 0 0 0,0;",
+                      parse, false, "repeated edge from vertex 0 to successor 0");
+        expect_reject("repeated successor in a long list", long_header + "11 0 0 0,1,2,3,4,5,6,7,8,0;\n" + long_rest,
+                      parse, false, "repeated edge from vertex 11 to successor 0");
+        expect_accept("different vertices can share successors", long_header + "11 0 0 0,1,2,3,4,5,6,7,8;\n" + long_rest, parse);
+        std::string bucket_rest;
+        for (int v = 1; v <= 33; v++) bucket_rest += std::to_string(v) + " 0 0 0;\n";
+        expect_accept("wide list with distinct targets", "parity 33;\n0 0 0 0,32,1,33,2,3,4,5,6;\n" + bucket_rest, parse);
+        expect_reject("wide list with repeated target 32", "parity 33;\n0 0 0 0,32,1,33,2,3,4,5,6,32;\n" + bucket_rest,
+                      parse, false, "repeated edge from vertex 0 to successor 32");
+        expect_reject("successor of missing last vertex", "parity 1;\n0 0 0 1;\n", parse);
+
+        // Split the second occurrence of 10 between the reader's blocks.
+        const std::string prefix = long_header + "11 0 0 10, 0,";
+        const std::string split = prefix + std::string((1 << 20) - prefix.size() - 1, ' ');
+        expect_reject("duplicate split across input blocks", split + "10;\n" + long_rest,
+                      parse, false, "repeated edge from vertex 11 to successor 10");
+
+        std::istringstream in(header + "2 3 0 5,2,0;\n" + rest);
+        Game g = parse(in, true);
+        if (g.outcount(2) != 2 or g.outs(2)[0] != 5 or g.outs(2)[1] != 0) {
+            std::cerr << "FAIL [losing self-loop]: loop removal changed the other successors" << std::endl;
+            failures++;
+        }
+    }
+    expect_reject("renumbering preserves input vertex IDs",
+                  "parity 2;\n2 4294967297 0 1,1;\n0 0 0 0;\n1 0 0 1;\n",
+                  PGParser::parse_pgsolver_renumber, false,
+                  "repeated edge from vertex 2 to successor 1");
+}
+
+static void
+test_bundled_games()
+{
+    namespace fs = std::filesystem;
+    const fs::path tests = OINK_TEST_DATA_DIR;
+    std::size_t parsed = 0;
+    for (const auto& root : {tests, tests.parent_path() / "examples"}) {
+        for (const auto& entry : fs::recursive_directory_iterator(root)) {
+            if (!entry.is_regular_file()) continue;
+            const auto& path = entry.path();
+            const std::string name = path.filename().string();
+            const bool bzip2 = path.extension() == ".bz2" and path.stem().extension() == ".pg";
+            const bool fixture = root == tests and path.extension().empty() and name.compare(0, 2, "vb") == 0;
+#ifndef OINK_HAVE_BZIP2
+            if (bzip2) continue;
+#endif
+            if (!bzip2 and !fixture and path.extension() != ".pg") continue;
+            try {
+                for (Parser parse : {PGParser::parse_pgsolver, PGParser::parse_pgsolver_renumber}) {
+                    parse(*open_input(path.string()), false);
+                }
+                parsed++;
+            } catch (const std::exception& e) {
+                std::cerr << "FAIL [" << path << "]: " << e.what() << std::endl;
+                failures++;
+            }
+        }
+    }
+    std::cout << "Loaded " << parsed << " bundled games with both parsers" << std::endl;
 }
 
 struct ExpectedVertex {
@@ -211,6 +294,8 @@ test_parser()
     expect_reject("missing nodes", "parity 3;\n0 0 0 0;\n");
 
     test_reader_boundaries();
+    test_repeated_edges();
+    test_bundled_games();
 
     if (failures) {
         std::cerr << failures << " parser test(s) failed" << std::endl;

@@ -35,13 +35,14 @@ public:
     PGParser() = delete;
 
     /**
-     * Parse a pgsolver game.
+     * Parse a pgsolver game. Throws std::runtime_error for a repeated edge.
      */
     static Game parse_pgsolver(std::istream &in, bool removeBadLoops);
 
     /**
      * Parse a pgsolver game. This version can handle priorities above INT_MAX, such as the mlsolver benchmarks.
      * It does this by renumbering (compressing) the priorities afterwards.
+     * Throws std::runtime_error for a repeated edge.
      */
     static Game parse_pgsolver_renumber(std::istream &in, bool removeBadLoops);
 };

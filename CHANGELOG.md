@@ -30,6 +30,11 @@ All notable changes to Oink will be documented in this file.
 
 ### Changed
 
+- Reading a PGSolver game now rejects repeated edges, which were previously
+  accepted and could lead to wrong solver results. Library callers get a
+  `std::runtime_error` from either PGSolver parser, `GameBuilder::build()`,
+  `Game::e_add()`, or the adjacency-list `Game` constructor for a repeated
+  edge. The error names both endpoints.
 - Random games are now generated the same way on every platform. Games
   selected with `--gameseed` may differ from those in earlier releases.
 - Sorting a game by priority now keeps vertices with equal priority in
@@ -53,6 +58,8 @@ All notable changes to Oink will be documented in this file.
 
 ### Fixed
 
+- A successor beyond the last vertex was accepted when the header of a
+  PGSolver game gives the number of vertices; it is now an error.
 - Parallel FPI could race while reading and updating its winner bitsets
   or writing Debug traces.
 - Oink rejects a partial solution if a strategy move or an opponent move

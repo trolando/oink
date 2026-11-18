@@ -271,6 +271,7 @@ Add `-p` to print which vertices each player wins.
 Oink provides usage instructions via `oink --help`. Typically, Oink is provided a parity game either
 via stdin (default) or from a file. The file may be zipped using the gzip or bzip2 format, which is detected if the
 filename ends with `.gz` or `.bz2`.
+Each vertex in a PGSolver game must list each successor at most once, and Oink reports the vertex and successor if an edge is repeated.
 
 What you want?                          | But how then?
 :-------------------------------------- | :---------------------------------

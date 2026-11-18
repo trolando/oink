@@ -32,6 +32,7 @@
 #include "oink/game.hpp"
 #include "oink/game_builder.hpp"
 #include "oink/io.hpp"
+#include "oink/pgparser.hpp"
 #include "oink/solution.hpp"
 #include "verifier.hpp"
 
@@ -156,7 +157,23 @@ test_bzip2()
     const std::string small = "parity 1;\n0 0 0 1;\n1 1 1 0;\n";
     p = write_temp("small", compress(small, 9));
     check(read_back(p) == small, "a small file (decompressed sequentially)");
+    Game game = PGParser::parse_pgsolver_renumber(*open_input(p), false);
+    check(game.edgecount() == 2, "parse a valid bzip2 game");
     std::remove(p.c_str());
+
+    const auto duplicate = compress("parity 1;\n0 1 0 1,0,0;\n1 0 0 0;\n", 9);
+    for (const auto& contents : {duplicate, duplicate + za}) {
+        // Appending the many-block stream also exercises parallel open_input.
+        p = write_temp("repeated_edge", contents);
+        bool rejected = false;
+        try {
+            PGParser::parse_pgsolver_renumber(*open_input(p), true);
+        } catch (const std::runtime_error& e) {
+            rejected = std::string(e.what()) == "repeated edge from vertex 0 to successor 0";
+        }
+        check(rejected, "reject a repeated edge in a bzip2 game");
+        std::remove(p.c_str());
+    }
 }
 
 #endif
