@@ -24,8 +24,6 @@
 #include <set>
 #include <vector>
 #include "oink/pgparser.hpp"
-#include "oink/game_builder.hpp"
-#include "oink/player.hpp"
 #include "printf.hpp"
 
 namespace pg {
@@ -41,7 +39,7 @@ namespace {
 class Reader
 {
 public:
-    explicit Reader(std::istream &in) : rd(in.rdbuf()), buf(1 << 20) { }
+    explicit Reader(std::istream &in) : rd(in.rdbuf()), buf((1 << 20) + 1) { }
 
     /** The next character, or EOF. */
     inline int peek()
@@ -77,14 +75,20 @@ public:
 
     inline bool read_uint64(uint64_t *res)
     {
-        int ch = peek();
-        if (ch < '0' or ch > '9') return false;
+        if (p == end and !fill()) return false;
+        unsigned digit = *p - '0';
+        if (digit > 9) return false;
         uint64_t r = 0;
+        // A non-digit at end lets the digit loop scan each block without
+        // checking the buffer boundary after every digit.
         do {
-            r = (10*r)+(ch-'0');
-            p++;
-            ch = peek();
-        } while (ch >= '0' and ch <= '9');
+            while (digit <= 9) {
+                r = (10*r) + digit;
+                digit = *++p - '0';
+            }
+            if (p != end or !fill()) break;
+            digit = *p - '0';
+        } while (digit <= 9);
         *res = r;
         return true;
     }
@@ -111,9 +115,10 @@ public:
 private:
     bool fill()
     {
-        const std::streamsize k = rd->sgetn(buf.data(), (std::streamsize)buf.size());
+        const std::streamsize k = rd->sgetn(buf.data(), (std::streamsize)buf.size() - 1);
         p = buf.data();
         end = p + (k > 0 ? k : 0);
+        buf[end - p] = '\0';
         return k > 0;
     }
 
@@ -130,6 +135,14 @@ read_parity_keyword(Reader &rd)
     for (const char *kw = "parity"; *kw; kw++) {
         if (rd.get() != *kw) throw std::runtime_error("expecting parity game specification");
     }
+}
+
+int
+initial_edge_count(uint64_t vertices)
+{
+    // Use Game's usual four edges per vertex unless the initial array would
+    // overflow its int size calculation. Large games grow the array as needed.
+    return vertices <= (INT_MAX - 1) / 5 ? -1 : 1;
 }
 
 }
@@ -165,7 +178,12 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
      * Construct game...
      */
 
-    Game res(n+1, true);
+    // Skip the first few allocations while keeping the same growth sequence
+    // for larger edge arrays. The initial array includes the terminators.
+    const auto vertices = n+1;
+    size_t capacity = vertices + 2;
+    for (int growth = 0; growth < 3; growth++) capacity = Game::grown_edge_capacity(capacity);
+    Game res(vertices, capacity <= INT_MAX ? capacity - vertices - 1 : 1);
 
     /**
      * Parse the nodes...
@@ -205,10 +223,11 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         else if (n == 1) { res._owner[id] = true; }
         else { throw std::runtime_error("invalid owner"); }
 
-        res.e_start(id);
+        const size_t first = res.e_size;
+        res._firstouts[id] = first;
 
+        const bool remove_self = removeBadLoops and res._owner[id] != (res._priority[id]&1);
         bool has_self = false;
-        int count = 0;
 
         // parse successors and optional label
         for (;;) {
@@ -219,12 +238,10 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
                 throw std::runtime_error("invalid successor");
             }
 
-            if (id == n and removeBadLoops and (res._owner[id] != (res._priority[id]&1))) {
+            if (remove_self and id == n) {
                 has_self = true;
             } else {
-                // add edge to the vector
-                res.e_add(id, n);
-                count++;
+                res.append_out(n);
             }
 
             const int ch = rd.next_token();
@@ -239,12 +256,11 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
             break;
         }
 
-        if (has_self and count == 0) {
-            res.e_add(id, id);
-            count++;
-        }
-
-        res.e_finish();
+        if (has_self and res.e_size == first) res.append_out(id);
+        const int count = res.e_size - first;
+        res._outcount[id] = count;
+        res.n_edges += count;
+        res.append_out(-1);
     }
 
     if (!seen.all()) {
@@ -436,10 +452,12 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
     // the given number is either the number of vertices, or the highest vertex
     // so, we expect n or n+1 nodes
     unsigned long n_vertices = n+1;
+    if (n_vertices == 0) return Game();
 
-    // accumulate vertices and edges directly into a builder; priorities are kept
-    // as uint64 here so they can be renumbered (compressed) before building
-    GameBuilder builder(n_vertices);
+    // Store each outgoing list directly. The priorities are kept separately
+    // until they have been compressed to fit in a Game.
+    Game res(n_vertices, initial_edge_count(n_vertices));
+    res.e_size = 0;
     bitset seen(n_vertices);
     std::vector<uint64_t> priority(n_vertices);
 
@@ -448,6 +466,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
      */
 
     size_t node_count = 0; // number of read nodes
+    bool in_vertex_order = true;
 
     while (node_count < n_vertices) {
         uint64_t id;
@@ -458,7 +477,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
             if (node_count == n_vertices - 1 && !seen[n_vertices - 1]) {
                 n_vertices -= 1;
                 seen.resize(n_vertices);
-                builder.truncate(n_vertices);
+                res.v_resize(n_vertices);
                 // ignore rest, they can be bigger
                 break;
             } else {
@@ -468,6 +487,7 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         if (id >= n_vertices) throw std::runtime_error("invalid id (too high)");
         if (seen[id]) throw std::runtime_error("duplicate id");
         seen[id] = true;
+        in_vertex_order &= id == node_count;
         node_count++;
 
         rd.skip_whitespace();
@@ -477,11 +497,12 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         rd.skip_whitespace();
         if (!rd.read_uint64(&n)) throw std::runtime_error("missing owner");
         if (n != 0 and n != 1) throw std::runtime_error("invalid owner (must be 0 or 1)");
-        const int cur_owner = (int) n;
-        builder.set_owner((int)id, player_from_int(cur_owner));
+        res._owner[id] = n != 0;
 
+        const size_t first = res.e_size;
+        res._firstouts[id] = first;
+        const bool remove_self = removeBadLoops and res._owner[id] != (priority[id]&1);
         bool has_self = false;
-        int count = 0;
 
         // parse successors and optional label
         for (;;) {
@@ -493,11 +514,10 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
                 throw std::runtime_error(err.str());
             }
 
-            if (id == n and removeBadLoops and (cur_owner != (int)(priority[id]&1))) {
+            if (remove_self and id == n) {
                 has_self = true;
             } else {
-                builder.add_edge((int)id, (int)n);
-                count++;
+                res.append_out(n);
             }
 
             const int ch = rd.next_token();
@@ -505,18 +525,18 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
             if (ch == ',') continue; // next successor
             if (ch == ';') break; // end of line
             if (ch == '\"') {
-                builder.set_label((int)id, rd.read_label());
+                res._label[id] = rd.read_label();
                 // now read ;
                 if (rd.next_token() != ';') throw std::runtime_error("missing ; to end line");
             }
             break;
         }
 
-        if (has_self and count == 0) {
-            // we must keep it
-            builder.add_edge((int)id, (int)id);
-            count++;
-        }
+        if (has_self and res.e_size == first) res.append_out(id);
+        const int count = res.e_size - first;
+        res._outcount[id] = count;
+        res.n_edges += count;
+        res.append_out(-1);
     }
 
     if (!seen.all()) {
@@ -524,6 +544,8 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
         err << "missing nodes, seen only " << seen.count();
         throw std::runtime_error(err.str());
     }
+
+    if (node_count == 0) return Game();
 
     // we now need to fix the priorities first...
     // Compress priorities: assign each distinct priority a dense value that
@@ -549,10 +571,26 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
 
     for (unsigned v=0; v<node_count; v++) {
         auto it = std::lower_bound(distinct.begin(), distinct.end(), priority[v]);
-        builder.set_priority(v, compressed[it - distinct.begin()]);
+        res._priority[v] = compressed[it - distinct.begin()];
     }
 
-    return builder.build();
+    // Preserve the renumbering parser's layout, with outgoing lists in vertex
+    // order. The common case already has that layout.
+    if (!in_vertex_order) {
+        std::vector<int> edges(res.e_size);
+        size_t pos = 0;
+        for (int v = 0; v < res.n_vertices; v++) {
+            const int count = res._outcount[v] + 1;
+            std::copy_n(res.outs(v), count, edges.data() + pos);
+            res._firstouts[v] = pos;
+            pos += count;
+        }
+        res._outedges.swap(edges);
+        res.e_allocated = res.e_size;
+    }
+
+    res.is_ordered = std::is_sorted(res._priority.begin(), res._priority.begin() + node_count);
+    return res;
 }
 
 }

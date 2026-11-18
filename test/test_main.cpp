@@ -24,6 +24,7 @@
 
 int test_measure_ops();
 int test_parser();
+int test_parser_input(bool renumber, const std::string& path);
 int test_io();
 int test_solution();
 int test_pma(const char* fixture);
@@ -107,6 +108,12 @@ main(int argc, char** argv)
         if (name == "--list") {
             for (const auto& test : tests) std::cout << test.name << std::endl;
             return 0;
+        }
+    }
+    if (argc == 3) {
+        const std::string mode = argv[1];
+        if (mode == "parser-input-fast" or mode == "parser-input-renumber") {
+            return test_parser_input(mode == "parser-input-renumber", argv[2]);
         }
     }
     std::cerr << "Usage: " << argv[0] << " [--list|TEST]" << std::endl;

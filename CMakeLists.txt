@@ -405,6 +405,25 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
         add_test(NAME TestMeasureOps COMMAND test_unit measure-ops)
         add_test(NAME TestParser COMMAND test_unit parser)
+        set(parser_input "${CMAKE_CURRENT_SOURCE_DIR}/test/parser-input/records.pg")
+        foreach(parser fast renumber)
+            add_test(NAME TestParserStdin-${parser}
+                COMMAND ${CMAKE_COMMAND} "-DTEST_UNIT=$<TARGET_FILE:test_unit>"
+                    "-DMODE=parser-input-${parser}" "-DINPUT=${parser_input}"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/test/test_parser_stdin.cmake")
+            if(ZLIB_FOUND)
+                add_test(NAME TestParserGzip-${parser}
+                    COMMAND test_unit parser-input-${parser} "${parser_input}.gz")
+            endif()
+            if(BZIP2_FOUND)
+                add_test(NAME TestParserBzip2-${parser}
+                    COMMAND test_unit parser-input-${parser} "${parser_input}.bz2")
+            endif()
+            if(LibLZMA_FOUND)
+                add_test(NAME TestParserXz-${parser}
+                    COMMAND test_unit parser-input-${parser} "${parser_input}.xz")
+            endif()
+        endforeach()
         add_test(NAME TestIO COMMAND test_unit io)
         add_test(NAME TestSolution COMMAND test_unit solution)
         add_test(NAME TestFPJBatch COMMAND test_unit fpj-batch)
