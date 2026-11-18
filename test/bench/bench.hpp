@@ -62,7 +62,7 @@ struct Options
     int repeats = 7;                // minimum measured repetitions per cell
     int warmups = 1;                // warm-up rounds per game
     int max_repeats = 10000;        // cap when sampling has a solve-time target
-    double min_solve_time = 0.001;  // accumulated solve time per cell; 0: fixed count
+    double min_solve_time = 0.01;   // accumulated solve time per cell; 0: fixed count
     double timeout = 30;            // wall seconds per solve; 0: no solve limit
     double safety_timeout = 300;    // wall seconds each for worker setup and verification
     bool isolate = true;            // run the trials in a worker process

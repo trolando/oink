@@ -262,7 +262,7 @@ test_command_line()
         std::vector<SolverRun> solvers;
         parse({"some/dir"}, o, solvers);
         check("default roster", solvers.size() == 7 && solvers[0].name == "tl" && solvers[6].name == "zlk");
-        check("default sampling", o.repeats == 7 && o.warmups == 1 && near(o.min_solve_time, 0.001) && o.max_repeats == 10000);
+        check("default sampling", o.repeats == 7 && o.warmups == 1 && near(o.min_solve_time, 0.01) && o.max_repeats == 10000);
         check("inputs", o.inputs == std::vector<std::string>({"some/dir"}));
         check("isolation by default", o.isolate == Worker::supported() && (o.isolate ? near(o.timeout, 30) : o.timeout == 0));
         check("setup and verification safety limit by default", o.safety_timeout == (o.isolate ? 300 : 0));
@@ -542,7 +542,7 @@ test_setup()
     std::string screen;
     for (const auto& line : chooser.render(120, 30, false, row, column)) screen += line + "\n";
     check("setup title", screen.find("OINK  /  BENCHMARK SETUP") != std::string::npos);
-    check("setup settings", screen.find("Reps 7   Warm-ups 1   Timeout 30 s   Seed 5   Sampling 1 ms") != std::string::npos);
+    check("setup settings", screen.find("Reps 7   Warm-ups 1   Timeout 30 s   Seed 5   Sampling 10 ms") != std::string::npos);
     check("setup toggles", screen.find("Preprocessing: OFF | Reference: none") != std::string::npos);
     check("setup keys", screen.find("s START   r Reps   w Warm-ups   t Timeout   b Seed   p Sampling   P Preprocessing   R Reference   q Cancel") != std::string::npos);
 

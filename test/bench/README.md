@@ -57,10 +57,12 @@ For every game:
    Preprocessing is off by default.
 3. After `--warmup` warm-up rounds (default 1), measured rounds continue
    for each solver until it reaches both `--repeat` (default 7) and
-   `--min-solve-time` (default 1 ms of accumulated solve time), or reaches
-   `--max-repeat` (default 10000). A 1 ms target collects more observations
-   when an individual solve is close to the timer's resolution, while
-   keeping the requested amount of extra solve time small. Every round
+   `--min-solve-time` (default 10 ms of accumulated solve time), or reaches
+   `--max-repeat` (default 10000). A 10 ms target spans several scheduler
+   ticks (4 ms at 250 Hz), so an interruption affects every measurement of
+   a fast game alike instead of only some of them, and the extra solve
+   time stays small. Repeated solves of a fast game run with warm caches.
+   Every round
    shuffles the solver order and every solve is verified in full. Warm-ups
    contribute neither solve time nor samples towards the target. Set
    `--min-solve-time=0` to use exactly `--repeat` measured trials.

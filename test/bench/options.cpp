@@ -101,7 +101,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
     opts.add_options("Benchmark")
         ("repeat", "Minimum measured repetitions per game and solver", cxxopts::value<int>()->default_value("7"))
         ("warmup", "Warm-up rounds per game, not part of the results", cxxopts::value<int>()->default_value("1"))
-        ("min-solve-time", "Accumulate at least this many measured solve seconds per game and solver; 0 uses a fixed count", cxxopts::value<double>()->default_value("0.001"))
+        ("min-solve-time", "Accumulate at least this many measured solve seconds per game and solver; 0 uses a fixed count", cxxopts::value<double>()->default_value("0.01"))
         ("max-repeat", "Maximum measured repetitions when using an accumulated solve-time target", cxxopts::value<int>()->default_value("10000"))
         ("quick", "One repetition, no warm-up and a fixed count (for testing)")
         ("timeout", "Wall seconds per solve in the worker process; 0 disables (default 30)", cxxopts::value<double>())
