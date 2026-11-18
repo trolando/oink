@@ -73,6 +73,50 @@ test_game()
         check("streaming can continue after rejection", h.outcount(0) == 11 and h.edgecount() == 12);
     }
 
+    // Stream a discarded row ahead of the rows that will survive the shrink.
+    {
+        Game h(3);
+        h.e_start(2);
+        h.e_add(2, 0);
+        h.e_finish();
+        h.e_start(0);
+        h.e_add(0, 1);
+        h.e_finish();
+        h.e_start(1);
+        h.e_add(1, 0);
+        h.e_add(1, 1);
+        h.e_finish();
+
+        h.v_resize(2);
+        int mapping[] = {1, 0};
+        h.permute(mapping);
+
+        check("shrink counts only retained edges",
+              h.nodecount() == 2 and h.edgecount() == 3 and h.edgeArraySize() == 5);
+        check("permute remaps both targets of the last streamed row",
+              h.outcount(0) == 2 and h.outs(0)[0] == 1 and h.outs(0)[1] == 0 and h.outs(0)[2] == -1);
+        check("permute remaps the other retained row",
+              h.outcount(1) == 1 and h.outs(1)[0] == 0 and h.outs(1)[1] == -1);
+    }
+
+    {
+        GameBuilder b(3);
+        b.add_edge(0, 2);
+        b.add_edge(0, 1);
+        b.add_edge(1, 2);
+        b.add_edge(2, 1);
+        Game h = b.build();
+        h.build_in_array();
+        h.v_resize(2);
+        h.build_in_array();
+        check("shrink removes edges to discarded vertices",
+              h.edgecount() == 1 and h.edgeArraySize() == 3
+              and h.outcount(0) == 1 and h.outs(0)[0] == 1
+              and h.outcount(1) == 0 and h.outs(1)[0] == -1);
+        check("shrink invalidates incoming edges",
+              h.incount(0) == 0 and h.incount(1) == 1 and h.ins(1)[0] == 0);
+    }
+
     // The adjacency-list constructor also checks lists supplied by a caller.
     {
         std::vector<int> priorities(2);

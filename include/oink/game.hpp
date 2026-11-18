@@ -220,7 +220,8 @@ public:
      */
     void e_sizeup(void);
     void v_sizeup(void);
-    void v_resize(size_t newsize); // does not do cleaning up..?
+    /** Resize the vertex set. Shrinking removes edges incident to discarded vertices. */
+    void v_resize(size_t newsize);
 
     /**
      * Edge making helpers.

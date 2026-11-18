@@ -440,11 +440,11 @@ Game::unsafe_permute(int *mapping)
 {
     // first update the edge arrays (the solution, if any, is held separately by
     // Oink and is only built after the game is sorted, so it needs no remapping)
-    unsigned long len = n_vertices + n_edges;
-    for (unsigned long i=0; i<len; i++) {
+    for (size_t i=0; i<e_size; i++) {
         if (_outedges[i] != -1) _outedges[i] = mapping[_outedges[i]];
     }
     if (!_inedges.empty()) {
+        const size_t len = n_vertices + n_edges;
         for (unsigned long i=0; i<len; i++) {
             if (_inedges[i] != -1) _inedges[i] = mapping[_inedges[i]];
         }
@@ -714,6 +714,40 @@ Game::v_sizeup(void)
 void
 Game::v_resize(size_t newsize)
 {
+    if (newsize < static_cast<size_t>(n_vertices)) {
+        // Rows can have been streamed in any order. Pack the retained rows
+        // into a separate array so a move cannot overwrite an unread row.
+        std::vector<int> edges;
+        edges.reserve(newsize + n_edges);
+        for (size_t v = 0; v < newsize; v++) {
+            const auto row = out_edges(v);
+            const auto first = edges.size();
+            for (const int to : row) {
+                if (to >= 0 and static_cast<size_t>(to) < newsize) edges.push_back(to);
+            }
+            _firstouts[v] = first;
+            _outcount[v] = edges.size() - first;
+            edges.push_back(-1);
+        }
+        std::fill(_firstouts.begin() + newsize, _firstouts.begin() + n_vertices, 0);
+        std::fill(_outcount.begin() + newsize, _outcount.begin() + n_vertices, 0);
+        _outedges.swap(edges);
+        e_size = e_allocated = _outedges.size();
+        n_edges = e_size - newsize;
+        _inedges.clear();
+        _firstins.clear();
+        _incount.clear();
+        _in_to_out.clear();
+
+        if (!_outvec.empty()) {
+            _outvec.resize(newsize);
+            for (auto& row : _outvec) {
+                row.erase(std::remove_if(row.begin(), row.end(), [newsize](int to) {
+                    return to >= 0 and static_cast<size_t>(to) >= newsize;
+                }), row.end());
+            }
+        }
+    }
     while (newsize > v_allocated) v_sizeup();
     n_vertices = newsize;
     _owner.resize(n_vertices);

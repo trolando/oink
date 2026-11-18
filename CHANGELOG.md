@@ -22,6 +22,8 @@ All notable changes to Oink will be documented in this file.
   integer offsets in both PGSolver parsers.
 - Require semicolons after PGSolver records and read `start` as a statement.
 - Report both input vertex IDs for an edge to an omitted vertex.
+- Keep outgoing edges and their counts consistent when shrinking and
+  permuting a streamed game.
 
 ## [1.2.0] - 2026-11-18
 
