@@ -143,7 +143,7 @@ public:
         }
     }
 
-    static void checkSparseMapping(MeasureKind kind, int invert, bool duplicates, bool shortcuts)
+    static void checkSparseMapping(MeasureKind kind, int invert, bool shortcuts)
     {
         constexpr int n = 8192;
         const std::vector<int> old_active = {64, 767, 4098, 8001};
@@ -158,7 +158,6 @@ public:
             } else {
                 const int i = int(found-old_active.begin());
                 game.e_add(v, old_active[(i+1)%4]);
-                if (duplicates) game.e_add(v, old_active[(i+1)%4]);
                 // A losing exit for the owner. Removing it preserves the
                 // active cycle's winner and matches a stable solved boundary.
                 game.e_add(v, ((1-game.owner(v))^invert) ? 128 : 256);
@@ -289,7 +288,7 @@ public:
                 }
             }
             if (player == 0 && (solver.escape_stamp[2] != expected_epoch || solver.escape_offset[2] != 4)) {
-                throw std::runtime_error("expired blocker did not advance past the duplicate edges");
+                throw std::runtime_error("expired blocker did not advance past the attracted vertices");
             }
             ++expected_epoch;
         }
@@ -305,10 +304,10 @@ test_gpm_cache()
     Game game(7);
     for (int v = 6; v >= 0; --v) game.init_vertex(v, 1, v == 2 ? 1 : 0);
     // Vertex 2 first blocks on 3, receives another callback with that blocker
-    // live, then resumes past both edges to 3 after the 0<-5<-3 chain grows.
+    // live, then resumes past 3 and 5 after the 0<-5<-3 chain grows.
     // Vertex 4 remains a blocker for Even. Its edge to 2 also tests clearing
     // a future Top sibling after an earlier new Top queues it. Odd attracts all.
-    const std::vector<std::vector<int>> edges = {{0}, {1}, {0, 1, 3, 3, 4}, {5}, {4, 2}, {0}, {5}};
+    const std::vector<std::vector<int>> edges = {{0}, {1}, {0, 1, 3, 5, 4}, {5}, {4, 2}, {0}, {5}};
     for (int v = 0; v < 7; ++v) {
         game.e_start(v);
         for (int to : edges[v]) game.e_add(v, to);
@@ -319,10 +318,8 @@ test_gpm_cache()
         GPMCacheProbe::check(game, kind);
         GPMCacheProbe::checkCounters(kind);
         for (int invert : {0, 1}) {
-            for (bool duplicates : {false, true}) {
-                for (bool shortcuts : {false, true}) {
-                    GPMCacheProbe::checkSparseMapping(kind, invert, duplicates, shortcuts);
-                }
+            for (bool shortcuts : {false, true}) {
+                GPMCacheProbe::checkSparseMapping(kind, invert, shortcuts);
             }
         }
     }

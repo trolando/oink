@@ -19,6 +19,7 @@
  */
 
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 #include "oink/game_builder.hpp"
@@ -43,6 +44,22 @@ succ(const Game& g, int v)
     std::vector<int> r;
     for (const int* e = g.outs(v); *e != -1; e++) r.push_back(*e);
     return r;
+}
+
+static void
+check_rejects_repeat(const std::vector<int>& successors, int repeated)
+{
+    GameBuilder b(12);
+    b.add_edge(2, successors.front());
+    b.add_edge(1, repeated); // a different source can share the same target
+    for (auto it = successors.begin() + 1; it != successors.end(); ++it) b.add_edge(2, *it);
+    bool rejected = false;
+    try {
+        b.build();
+    } catch (const std::runtime_error& e) {
+        rejected = std::string(e.what()) == "repeated edge from vertex 2 to successor " + std::to_string(repeated);
+    }
+    check("builder reports source and repeated successor", rejected);
 }
 
 int
@@ -89,6 +106,10 @@ test_builder()
     // Builder remains usable after build(): build a second, equivalent game.
     Game g2 = b.build();
     check("rebuild vertexcount", g2.vertexcount() == 3 and g2.edgecount() == 4);
+
+    check_rejects_repeat({2, 2}, 2);
+    check_rejects_repeat({5, 0, 3, 0}, 0);
+    check_rejects_repeat({0, 1, 2, 3, 4, 5, 6, 7, 8, 0}, 0);
 
     if (failures) {
         std::cerr << failures << " builder test(s) failed" << std::endl;

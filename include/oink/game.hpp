@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cstdint>
 #include <sstream>
+#include <unordered_set>
 #include <vector>
 #include <map>
 #include <memory>
@@ -73,6 +74,7 @@ public:
      */
     Game(int count, int ecount = -1);
 
+    /** Construct from adjacency lists. Throws std::runtime_error for a repeated edge. */
     Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, std::vector<std::vector<int>>& edges, std::vector<std::string*>& labels);
 
     /**
@@ -132,7 +134,7 @@ public:
      */
     void vec_init(void); // initialize for manipulating vertices using the vectors
     void vec_finish(void); // finalize
-    bool vec_add_edge(int from, int to); // return true if changed
+    bool vec_add_edge(int from, int to); // return false if the edge already exists
     bool vec_remove_edge(int from, int to); // return true if changed
     bool vec_has_edge(int from, int to); // return true if exists
 
@@ -224,6 +226,7 @@ public:
      * Edge making helpers.
      */
     void e_start(int source);
+    /** Add a successor to the current vertex. Throws std::runtime_error for a repeated edge. */
     void e_add(int source, int target);
     void e_finish(void);
 
@@ -447,6 +450,7 @@ private:
     std::vector<int> _in_to_out;  // scratch: in-edge slot -> out-edge index (built on demand)
 
     std::vector<std::vector<int>> _outvec; // outgoing edges as vector (for construction)
+    std::unordered_set<int> _stream_successors; // used only for long lists in e_add
 
     bool is_ordered;       // records if the game is in-order
     size_t v_allocated;    // number of vertices allocated as virtual memory
@@ -454,6 +458,17 @@ private:
     size_t e_size;         // number of entries used in edge array
 
     void unsafe_permute(int *mapping); // apply a reordering
+    static size_t grown_edge_capacity(size_t capacity)
+    {
+        return capacity + capacity/2 + 1;
+    }
+    void append_out(int target)
+    {
+        if (e_size == e_allocated) e_sizeup();
+        _outedges[e_size++] = target;
+    }
+    void e_add_unchecked(int source, int target);
+    void assert_unique_edges() const;
     
     std::mt19937 generator;
 

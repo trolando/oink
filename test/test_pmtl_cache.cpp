@@ -138,8 +138,8 @@ test_pmtl_cache()
     for (int v = 6; v >= 0; --v) game.init_vertex(v, v < 2 ? 0 : 1, v == 1 || v == 4 ? 1 : 0);
     // The Even tangle {0,1} escapes to 2. LIFO seeds 6 then 3 produce a live
     // blocker at 0; processing seed 2 attracts the tangle and invalidates it.
-    // Scanning then passes the duplicate edge to 0 and blocks at vertex 5.
-    const std::vector<std::vector<int>> edges = {{1}, {0, 2}, {2}, {3}, {2, 3, 6, 0, 0, 5}, {5}, {6}};
+    // Scanning then passes the other tangle member 1 and blocks at vertex 5.
+    const std::vector<std::vector<int>> edges = {{1}, {0, 2}, {2}, {3}, {2, 3, 6, 0, 1, 5}, {5}, {6}};
     for (int v = 0; v < 7; ++v) {
         game.e_start(v);
         for (int to : edges[v]) game.e_add(v, to);

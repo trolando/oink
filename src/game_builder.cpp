@@ -16,9 +16,11 @@
 
 #include <algorithm>
 #include <cassert>
+#include <stdexcept>
 #include <utility>
 
 #include "oink/game_builder.hpp"
+#include "successor_check.hpp"
 
 namespace pg {
 
@@ -110,7 +112,23 @@ GameBuilder::build()
         g._outedges[pos++] = -1;
     }
     std::vector<int> next(g._firstouts.begin(), g._firstouts.begin() + nv);
-    for (size_t i = 0; i < ne; i++) g._outedges[next[edge_from_[i]]++] = edge_to_[i];
+    std::vector<int> stamps;
+    for (size_t i = 0; i < ne; i++) {
+        const int v = edge_from_[i];
+        const int to = edge_to_[i];
+        // Truncating the builder can leave an edge into a dropped vertex.
+        if (to < 0 or to >= nv) {
+            throw std::runtime_error("invalid successor " + std::to_string(to) + " for vertex " + std::to_string(v));
+        }
+        const int slot = next[v]++;
+        g._outedges[slot] = to;
+        const int count = g._outcount[v];
+        // A complete list can be checked even when its edges were added interleaved.
+        if (count > 1 and next[v] == g._firstouts[v] + count) {
+            const int repeated = detail::repeated_successor(g.outs(v), count, v, nv, stamps);
+            if (repeated != -1) throw std::runtime_error(detail::repeated_edge_message(v, repeated));
+        }
+    }
     g.e_size = pos;
 
     // labels_ is grown lazily, so any index beyond its size has no label

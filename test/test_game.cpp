@@ -19,6 +19,7 @@
  */
 
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 #include "oink/game.hpp"
@@ -51,6 +52,41 @@ test_game()
     check("grew to hold all vertices", g.vertexcount() >= 3);
     check("priorities preserved", g.priority(0) == 5 and g.priority(1) == 6 and g.priority(2) == 7);
     check("owners preserved", g.owner(0) == 0 and g.owner(1) == 1 and g.owner(2) == 0);
+
+    // Streaming rejects a duplicate before storing it, including in a long list.
+    {
+        Game h(12, 1);
+        h.e_start(0);
+        for (int to = 0; to < 10; to++) h.e_add(0, to);
+        bool rejected = false;
+        try {
+            h.e_add(0, 2);
+        } catch (const std::runtime_error& e) {
+            rejected = std::string(e.what()) == "repeated edge from vertex 0 to successor 2";
+        }
+        check("streaming reports repeated successor", rejected);
+        h.e_add(0, 10);
+        h.e_finish();
+        h.e_start(1);
+        h.e_add(1, 2); // the same target from a different source is valid
+        h.e_finish();
+        check("streaming can continue after rejection", h.outcount(0) == 11 and h.edgecount() == 12);
+    }
+
+    // The adjacency-list constructor also checks lists supplied by a caller.
+    {
+        std::vector<int> priorities(2);
+        bitset owners(2);
+        std::vector<std::vector<int>> edges{{1}, {1, 0, 1}};
+        std::vector<std::string*> labels(2);
+        bool rejected = false;
+        try {
+            Game h(2, 4, priorities, owners, edges, labels);
+        } catch (const std::runtime_error& e) {
+            rejected = std::string(e.what()) == "repeated edge from vertex 1 to successor 1";
+        }
+        check("adjacency lists report a repeated self-loop", rejected);
+    }
 
     // build_in_to_out: the in->out edge map must align with the in-edge array, so
     // that for every incoming-edge slot of vertex w the mapped out-edge index

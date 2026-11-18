@@ -408,8 +408,7 @@ test_trials()
 
 /**
  * A game for preprocessing: two vertices with self-loops that preprocessing
- * solves, and a residual of mixed parity with a parallel edge (13 edges, 8 in
- * the residual).
+ * solves, and a residual of mixed parity (12 edges, 7 in the residual).
  */
 static pg::Game
 preprocessing_game()
@@ -427,7 +426,6 @@ preprocessing_game()
     b.add_edge(2, 1); // odd avoids the even self-loop
     b.add_edge(2, 3);
     b.add_edge(3, 4);
-    b.add_edge(3, 4); // a parallel edge
     b.add_edge(3, 5);
     b.add_edge(4, 3);
     b.add_edge(4, 5);
@@ -452,7 +450,7 @@ test_preprocessing()
     const auto prepared = prepare(game, o, log);
     check("residual after preprocessing", prepared->residual != nullptr && !prepared->identity());
     check("self-loops solved", prepared->info.solved_vertices == 2 && prepared->info.residual_vertices == 4);
-    check("parallel edge kept", prepared->info.residual_edges == 8);
+    check("residual edge count", prepared->info.residual_edges == 7);
     bool distinct = true;
     for (size_t i = 0; i < prepared->edges.size(); i++) {
         for (size_t j = 0; j < i; j++) {

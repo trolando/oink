@@ -31,7 +31,7 @@
 #include "verifier.hpp"
 
 static void
-check(const char* solver, int invert, bool duplicates, int workers)
+check(const char* solver, int invert, int workers)
 {
     constexpr int n = 256;
     const int reset_count = workers > 0 ? n : 1;
@@ -48,9 +48,7 @@ check(const char* solver, int invert, bool duplicates, int workers)
     text << "parity " << last << ";\n";
     text << "0 " << invert << ' ' << invert << " 0;\n";
     for (int v = 1; v <= n; ++v) {
-        text << v << ' ' << 1+invert << ' ' << ((v&1)^invert) << ' ' << successor[v];
-        if (duplicates) text << ',' << successor[v];
-        text << ";\n";
+        text << v << ' ' << 1+invert << ' ' << ((v&1)^invert) << ' ' << successor[v] << ";\n";
     }
     // Once the chain has converged, these distractions reset all its winners.
     // The chain must then converge again, notifying predecessors on both flips.
@@ -88,9 +86,7 @@ test_fpi_frontier()
 {
     try {
         for (const char* solver : {"fpi", "fpim"}) {
-            for (int invert : {0, 1}) {
-                for (bool duplicates : {false, true}) check(solver, invert, duplicates, -1);
-            }
+            for (int invert : {0, 1}) check(solver, invert, -1);
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;
@@ -106,9 +102,7 @@ test_fpi_parallel()
     lace_start(workers, 100000, 0);
     int result = 0;
     try {
-        for (int invert : {0, 1}) {
-            for (bool duplicates : {false, true}) check("fpi", invert, duplicates, workers);
-        }
+        for (int invert : {0, 1}) check("fpi", invert, workers);
     } catch (const std::exception& error) {
         std::cerr << error.what() << std::endl;
         result = 1;

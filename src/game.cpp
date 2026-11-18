@@ -17,10 +17,12 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <stdexcept>
 #include <ctime>
 
 #include "oink/game.hpp"
 #include "oink/subgame_view.hpp"
+#include "successor_check.hpp"
 
 #define USE_MMAP 1
 
@@ -52,13 +54,20 @@ Game::Game(size_t nv, size_t ne, std::vector<int>& priorities, bitset& owners, s
 
     // copy edges
     int e = 0;
+    std::vector<int> stamps;
     for (auto v=0; v<n_vertices; v++) {
-        const auto f = e;
-        _firstouts[v] = e;
-        for (auto & to : edges[v]) {
+        const auto first = e;
+        _firstouts[v] = first;
+        for (const int to : edges[v]) {
+            if (to < 0 or to >= n_vertices) {
+                throw std::runtime_error("invalid successor " + std::to_string(to) + " for vertex " + std::to_string(v));
+            }
             _outedges[e++] = to;
         }
-        _outcount[v] = e-f;
+        const int count = e - first;
+        const int repeated = detail::repeated_successor(outs(v), count, v, nv, stamps);
+        if (repeated != -1) throw std::runtime_error(detail::repeated_edge_message(v, repeated));
+        _outcount[v] = count;
         _outedges[e++] = -1;
     }
     e_size = e;
@@ -268,11 +277,14 @@ Game::vec_finish(void)
     n_edges = 0;
     for (int v=0; v<n_vertices; v++) {
         e_start(v);
-        for (int to : _outvec[v]) e_add(v, to);
+        for (int to : _outvec[v]) e_add_unchecked(v, to);
         e_finish();
     }
     _outvec.clear();
     _outvec.shrink_to_fit();
+#ifndef NDEBUG
+    assert_unique_edges();
+#endif
 }
 
 bool
@@ -457,6 +469,9 @@ Game::unsafe_permute(int *mapping)
             }
         }
     }
+#ifndef NDEBUG
+    assert_unique_edges();
+#endif
 }
 
 int
@@ -630,10 +645,14 @@ Game::extract_subgame(const bitset& mask, std::vector<int>& subgame_to_game)
         int v = subgame_to_game[w];
         res->e_start(w);
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
-            if (view.contains(*curedge)) res->e_add(w, game_to_subgame[*curedge]);
+            if (view.contains(*curedge)) res->e_add_unchecked(w, game_to_subgame[*curedge]);
         }
         res->e_finish();
     }
+
+#ifndef NDEBUG
+    res->assert_unique_edges();
+#endif
 
     // TODO: fix is_ordered?
 
@@ -657,6 +676,7 @@ Game::swap(Game &other)
     std::swap(_owner, other._owner);
     std::swap(_label, other._label);
     std::swap(_outvec, other._outvec);
+    std::swap(_stream_successors, other._stream_successors);
     std::swap(_outedges, other._outedges);
     std::swap(_firstouts, other._firstouts);
     std::swap(_outcount, other._outcount);
@@ -672,7 +692,7 @@ Game::swap(Game &other)
 void
 Game::e_sizeup(void)
 {
-    e_allocated += e_allocated/2 + 1; // +1 so it always grows (e.g. from size 1)
+    e_allocated = grown_edge_capacity(e_allocated);
     _outedges.resize(e_allocated);
 }
 
@@ -700,6 +720,7 @@ Game::v_resize(size_t newsize)
 void
 Game::e_start(int source)
 {
+    if (!_stream_successors.empty()) _stream_successors.clear();
     _firstouts[source] = e_size;
     _outcount[source] = 0;
 }
@@ -708,7 +729,25 @@ void
 Game::e_add(int source, int target)
 {
     if (e_size == e_allocated) e_sizeup();
-    _outedges[e_size++] = target;
+    const int* first = outs(source);
+    const int count = _outcount[source];
+    bool repeated;
+    if (count < detail::small_successor_list) {
+        repeated = std::find(first, first + count, target) != first + count;
+    } else {
+        if (count == detail::small_successor_list or _stream_successors.empty()) {
+            _stream_successors.insert(first, first + count);
+        }
+        repeated = !_stream_successors.insert(target).second;
+    }
+    if (repeated) throw std::runtime_error(detail::repeated_edge_message(source, target));
+    e_add_unchecked(source, target);
+}
+
+void
+Game::e_add_unchecked(int source, int target)
+{
+    append_out(target);
     _outcount[source] += 1;
     n_edges++;
 }
@@ -716,9 +755,20 @@ Game::e_add(int source, int target)
 void
 Game::e_finish(void)
 {
-    if (e_size == e_allocated) e_sizeup();
-    _outedges[e_size++] = -1;
+    append_out(-1);
 }
+
+#ifndef NDEBUG
+void
+Game::assert_unique_edges() const
+{
+    std::vector<int> stamps;
+    for (int v = 0; v < n_vertices; v++) {
+        for (const int to : out_edges(v)) assert(to >= 0 and to < n_vertices);
+        assert(detail::repeated_successor(outs(v), _outcount[v], v, n_vertices, stamps) == -1);
+    }
+}
+#endif
 
 void
 Game::build_in_array(bool rebuild)

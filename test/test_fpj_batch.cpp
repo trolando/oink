@@ -62,7 +62,7 @@ check_batch()
  * including across word boundaries.
  */
 static void
-check_restarts(int invert, bool duplicates)
+check_restarts(int invert)
 {
     constexpr int n = 256;
     std::vector<int> order(n), successor(n+1);
@@ -76,9 +76,7 @@ check_restarts(int invert, bool duplicates)
         const int player = v == n/2 ? invert : ((v&1)^invert);
         text << v << ' ' << 1+invert << ' ' << player << ' ';
         if (v == n/2) text << n+1 << ',';
-        text << successor[v];
-        if (duplicates) text << ',' << successor[v];
-        text << ";\n";
+        text << successor[v] << ";\n";
     }
     text << n+1 << ' ' << 2+invert << ' ' << (1^invert) << ' ' << n+2 << ";\n";
     text << n+2 << ' ' << 3+invert << ' ' << (1^invert) << ' ' << n+2 << ";\n";
@@ -106,9 +104,7 @@ int
 test_fpj_batch()
 {
     check_batch();
-    for (int invert : {0, 1}) {
-        for (bool duplicates : {false, true}) check_restarts(invert, duplicates);
-    }
+    for (int invert : {0, 1}) check_restarts(invert);
 
     // Exhaust all total graphs, ownerships and priority assignments on at most
     // three vertices. Verify the complete strategies without preprocessing.

@@ -57,6 +57,7 @@ public:
 
     /**
      * Construct a Game from the accumulated vertices and edges.
+     * Throws std::runtime_error if an edge was added more than once.
      * The builder remains usable afterwards.
      */
     Game build();

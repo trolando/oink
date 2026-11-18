@@ -89,9 +89,9 @@ make(int n)
     for (int v = 0; v < n; ++v) game.init_vertex(v, v%3, v%2);
     for (int v = 0; v < n; ++v) {
         game.e_start(v);
-        // The last vertex has zero indegree; duplicate and self edges remain.
+        // The last vertex has zero indegree; the other vertices have self-loops.
         game.e_add(v, v%(n-1));
-        game.e_add(v, (v+1)%(n-1));
+        game.e_add(v, (v+2)%(n-1));
         game.e_add(v, (v+1)%(n-1));
         game.e_finish();
     }
@@ -128,6 +128,6 @@ test_in_edge_map()
     b.build_in_to_out();
     signature(b);
     compare(b);
-    std::cout << "Incoming edge maps preserve counts, duplicates and exact layout across reuse, copy, permutation, swap and full rebuild." << std::endl;
+    std::cout << "Incoming edge maps preserve counts and exact layout across reuse, copy, permutation, swap and full rebuild." << std::endl;
     return 0;
 }
