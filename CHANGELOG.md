@@ -2,7 +2,7 @@
 
 All notable changes to Oink will be documented in this file.
 
-## [Unreleased]
+## [1.2.0] - 2026-11-18
 
 ### Added
 
