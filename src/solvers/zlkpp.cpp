@@ -265,7 +265,7 @@ void ZLKPPSolver::run() {
     int pow2 = 0;
     while ((1 << pow2) - 1 < nodecount())
         ++pow2;
-    bool reached_bottom_cur, reached_bottom_opo;
+    bool reached_bottom_cur = false, reached_bottom_opo = false;
     auto win = solve(max_priority, (1 << pow2) - 1, (1 << pow2) - 1, reached_bottom_cur, reached_bottom_opo);
 
     int player = max_priority % 2;
