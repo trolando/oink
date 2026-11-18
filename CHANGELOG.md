@@ -53,6 +53,8 @@ All notable changes to Oink will be documented in this file.
 
 ### Fixed
 
+- Parallel FPI could race while reading and updating its winner bitsets
+  or writing Debug traces.
 - Oink rejects a partial solution if a strategy move or an opponent move
   leaves its winning region. With `--sol`, errors give the vertex numbers
   from the input file.

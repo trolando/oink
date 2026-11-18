@@ -17,6 +17,9 @@
 #ifndef FPI_HPP
 #define FPI_HPP
 
+#ifndef NDEBUG
+#include <mutex>
+#endif
 #include <queue>
 
 #include "oink/solver.hpp"
@@ -41,7 +44,7 @@ public:
     void run_par(lace_worker*);
 
 private:
-    template<bool ReuseWitness, bool TrackChanges = false>
+    template<bool Parallel, bool TrackChanges = false>
     int updateBlockImpl(int i, int n);
     void initState(void);
     inline void markDirty(int v)
@@ -50,16 +53,6 @@ private:
             dirty.set(v);
             dirty_words.set(v >> 6);
         }
-    }
-
-    // v becomes a distraction: it is now won by the opponent of its parity
-    inline void makeDistraction(int v)
-    {
-        const int par = parity[v];
-        distraction.set(v);
-        candidate.reset(v);
-        won[par].reset(v);
-        won[1-par].set(v);
     }
 
     // v is no longer a distraction: it is won by its parity again
@@ -84,6 +77,9 @@ private:
     bitset dirty;     // sequential candidates whose one-step winner may have changed
     bool track_changes = false; // parallel iteration retains full block scans
     bitset candidate; // v is enabled, not frozen and not a distraction
+#ifndef NDEBUG
+    std::mutex trace_mutex;
+#endif
 };
 
 }

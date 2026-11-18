@@ -39,7 +39,7 @@ int
 FPISolver::update_block_rec(lace_worker* lace, int i, int n)
 {
     if (n>128) {
-        // because dynamic bitset is not thread safe, work in blocks of 64...
+        // Give each worker exclusive write access to its bitset words.
         if (i&127) {
             // start not yet aligned
             int N = 128 - (i&127);
@@ -63,7 +63,7 @@ VOID_TASK_4(freeze_thaw_reset_rec, FPISolver*, solver, int, i, int, n, int, p)
 void freeze_thaw_reset_rec_CALL(lace_worker* lace, FPISolver* solver, int i, int n, int p)
 {
     if (n>128) {
-        // because dynamic bitset is not thread safe, work in blocks of 64...
+        // This phase only accesses words in the worker's own range.
         if (i&127) {
             // start not yet aligned
             int N = 128 - (i&127);
@@ -81,7 +81,7 @@ void freeze_thaw_reset_rec_CALL(lace_worker* lace, FPISolver* solver, int i, int
     }
 }
 
-template<bool ReuseWitness, bool TrackChanges>
+template<bool Parallel, bool TrackChanges>
 int
 FPISolver::updateBlockImpl(int i, int n)
 {
@@ -90,7 +90,15 @@ FPISolver::updateBlockImpl(int i, int n)
     int res = 0;
     const int end = i + n;
     const int last_word = (end - 1) >> 6;
-    const uint64_t *cand = candidate.data();
+    // Each range lies within one priority block. Cache the data that does not
+    // change during the scan, including across atomic winner updates.
+    const int par = parity[i];
+    const uint64_t *owners = game.owner().data();
+    const int *edges = game.outedges();
+    uint64_t *cand = candidate.data();
+    uint64_t *dist = distraction.data();
+    uint64_t *const winners[] = {won[0].data(), won[1].data()};
+    int *moves = strategy;
 
     const int first_word = i >> 6;
     auto prev_word = [&](int word) {
@@ -113,35 +121,53 @@ FPISolver::updateBlockImpl(int i, int n)
         if (w == (i >> 6)) bits &= ~uint64_t(0) << (i & 63);
         if (w == last_word and (end & 63) != 0) bits &= (uint64_t(1) << (end & 63)) - 1;
 
-        if constexpr (ReuseWitness && !TrackChanges) {
+        if constexpr (!Parallel && !TrackChanges) {
             if (bits) scan_work += intrinsics::popcount64(bits);
         }
+        const uint64_t owned = bits ? owners[w] : 0;
         while (bits) {
             const int v = (w << 6) + 63 - intrinsics::countl_zero64(bits);
-            bits &= ~(uint64_t(1) << (v & 63));
+            const uint64_t mask = uint64_t(1) << (v & 63);
+            bits &= ~mask;
             if constexpr (TrackChanges) dirty.reset(v);
 
             // update whether vertex <v> is a distraction by computing the one step winner:
             // can the owner go to a vertex currently won by the owner?
-            const int pl = owner(v);
-            const uint64_t *good = won[pl].data();
+            const int pl = (owned & mask) != 0;
+            const uint64_t *good = winners[pl];
+            const auto wins = [good](int to) {
+                const uint64_t *word = good + (to >> 6);
+                const uint64_t bits = Parallel ? __atomic_load_n(word, __ATOMIC_RELAXED) : *word;
+                return (bits >> (to & 63)) & 1;
+            };
             int onestep_winner = 1 - pl;
-            if constexpr (ReuseWitness) {
-                const int to = strategy[v];
-                if (to != -1 && ((good[to >> 6] >> (to & 63)) & 1)) onestep_winner = pl;
+            if constexpr (!Parallel) {
+                const int to = moves[v];
+                if (to != -1 && wins(to)) onestep_winner = pl;
             }
             if (onestep_winner != pl) {
-                for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                for (auto curedge = edges + game.firstout(v); *curedge != -1; curedge++) {
                     const int to = *curedge;
-                    if ((good[to >> 6] >> (to & 63)) & 1) {
+                    if (wins(to)) {
                         onestep_winner = pl;
-                        strategy[v] = to;
+                        moves[v] = to;
                         break;
                     }
                 }
             }
-            if (parity[v] != onestep_winner) {
-                makeDistraction(v);
+            if (par != onestep_winner) {
+                dist[w] |= mask;
+                cand[w] &= ~mask;
+                uint64_t *loser = winners[par] + w;
+                uint64_t *winner = winners[1-par] + w;
+                if constexpr (Parallel) {
+                    // Each word has one writer, but other workers test successor bits.
+                    __atomic_store_n(loser, __atomic_load_n(loser, __ATOMIC_RELAXED) & ~mask, __ATOMIC_RELAXED);
+                    __atomic_store_n(winner, __atomic_load_n(winner, __ATOMIC_RELAXED) | mask, __ATOMIC_RELAXED);
+                } else {
+                    *loser &= ~mask;
+                    *winner |= mask;
+                }
                 if constexpr (TrackChanges) {
                     // Only predecessors can change their one-step winner. Visit
                     // newly affected lower lanes in this word in the usual order.
@@ -154,7 +180,11 @@ FPISolver::updateBlockImpl(int i, int n)
                 }
                 res++;
 #ifndef NDEBUG
-                if (trace >= 2) logger << "vertex " << label_vertex(v) << " is now a distraction (won by " << onestep_winner << ")" << std::endl;
+                if (trace >= 2) {
+                    std::unique_lock lock(trace_mutex, std::defer_lock);
+                    if constexpr (Parallel) lock.lock();
+                    logger << "vertex " << label_vertex(v) << " is now a distraction (won by " << onestep_winner << ")" << std::endl;
+                }
 #endif
             }
         }
@@ -165,14 +195,14 @@ FPISolver::updateBlockImpl(int i, int n)
             if (!dirty.data()[w]) dirty_words.reset(w);
         }
     }
-    if constexpr (ReuseWitness && !TrackChanges) scan_changes += res;
+    if constexpr (!Parallel && !TrackChanges) scan_changes += res;
     return res;
 }
 
 int
 FPISolver::updateBlock(int i, int n)
 {
-    return updateBlockImpl<false>(i, n);
+    return updateBlockImpl<true>(i, n);
 }
 
 /**
@@ -234,6 +264,7 @@ FPISolver::freezeThawReset(int i, int n, int p)
         const uint64_t setp = refreeze | freeze_d | freeze_c; // frozen = p
         const uint64_t clear = thaw | reset_d;                // no longer a distraction, candidate again
 
+        // Update tasks have joined. Reset tasks access only their own words.
         DIST[w] = D & ~clear;
         WON1[w] = (WON1[w] & ~clear) | (clear & P);
         WON0[w] = (WON0[w] & ~clear) | (clear & ~P);
@@ -260,6 +291,8 @@ FPISolver::freezeThawReset(int i, int n, int p)
 
 #ifndef NDEBUG
         if (trace >= 2) {
+            std::unique_lock lock(trace_mutex, std::defer_lock);
+            if (parallel()) lock.lock();
             for (uint64_t m = thaw; m; m &= m - 1) logger << "\033[38;5;202;1mthaw\033[m " << label_vertex((w << 6) + intrinsics::countr_zero64(m)) << std::endl;
             for (uint64_t m = freeze_d | freeze_c; m; m &= m - 1) logger << "\033[38;5;51;1mfreeze\033[m " << label_vertex((w << 6) + intrinsics::countr_zero64(m)) << " at priority " << p << std::endl;
             for (uint64_t m = reset_d; m; m &= m - 1) logger << "\033[31;1mresetting\033[m " << label_vertex((w << 6) + intrinsics::countr_zero64(m)) << std::endl;
@@ -330,7 +363,9 @@ FPISolver::run_par(lace_worker* lace)
             if (this->trace >= 2) this->logger << "restarting after finding distractions" << std::endl;
 #endif
         } else {
-            // nothing changed
+            // A scan can miss a concurrent flip towards the opponent of p's
+            // parity. Every flip is counted and causes a rescan. A zero-change
+            // scan sees stable winners, including writes from joined tasks.
             p++;
         }
     }
@@ -431,8 +466,8 @@ FPISolver::runSeq()
             track_changes = true;
         }
         const int changed = p_len[p] == 0 ? 0 : (track_changes
-            ? updateBlockImpl<true, true>(p_start[p], p_len[p])
-            : updateBlockImpl<true, false>(p_start[p], p_len[p]));
+            ? updateBlockImpl<false, true>(p_start[p], p_len[p])
+            : updateBlockImpl<false, false>(p_start[p], p_len[p]));
         if (changed == 0) {
             p++;
             continue;
