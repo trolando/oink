@@ -20,6 +20,7 @@ All notable changes to Oink will be documented in this file.
 
 - Reject out-of-range numbers and games whose edge arrays would overflow
   integer offsets in both PGSolver parsers.
+- Require semicolons after PGSolver records and read `start` as a statement.
 
 ## [1.2.0] - 2026-11-18
 

@@ -67,14 +67,6 @@ public:
         }
     }
 
-    inline void skip_line()
-    {
-        for (;;) {
-            const int ch = get();
-            if (ch == EOF or ch == '\n' or ch == '\r') return;
-        }
-    }
-
     inline bool read_uint64(uint64_t *res, const char *field)
     {
         if (p == end and !fill()) return false;
@@ -148,13 +140,42 @@ private:
     const char *end = nullptr;
 };
 
-/** Read the "parity" keyword that starts a game. */
-void
-read_parity_keyword(Reader &rd)
+int
+read_header(Reader &rd)
 {
     for (const char *kw = "parity"; *kw; kw++) {
         if (rd.get() != *kw) throw std::runtime_error("expecting parity game specification");
     }
+    uint64_t n;
+    rd.skip_whitespace();
+    if (!rd.read_uint64(&n, "number of nodes")) throw std::runtime_error("missing number of nodes");
+    if (rd.next_token() != ';') throw std::runtime_error("missing ';' after parity header");
+    return detail::pgsolver_vertex_capacity(n);
+}
+
+int
+read_start(Reader &rd, int vertices)
+{
+    rd.skip_whitespace();
+    if (rd.peek() != 's') return -1;
+    for (const char *kw = "start"; *kw; kw++) {
+        if (rd.get() != *kw) throw std::runtime_error("expecting start statement");
+    }
+    uint64_t start;
+    rd.skip_whitespace();
+    if (!rd.read_uint64(&start, "start vertex ID")) throw std::runtime_error("missing start vertex ID");
+    if (start >= static_cast<uint64_t>(vertices)) throw std::runtime_error("invalid start vertex ID");
+    if (rd.next_token() != ';') throw std::runtime_error("missing ';' after start statement");
+    return static_cast<int>(start);
+}
+
+void
+check_omitted_vertex(const Game& game, int omitted, int start)
+{
+    const auto* edges = game.outedges();
+    const auto* end = edges + game.edgeArraySize();
+    if (std::find(edges, end, omitted) != end) throw std::runtime_error("invalid successor");
+    if (start == omitted) throw std::runtime_error("invalid start vertex ID");
 }
 
 // Keep validation out of line so the renumbering parser's hot path stays small.
@@ -188,37 +209,13 @@ Game
 PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
 {
     Reader rd(inp);
-
+    const int vertices = read_header(rd);
+    const int start = read_start(rd, vertices);
     uint64_t n;
-
-    /**
-     * Read header line...
-     * "parity" <number of nodes> ;
-     */
-
-    read_parity_keyword(rd);
-
-    rd.skip_whitespace();
-    if (!rd.read_uint64(&n, "number of nodes")) throw std::runtime_error("missing number of nodes");
-
-    rd.skip_whitespace();
-    if (rd.get() != ';') throw std::runtime_error("missing ';'");
-
-    // check if next token is 'start'
-    {
-        rd.skip_whitespace();
-        int ch = rd.peek();
-        if (ch == 's') rd.skip_line();
-    }
-
-    /**
-     * Construct game...
-     */
 
     // Skip the first few allocations while keeping the same growth sequence
     // for larger edge arrays. The initial array includes the terminators.
-    const int vertices = detail::pgsolver_vertex_capacity(n);
-    size_t capacity = vertices + 2;
+    size_t capacity = static_cast<size_t>(vertices) + 2;
     for (int growth = 0; growth < 3; growth++) capacity = Game::grown_edge_capacity(capacity);
     Game res(vertices, capacity <= detail::max_edge_slots ? capacity - vertices - 1 : 1);
 
@@ -235,12 +232,12 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
         rd.skip_whitespace();
         if (!rd.read_uint64(&id, "vertex ID")) {
             // we expect maybe one more node...
-            if (node_count == res.n_vertices-1 and !seen[res.n_vertices-1]) {
-                if (std::find(res._outedges.begin(), res._outedges.begin() + res.e_size, node_count)
-                    != res._outedges.begin() + res.e_size) throw std::runtime_error("invalid successor");
-                res.v_resize(node_count);
+            if (rd.peek() == EOF and node_count == vertices - 1 and !seen[vertices - 1]) {
+                check_omitted_vertex(res, node_count, start);
+                // The omitted vertex has no row, and no edge refers to it.
+                res.n_vertices = node_count;
+                res._owner.resize(node_count);
                 seen.resize(node_count);
-                // ignore rest, they can be bigger
                 break;
             }
             throw std::runtime_error("unable to read id");
@@ -286,15 +283,13 @@ PGParser::parse_pgsolver(std::istream &inp, bool removeBadLoops)
             }
 
             const int ch = rd.next_token();
-            if (ch == EOF) throw std::runtime_error("missing ; to end line");
             if (ch == ',') continue; // next successor
-            if (ch == ';') break; // end of line
+            if (ch == ';') break; // end of record
             if (ch == '\"') {
                 res._label[id] += rd.read_label();
-                // now read ;
-                if (rd.next_token() != ';') throw std::runtime_error("missing ; to end line");
+                if (rd.next_token() == ';') break;
             }
-            break;
+            throw std::runtime_error("missing ; to end line");
         }
 
         if (has_self and res.e_size == first) res.append_out(id);
@@ -461,39 +456,9 @@ Game
 PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
 {
     Reader rd(in);
-
+    const int n_vertices = read_header(rd);
+    const int start = read_start(rd, n_vertices);
     uint64_t n;
-
-    /**
-     * Read header line... one of the following:
-     * "parity" <number of vertices> ;
-     * "parity" <highest vertex id> ;
-     */
-
-    read_parity_keyword(rd);
-
-    rd.skip_whitespace();
-    if (!rd.read_uint64(&n, "number of nodes")) throw std::runtime_error("missing number of nodes");
-
-    rd.skip_whitespace();
-    if (rd.get() != ';') throw std::runtime_error("missing ';'");
-
-    // check if next token is 'start'
-    // that means "start" <initial vertex id> ";"
-    // which we ignore...
-    {
-        rd.skip_whitespace();
-        int ch = rd.peek();
-        if (ch == 's') rd.skip_line();
-    }
-
-    /**
-     * Construct game...
-     */
-
-    // the given number is either the number of vertices, or the highest vertex
-    // so, we expect n or n+1 nodes
-    int n_vertices = detail::pgsolver_vertex_capacity(n);
 
     // Store each outgoing list directly. The priorities are kept separately
     // until they have been compressed to fit in a Game.
@@ -513,20 +478,16 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
     while (node_count < n_vertices) {
         uint64_t id;
         rd.skip_whitespace();
-        // TODO: assume size is n, not n+1
         if (!rd.read_uint64(&id, "vertex ID")) {
-            // we expect maybe one more node...
-            if (node_count == n_vertices - 1 && !seen[n_vertices - 1]) {
-                if (std::find(res._outedges.begin(), res._outedges.begin() + res.e_size, node_count)
-                    != res._outedges.begin() + res.e_size) throw std::runtime_error("invalid successor");
-                n_vertices -= 1;
-                seen.resize(n_vertices);
-                res.v_resize(n_vertices);
-                // ignore rest, they can be bigger
+            if (rd.peek() == EOF and node_count == n_vertices - 1 and !seen[n_vertices - 1]) {
+                check_omitted_vertex(res, node_count, start);
+                // The omitted vertex has no row, and no edge refers to it.
+                res.n_vertices = node_count;
+                res._owner.resize(node_count);
+                seen.resize(node_count);
                 break;
-            } else {
-                throw std::runtime_error("unable to read id");
             }
+            throw std::runtime_error("unable to read id");
         }
         if (id >= (uint64_t)n_vertices) throw std::runtime_error("invalid id (too high)");
         if (seen[id]) throw std::runtime_error("duplicate id");
@@ -566,15 +527,13 @@ PGParser::parse_pgsolver_renumber(std::istream &in, bool removeBadLoops)
             }
 
             const int ch = rd.next_token();
-            if (ch == EOF) throw std::runtime_error("missing ; to end line");
             if (ch == ',') continue; // next successor
-            if (ch == ';') break; // end of line
+            if (ch == ';') break; // end of record
             if (ch == '\"') {
                 res._label[id] = rd.read_label();
-                // now read ;
-                if (rd.next_token() != ';') throw std::runtime_error("missing ; to end line");
+                if (rd.next_token() == ';') break;
             }
-            break;
+            throw std::runtime_error("missing ; to end line");
         }
 
         if (has_self and res.e_size == first) res.append_out(id);

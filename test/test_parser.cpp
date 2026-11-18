@@ -347,6 +347,32 @@ test_numeric_limits()
     }
 }
 
+static void
+test_record_endings()
+{
+    for (Parser parse : {PGParser::parse_pgsolver, PGParser::parse_pgsolver_renumber}) {
+        expect_reject("wrong vertex terminator", "parity 0;\n0 0 0 0!\n",
+                      parse, false, "missing ; to end line");
+        expect_reject("wrong labeled vertex terminator", "parity 0;\n0 0 0 0 \"node\"!\n",
+                      parse, false, "missing ; to end line");
+        expect_reject("negative optional vertex ID", "parity 1;\n0 0 0 0;\n-1 1 1 0;\n",
+                      parse, false, "unable to read id");
+        expect_reject("misspelled start", "parity 0;\nsomething 0;\n0 1 0 0;",
+                      parse, false, "expecting start statement");
+        expect_reject("missing start terminator", "parity 0;\nstart 0 0 1 0 0;",
+                      parse, false, "missing ';' after start statement");
+        expect_reject("out-of-range start", "parity 0;\nstart 1; 0 1 0 0;",
+                      parse, false, "invalid start vertex ID");
+        expect_reject("start at omitted vertex", "parity 1;\nstart 1; 0 1 0 0;",
+                      parse, false, "invalid start vertex ID");
+        expect_reject("overflowing start ID", "parity 0;\nstart 18446744073709551616; 0 1 0 0;",
+                      parse, false, "start vertex ID exceeds UINT64_MAX");
+        std::istringstream same_line("parity 0;\nstart 0; 0 1 0 0;\n");
+        expect_game("start followed by a vertex on the same line", same_line, parse,
+                    {{1, 0, nullptr, {0}}});
+    }
+}
+
 int
 test_parser()
 {
@@ -385,6 +411,7 @@ test_parser()
 
     test_reader_boundaries();
     test_numeric_limits();
+    test_record_endings();
     test_repeated_edges();
     test_bundled_games();
 
