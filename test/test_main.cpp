@@ -31,6 +31,7 @@ int test_ppj();
 int test_zlkj();
 int test_fpj_batch();
 int test_fpi_frontier();
+int test_fpi_parallel();
 int test_tlq_cache();
 int test_tlj_cache();
 int test_gpm_cache();
@@ -61,6 +62,7 @@ const Test tests[] = {
     {"zlkj", test_zlkj},
     {"fpj-batch", test_fpj_batch},
     {"fpi-frontier", test_fpi_frontier},
+    {"fpi-parallel", test_fpi_parallel},
     {"tlq-cache", test_tlq_cache},
     {"tlj-cache", test_tlj_cache},
     {"gpm-cache", test_gpm_cache},

@@ -15,7 +15,7 @@
  */
 
 /**
- * Unit tests for sequential FPI and FPIM after they start to track the affected vertices.
+ * Exercise winner propagation and resets in FPI and FPIM.
  */
 
 #include <iostream>
@@ -25,14 +25,17 @@
 #include <string>
 #include <vector>
 
+#include "lace.h"
 #include "oink/oink.hpp"
 #include "oink/pgparser.hpp"
 #include "verifier.hpp"
 
 static void
-check(const char* solver, int invert, bool duplicates)
+check(const char* solver, int invert, bool duplicates, int workers)
 {
     constexpr int n = 256;
+    const int reset_count = workers > 0 ? n : 1;
+    const int last = n + reset_count + 1;
     std::vector<int> order(n), successor(n+1);
     std::iota(order.begin(), order.end(), 1);
     // Most changes propagate to a later vertex, which the descending scan of a block
@@ -42,17 +45,20 @@ check(const char* solver, int invert, bool duplicates)
     for (int i = 62; i+1 < n; i += 64) std::swap(order[i], order[i+1]);
     for (int i = 0; i < n; ++i) successor[order[i]] = i > 0 ? order[i-1] : 0;
     std::ostringstream text;
-    text << "parity " << n+2 << ";\n";
+    text << "parity " << last << ";\n";
     text << "0 " << invert << ' ' << invert << " 0;\n";
     for (int v = 1; v <= n; ++v) {
         text << v << ' ' << 1+invert << ' ' << ((v&1)^invert) << ' ' << successor[v];
         if (duplicates) text << ',' << successor[v];
         text << ";\n";
     }
-    // Once the chain has converged, this distraction resets all its winners.
+    // Once the chain has converged, these distractions reset all its winners.
     // The chain must then converge again, notifying predecessors on both flips.
-    text << n+1 << ' ' << 2+invert << ' ' << (1^invert) << ' ' << n+2 << ";\n";
-    text << n+2 << ' ' << 3+invert << ' ' << (1^invert) << ' ' << n+2 << ";\n";
+    // In parallel this also exercises a second priority block large enough to split.
+    for (int v = n+1; v < last; ++v) {
+        text << v << ' ' << 2+invert << ' ' << (1^invert) << ' ' << last << ";\n";
+    }
+    text << last << ' ' << 3+invert << ' ' << (1^invert) << ' ' << last << ";\n";
     std::istringstream input(text.str());
     auto game = pg::PGParser::parse_pgsolver(input, false);
     game.ensure_sorted();
@@ -61,9 +67,13 @@ check(const char* solver, int invert, bool duplicates)
     controller.setRemoveLoops(false);
     controller.setRemoveWCWC(false);
     controller.setSolveSingle(false);
-    controller.setWorkers(-1);
+    controller.setWorkers(workers);
+    controller.setForceParallel(workers > 0);
     controller.setSolver(solver);
     controller.run();
+    if (workers > 0 && !controller.parallel()) {
+        throw std::runtime_error("FPI did not run in parallel");
+    }
     pg::Verifier(game, controller.solution(), log).verify(true, true, true);
     for (int v = 0; v < game.nodecount(); ++v) {
         const int expected = v <= n ? invert : (1^invert);
@@ -79,7 +89,7 @@ test_fpi_frontier()
     try {
         for (const char* solver : {"fpi", "fpim"}) {
             for (int invert : {0, 1}) {
-                for (bool duplicates : {false, true}) check(solver, invert, duplicates);
+                for (bool duplicates : {false, true}) check(solver, invert, duplicates, -1);
             }
         }
     } catch (const std::exception& error) {
@@ -87,4 +97,22 @@ test_fpi_frontier()
         return 1;
     }
     return 0;
+}
+
+int
+test_fpi_parallel()
+{
+    constexpr int workers = 4;
+    lace_start(workers, 100000, 0);
+    int result = 0;
+    try {
+        for (int invert : {0, 1}) {
+            for (bool duplicates : {false, true}) check("fpi", invert, duplicates, workers);
+        }
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << std::endl;
+        result = 1;
+    }
+    lace_stop();
+    return result;
 }
