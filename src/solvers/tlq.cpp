@@ -82,8 +82,8 @@ TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R)
             if (owner(from) != pl) {
                 unsigned int e;
                 // Count unprocessed successors on first touch, then consume this edge.
-                // Keep v unprocessed until all its incoming edges have been handled, so
-                // parallel edges are counted and decremented with the same multiplicity.
+                // v stays unprocessed until its incoming edges have been handled, so the
+                // count includes the edge to v that is consumed here.
                 if (esc_epoch[from] != attract_epoch) {
                     esc_epoch[from] = attract_epoch;
                     e = 0;
