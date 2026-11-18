@@ -50,6 +50,9 @@ VBS wins/ties and, with --reference, the geometric mean speedup and W/T/L) to
 stdout. --jsonl writes every trial, --csv the
 statistics per game and solver.
 
+Sequential runs omit parallel-only solvers from the default roster, --all
+and the setup chooser. Explicitly selecting one requires --workers.
+
 With -i, a setup screen comes first: AVAILABLE lists the solvers by family
 (x shows the experimental ones, / filters), SELECTED is the roster. Enter
 adds a solver or configures a selected one, d adds a configured variant,
@@ -87,7 +90,8 @@ given(const cxxopts::ParseResult& result, const char* key)
 }
 
 bool
-parse_command_line(int argc, const char* const* argv, Options& o, std::vector<SolverRun>& solvers, std::ostream& out)
+parse_command_line(int argc, const char* const* argv, Options& o, std::vector<SolverRun>& solvers,
+                   std::ostream& out, std::ostream* notices)
 {
     cxxopts::Options opts("bench_solvers", "Benchmark parity game solvers");
     opts.custom_help("[OPTIONS...] [FILES/DIRECTORIES...]");
@@ -152,7 +156,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("c,configure", "Configuration of the single selected solver (otherwise use --<solver>=<options>)", cxxopts::value<std::string>())
         ;
     opts.add_options("Solvers")
-        ("all", "Benchmark all solvers")
+        ("all", "Benchmark all solvers available with the requested workers")
         ("e,external", "External solver as name:command, e.g. 'mysolv:mysolver %I %O'", cxxopts::value<std::vector<std::string>>())
         ;
     // only solvers with options take a configuration: --tlpar=parmin=1,chunk=8
@@ -293,11 +297,17 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         solvers.push_back(run);
     };
     const auto ids = Solvers::getSolverIDs();
-    if (given(result, "all")) {
-        for (const auto& id : ids) add(id, "");
+    const bool all = given(result, "all");
+    if (all) {
+        for (const auto& id : ids) {
+            if (solver_available(o, id)) add(id, "");
+        }
     }
     for (const auto& arg : result.arguments()) {
-        if (ids.count(arg.key())) add(arg.key(), Solvers::hasOptions(arg.key()) ? arg.value() : "");
+        if (ids.count(arg.key())) {
+            require_solver_available(o, arg.key());
+            add(arg.key(), Solvers::hasOptions(arg.key()) ? arg.value() : "");
+        }
     }
     if (given(result, "external")) {
         for (const auto& spec : result["external"].as<std::vector<std::string>>()) {
@@ -310,7 +320,13 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         if (!solvers[0].config.empty()) throw std::runtime_error("configuration given both with --" + solvers[0].id + "= and with -c");
         solvers[0] = SolverRun(solvers[0].id, result["configure"].as<std::string>());
     }
-    if (solvers.empty()) solvers = default_solvers();
+    const bool use_defaults = solvers.empty();
+    if (use_defaults) solvers = default_solvers(o);
+    if (notices && (all || use_defaults)) {
+        for (const auto& id : ids) {
+            if (!solver_available(o, id)) *notices << "Sequential run omits parallel-only solver " << id << "; enable Lace with --workers.\n";
+        }
+    }
     return true;
 }
 

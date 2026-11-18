@@ -32,9 +32,11 @@ namespace bench {
 /**
  * Parse the command line into <options> and the roster <solvers>; external
  * solvers (-e) are registered in the solver registry. Returns false after
- * printing the help to <out>. Throws std::runtime_error for a bad command line.
+ * printing the help to <out>. Reports implicit solver exclusions to <notices>
+ * if supplied. Throws std::runtime_error for a bad command line.
  */
-bool parse_command_line(int argc, const char* const* argv, Options& options, std::vector<SolverRun>& solvers, std::ostream& out);
+bool parse_command_line(int argc, const char* const* argv, Options& options, std::vector<SolverRun>& solvers,
+                        std::ostream& out, std::ostream* notices = nullptr);
 
 }
 

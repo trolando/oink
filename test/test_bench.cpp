@@ -271,7 +271,7 @@ test_command_line()
     {
         Options o;
         std::vector<SolverRun> solvers;
-        parse({"--zlk", "--tlpar=parmin=1,chunk=8", "--tl", "--quick", "--bench-seed=9", "--seed=4", "--reference=tl"}, o, solvers);
+        parse({"--zlk", "--tlpar=parmin=1,chunk=8", "--tl", "--workers=2", "--quick", "--bench-seed=9", "--seed=4", "--reference=tl"}, o, solvers);
         check("solvers in the given order", solvers.size() == 3 && solvers[0].name == "zlk" && solvers[1].name == "tlpar[parmin=1,chunk=8]" && solvers[2].name == "tl");
         check("quick", o.repeats == 1 && o.warmups == 0 && o.min_solve_time == 0);
         check("seeds", o.seed == 9 && o.game_seed == 4 && o.game_seed_given);
@@ -280,7 +280,7 @@ test_command_line()
     {
         Options o;
         std::vector<SolverRun> solvers;
-        parse({"--tlpar", "-c", "parmin=2,chunk=4", "--in-process", "--quick", "--repeat=3"}, o, solvers);
+        parse({"--tlpar", "-c", "parmin=2,chunk=4", "--workers=2", "--in-process", "--quick", "--repeat=3"}, o, solvers);
         check("-c configures the single solver", solvers.size() == 1 && solvers[0].name == "tlpar[parmin=2,chunk=4]");
         check("in-process has no timeout", !o.isolate && o.timeout == 0 && o.safety_timeout == 0);
         check("explicit setting overrides quick", o.repeats == 3);
@@ -289,6 +289,16 @@ test_command_line()
         Options o;
         std::vector<SolverRun> solvers;
         check("help returns false", !parse({"--help"}, o, solvers));
+    }
+    for (const int workers : {-1, 0, 2}) {
+        Options o;
+        std::vector<SolverRun> solvers;
+        parse({"--all", "--workers=" + std::to_string(workers)}, o, solvers);
+        const auto has = [&](const std::string& id) {
+            return std::any_of(solvers.begin(), solvers.end(), [&](const SolverRun& run) { return run.id == id; });
+        };
+        check("all selection uses the parallel-only rule", has("tlpar") == (workers >= 0));
+        check("parallel solvers with a sequential implementation stay selectable", has("fpi") && has("psi") && has("zlk"));
     }
     bool unknown = false;
     try {
@@ -304,7 +314,7 @@ test_command_line()
     try {
         Options o;
         std::vector<SolverRun> solvers;
-        parse({"--tlpar=bogus"}, o, solvers);
+        parse({"--tlpar=bogus", "--workers=2"}, o, solvers);
         validate(o, solvers);
     } catch (const std::runtime_error&) {
         bad_config = true;

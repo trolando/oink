@@ -13,6 +13,8 @@ All notable changes to Oink will be documented in this file.
 - Fast benchmark cases repeat until the measured solves reach the
   configured cumulative time or repetition cap. Reports include the
   mean solve time and measured repetition count.
+- Sequential benchmarks omit solvers whose registry entry redirects
+  sequential execution to a different solver.
 
 ## [1.2.0] - 2026-11-18
 

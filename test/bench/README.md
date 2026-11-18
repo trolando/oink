@@ -22,6 +22,19 @@ solver may be given), `-c` to configure the only selected solver, `--all`,
 and `-e name:command` for an external solver (`%I` is the game, `%O` the
 solution). `bench_solvers --help` lists all options.
 
+Sequential runs (`--workers=-1`, the default) omit parallel-only solvers
+from the default roster, `--all` and the setup chooser. The registry
+identifies these solvers by their separate sequential fallback. Currently
+this is TLPar, whose fallback is TL. An explicit request for a parallel-only
+solver in a sequential run is a command-line error. Use `--workers=0` to
+autodetect the Lace worker count or give a positive count.
+
+With workers, `Oink::run` in `src/oink.cpp` still decides whether a game is
+large enough to run a solver in parallel. Small games use the solver's
+sequential implementation or its registered fallback. For parallel scaling
+on small games, pass `--force-parallel`. Trial records include the effective
+solver and whether it ran in parallel.
+
 ## What is measured
 
 The games are read one at a time. Files are canonicalised, deduplicated,

@@ -109,7 +109,10 @@ struct Options
 };
 
 /** The solvers benchmarked when none are selected. */
-std::vector<SolverRun> default_solvers();
+std::vector<SolverRun> default_solvers(const Options& options);
+
+bool solver_available(const Options& options, const std::string& id);
+void require_solver_available(const Options& options, const std::string& id);
 
 /**
  * The index of the reference solver: a selected name, a selected id with one

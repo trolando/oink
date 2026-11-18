@@ -28,15 +28,33 @@
 
 #include "common/chooser.hpp"
 #include "oink/game.hpp"
+#include "oink/solvers.hpp"
 
 namespace bench {
 
 std::vector<SolverRun>
-default_solvers()
+default_solvers(const Options& o)
 {
     std::vector<SolverRun> result;
-    for (const char* id : {"tl", "tlj", "tlq", "npp", "fpi", "fpj", "zlk"}) result.emplace_back(id, "");
+    for (const char* id : {"tl", "tlj", "tlq", "npp", "fpi", "fpj", "zlk"}) {
+        if (solver_available(o, id)) result.emplace_back(id, "");
+    }
     return result;
+}
+
+bool
+solver_available(const Options& o, const std::string& id)
+{
+    // An entry with a fallback has no sequential implementation of its own.
+    return o.workers >= 0 || pg::Solvers::sequentialFallback(id).empty();
+}
+
+void
+require_solver_available(const Options& o, const std::string& id)
+{
+    if (!solver_available(o, id)) {
+        throw std::runtime_error("solver " + id + " is parallel-only; enable Lace with --workers=0 or a positive worker count");
+    }
 }
 
 std::optional<size_t>
@@ -67,6 +85,7 @@ validate(const Options& o, const std::vector<SolverRun>& solvers)
 {
     if (solvers.empty()) throw std::runtime_error("select at least one solver");
     for (size_t i = 0; i < solvers.size(); i++) {
+        require_solver_available(o, solvers[i].id);
         std::string error;
         if (!ui::valid_configuration(solvers[i].id, solvers[i].config, error)) {
             throw std::runtime_error("invalid configuration for " + solvers[i].id + ": " + error);

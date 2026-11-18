@@ -16,10 +16,13 @@
 
 #include "setup.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+
+#include "oink/solvers.hpp"
 
 namespace bench {
 
@@ -172,7 +175,11 @@ setup_config(Options& o)
 bool
 setup_benchmark(Options& o, std::vector<SolverRun>& solvers, volatile std::sig_atomic_t* quit)
 {
-    ui::Chooser chooser(solvers, setup_config(o));
+    auto ids = pg::Solvers::getSolverIDsByFamily();
+    ids.erase(std::remove_if(ids.begin(), ids.end(), [&](const std::string& id) {
+        return !solver_available(o, id);
+    }), ids.end());
+    ui::Chooser chooser(solvers, setup_config(o), ids);
     // start with the reference of the command line, if it is selected
     bool resolved = true;
     try {

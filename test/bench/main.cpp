@@ -39,7 +39,7 @@ main(int argc, char** argv)
     try {
         Options options;
         std::vector<SolverRun> solvers;
-        if (!parse_command_line(argc, argv, options, solvers, std::cout)) return 0;
+        if (!parse_command_line(argc, argv, options, solvers, std::cout, &std::cerr)) return 0;
         const std::string executable = executable_path(argv[0]);
         volatile std::sig_atomic_t cancelled = 0;
 
