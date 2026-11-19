@@ -17,6 +17,7 @@
 #ifndef TLQ_HPP
 #define TLQ_HPP
 
+#include <memory>
 #include <vector>
 
 #include "oink/solver.hpp"
@@ -45,20 +46,27 @@ protected:
     unsigned int tangles = 0;
 
     std::vector<int*> tout; // for each tangle
-    bitset has_tin; // vertices with incoming tangle escapes
-    std::vector<int> *tin; // for each normal vertex
+    // The tangles that escape to a vertex, in discovery order in <tin_pool>.
+    // Only pages with an escape destination have descriptors, and only vertices
+    // marked in <has_tin> have an initialized descriptor.
+    struct Backlinks { size_t offset; unsigned int size, capacity; };
+    static constexpr unsigned int TIN_PAGE_SIZE = 256;
+    std::vector<int> tin_pool;
+    std::vector<std::unique_ptr<Backlinks[]>> tin_pages;
+    bitset has_tin;
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
     std::vector<unsigned int> tdone; // all members in Z in this attraction
 
-    uintqueue pea_state; // v,i,...
-    uintqueue pea_S;  // S
-    unsigned int* pea_vidx;    // rindex
+    struct PearceFrame { unsigned int vertex, edge; };
+    std::vector<PearceFrame> pea_state; // DFS stack
+    std::vector<unsigned int> pea_S;
+    std::unique_ptr<unsigned int[]> pea_vidx; // rindex
     bitset pea_root;  // root
     int pea_curidx;   // index
 
     std::vector<int> tangle; // stores the new tangle
-    uintqueue tangleto;
+    std::vector<int> tangleto;
     bitset escapes; // which escapes we considered
 
     uintqueue Q;
@@ -80,6 +88,7 @@ protected:
     void attractVertices(const int pl, const int v, bitset &Z, bitset &R);
     bool attractTangle(int t, int pl, bitset &R, bitset &Z, bitset &G);
     void attractTangles(int pl, int v, bitset &R, bitset &Z, bitset &G);
+    void addBacklinks(int tidx);
     bool extractTangles(int startvertex, bitset &R);
     void solve(bitset &Subgame, int vtop, int pe, int po);
 };

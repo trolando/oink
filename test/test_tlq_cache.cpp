@@ -50,12 +50,9 @@ public:
         std::fill(escs, escs+n, 99u);
         esc_epoch = new unsigned[n];
         std::fill(esc_epoch, esc_epoch+n, 1u);
-        tin = new std::vector<int>[n];
-        has_tin.resize(n);
-        for (int v : {2, 3}) {
-            tin[v].push_back(0);
-            has_tin[v] = true;
-        }
+        tangleto = {2, 3};
+        addBacklinks(0);
+        tangleto.clear();
         tv.push_back(new int[5]{0, 1, 1, -1, -1});
         tout.push_back(new int[3]{2, 3, -1});
         tpr.push_back(0);
@@ -68,7 +65,6 @@ public:
         delete[] str;
         delete[] escs;
         delete[] esc_epoch;
-        delete[] tin;
         for (auto p : tv) delete[] p;
         for (auto p : tout) delete[] p;
     }
