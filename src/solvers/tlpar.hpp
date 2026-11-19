@@ -17,6 +17,7 @@
 #ifndef TLPAR_HPP
 #define TLPAR_HPP
 
+#include <memory>
 #include <vector>
 
 #include "oink/solver.hpp"
@@ -71,13 +72,14 @@ protected:
     std::vector<int> toutdata; // the escapes of the tangles (each ending with -1)
     std::vector<size_t> tvpos; // for each tangle, its vertex-strategy pairs in <tvdata>
     std::vector<size_t> toutpos; // for each tangle, its escapes in <toutdata>
-    // for each vertex, the tangles that escape to it (if <has_tin>), in the order they were
-    // found: <tin_size> of them, in a block of <tin_cap> at <tin_off> in <tin_pool>
+    // The tangles that escape to a vertex, in discovery order in <tin_pool>.
+    // Only pages with an escape destination have descriptors, and only vertices
+    // marked in <has_tin> have an initialized descriptor.
+    struct Backlinks { size_t offset; unsigned int size, capacity; };
+    static constexpr unsigned int TIN_PAGE_SIZE = 256;
     std::vector<int> tin_pool;
-    size_t *tin_off;
-    unsigned int *tin_size;
-    unsigned int *tin_cap;
-    bitset has_tin; // the vertices with tangles that escape to it (to skip reading <tin>)
+    std::vector<std::unique_ptr<Backlinks[]>> tin_pages;
+    bitset has_tin;
     std::vector<int> tpr; // priority of a tangle
     std::vector<unsigned int> tescs; // number of escapes of a tangle
 
@@ -97,7 +99,7 @@ protected:
     struct Region { size_t begin, hbegin; int pr; bool highest0, highest1; };
     std::vector<Region> regions;
     std::vector<int> heads; // the heads of these regions, region by region
-    int *regidx; // for each vertex in <G>, the index of its region in <regions>
+    std::unique_ptr<int[]> regidx; // for each vertex in <G>, the index of its region in <regions>
     int keep = -1; // the next pass keeps the regions before this one and extends it (see tl)
     std::vector<int> seeds; // the new tangles that go into region <keep> (see tl)
     bitset Zx, Vx; // the vertices and heads of region <zx> of the current pass, if not -1 (see tl)
@@ -111,18 +113,19 @@ protected:
     std::vector<int> lreg; // for each region tangle: the region of the current pass it is in, or -1
     std::vector<int> lazies; // the region tangles
     int cur_ridx = -1; // the region being attracted (see attractTangle)
-    int *astr; // the strategy of a region tangle being analysed
+    std::unique_ptr<int[]> astr; // the strategy of a region tangle being analysed
     bitset LB; // the vertices of a region tangle being analysed
     bitset H[2]; // the highest region of each player in the current pass
 
-    uintqueue pea_state; // v,i,...
-    uintqueue pea_S;  // S
-    unsigned int* pea_vidx;    // rindex
+    struct PearceFrame { unsigned int vertex, edge; };
+    std::vector<PearceFrame> pea_state; // DFS stack
+    std::vector<unsigned int> pea_S;
+    std::unique_ptr<unsigned int[]> pea_vidx; // rindex
     bitset pea_root;  // root
     int pea_curidx;   // index
 
     std::vector<int> tangle; // stores the new tangle
-    uintqueue tangleto; // stores the vertices the tangle can escape to
+    std::vector<int> tangleto; // stores the vertices the tangle can escape to
     bitset escapes; // which escapes we considered
 
     bitset C; // during an attraction: the vertices in <R> but not in <Z>
@@ -164,6 +167,7 @@ protected:
     void drain(const int pl, bitset &R, bitset &Z, const int maxpr, unsigned int &qh, const int ridx);
 
     bool tl(void);
+    void prepareExtraction();
     bool extractTangles(int i, bitset &R, int *str, int tangle_pr = -1);
 };
 

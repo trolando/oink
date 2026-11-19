@@ -213,9 +213,10 @@ TLParSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, int 
 __attribute__((always_inline)) void
 TLParSolver::attractTangles(const int pl, int v, bitset &R, bitset &Z, int maxpr)
 {
-    if (!has_tin[v]) return;
-    const int *ts = &tin_pool[tin_off[v]];
-    for (unsigned int i = 0, n = tin_size[v]; i < n; i++) attractTangle(ts[i], pl, R, Z, maxpr);
+    if (has_tin.empty() or !has_tin[v]) return;
+    const Backlinks &links = tin_pages[v/TIN_PAGE_SIZE][v%TIN_PAGE_SIZE];
+    const int *ts = &tin_pool[links.offset];
+    for (unsigned int i = 0, n = links.size; i < n; i++) attractTangle(ts[i], pl, R, Z, maxpr);
 }
 
 
@@ -398,13 +399,15 @@ TLParSolver::roundChunk(int start, int n)
 {
     auto &out = pbuf[lace_worker_id()].v;
     out.clear();
+    const bool has_backlinks = !has_tin.empty();
     for (int i = start; i < start+n; i++) {
         const int v = Q[i];
         if (par_ridx >= 0) regidx[v] = par_ridx;
         attractVerticesPar(v, out);
-        if (has_tin[v]) {
-            const int *ts = &tin_pool[tin_off[v]];
-            for (unsigned int j = 0, m = tin_size[v]; j < m; j++) attractTanglePar(ts[j], out);
+        if (has_backlinks and has_tin[v]) {
+            const Backlinks &links = tin_pages[v/TIN_PAGE_SIZE][v%TIN_PAGE_SIZE];
+            const int *ts = &tin_pool[links.offset];
+            for (unsigned int j = 0, m = links.size; j < m; j++) attractTanglePar(ts[j], out);
         }
     }
     if (!out.empty()) {
@@ -475,24 +478,29 @@ TLParSolver::addTangle(const int pr, const int *strat)
     // new tangle idx
     const int tidx = tpr.size();
 
-    // add back links to all normal vertices in our [out]
-    for (unsigned int x = 0; x < tangleto.size(); x++) {
-        const int e = tangleto[x];
+    // Publish backlinks between attraction rounds, in the coordinating task.
+    if (has_tin.empty()) {
+        has_tin.resize(nodecount());
+        tin_pages.resize((nodecount()+TIN_PAGE_SIZE-1)/TIN_PAGE_SIZE);
+    }
+    for (const int e : tangleto) {
+        auto &page = tin_pages[e/TIN_PAGE_SIZE];
+        if (!page) page.reset(new Backlinks[TIN_PAGE_SIZE]);
+        auto &links = page[e%TIN_PAGE_SIZE];
         if (!has_tin[e]) {
             has_tin[e] = true;
-            tin_size[e] = 0;
-            tin_cap[e] = 0;
+            links = {};
         }
-        if (tin_size[e] == tin_cap[e]) {
+        if (links.size == links.capacity) {
             // move the list of <e> to a new block of twice the size at the end of the pool
-            const unsigned int cap = tin_cap[e] ? 2*tin_cap[e] : 2;
+            const unsigned int cap = links.capacity ? 2*links.capacity : 2;
             const size_t off = tin_pool.size();
             tin_pool.resize(off+cap);
-            if (tin_size[e]) std::copy(&tin_pool[tin_off[e]], &tin_pool[tin_off[e]]+tin_size[e], &tin_pool[off]);
-            tin_off[e] = off;
-            tin_cap[e] = cap;
+            if (links.size) std::copy_n(&tin_pool[links.offset], links.size, &tin_pool[off]);
+            links.offset = off;
+            links.capacity = cap;
         }
-        tin_pool[tin_off[e]+tin_size[e]++] = tidx;
+        tin_pool[links.offset+links.size++] = tidx;
     }
 
     // store the tangle: its vertex-strategy pairs and its escapes (each ending with -1)
@@ -503,7 +511,7 @@ TLParSolver::addTangle(const int pr, const int *strat)
     }
     tvdata.push_back(-1);
     toutpos.push_back(toutdata.size());
-    toutdata.insert(toutdata.end(), &tangleto[0], &tangleto[0]+tangleto.size());
+    toutdata.insert(toutdata.end(), tangleto.begin(), tangleto.end());
     toutdata.push_back(-1);
 
     // and set p to pr
@@ -511,6 +519,17 @@ TLParSolver::addTangle(const int pr, const int *strat)
     tescs.push_back(0);
     tlazy.push_back(0);
     lreg.push_back(-1);
+}
+
+
+void
+TLParSolver::prepareExtraction()
+{
+    if (pea_vidx) return;
+    pea_vidx.reset(new unsigned int[nodecount()]);
+    pea_root.resize(nodecount());
+    S.resize(nodecount());
+    if (escapes.empty()) escapes.resize(nodecount());
 }
 
 
@@ -534,15 +553,15 @@ TLParSolver::extractTangles(int startvertex, bitset &R, int *str, int tangle_pr)
      */
 
     // beginVisiting
-    pea_state.push(startvertex);
-    pea_state.push(0);
-    pea_root[startvertex] = true;
-    pea_vidx[startvertex] = pea_curidx++;
-    while (pea_state.nonempty()) {
-pearce_again:
+    unsigned int next_vertex = startvertex;
+begin_visiting:
+    pea_state.push_back({next_vertex, 0});
+    pea_root[next_vertex] = true;
+    pea_vidx[next_vertex] = pea_curidx++;
+    while (!pea_state.empty()) {
         // visitLoop
-        const unsigned int n = pea_state.back2();
-        unsigned int i = pea_state.back();
+        const unsigned int n = pea_state.back().vertex;
+        unsigned int i = pea_state.back().edge;
 
         if (owner(n) != pl) {
             auto edges = outs(n);
@@ -560,13 +579,9 @@ pearce_again:
                 // beginEdge
                 if (R[to]) {
                     if (pea_vidx[to] == 0) {
-                        pea_state.back() = i+1;
-                        // beginVisiting
-                        pea_state.push(to);
-                        pea_state.push(0);
-                        pea_root[to] = true;
-                        pea_vidx[to] = pea_curidx++;
-                        goto pearce_again; // break; continue;
+                        pea_state.back().edge = i+1;
+                        next_vertex = to;
+                        goto begin_visiting;
                     } else {
                         // finishEdge
                         if (pea_vidx[to] < pea_vidx[n]) {
@@ -582,13 +597,9 @@ pearce_again:
             if (i == 0) {
                 // beginEdge
                 if (pea_vidx[s] == 0) {
-                    pea_state.back() = 1;
-                    // beginVisiting
-                    pea_state.push(s);
-                    pea_state.push(0);
-                    pea_root[s] = true;
-                    pea_vidx[s] = pea_curidx++;
-                    goto pearce_again; // break; continue;
+                    pea_state.back().edge = 1;
+                    next_vertex = s;
+                    goto begin_visiting;
                 }
             }
             // finishEdge
@@ -598,21 +609,21 @@ pearce_again:
             }
         }
         // finishVisiting
-        pea_state.pop2();
+        pea_state.pop_back();
         if (pea_root[n]) {
             pea_curidx -= 1;
             tangle.push_back(n);
-            while (pea_S.nonempty()) {
+            while (!pea_S.empty()) {
                 const int t = pea_S.back();
                 if (pea_vidx[n]>pea_vidx[t]) break;
-                pea_S.pop();
+                pea_S.pop_back();
                 pea_curidx -= 1;
                 pea_vidx[t] = (unsigned int)-1;
                 tangle.push_back(t);
             }
             pea_vidx[n] = (unsigned int)-1;
         } else {
-            pea_S.push(n);
+            pea_S.push_back(n);
             continue;
         }
 
@@ -644,7 +655,7 @@ pearce_again:
                     int to = *curedge;
                     if (G[to] and !S[to] && !escapes[to]) {
                         escapes[to] = true;
-                        tangleto.push(to);
+                        tangleto.push_back(to);
                     }
                 }
             }
@@ -722,6 +733,7 @@ pearce_again:
 bool
 TLParSolver::learnRegion(const int ridx, const int pl, const int pr)
 {
+    if (escapes.empty()) escapes.resize(nodecount());
     bool single = true;
     for (size_t i = regions[ridx].begin; single and i < Q.size(); i++) {
         const int u = Q[i];
@@ -731,7 +743,7 @@ TLParSolver::learnRegion(const int ridx, const int pl, const int pr)
             if (!G[to] or Z[to] or escapes[to]) continue;
             if (!H[pl][to]) { single = false; break; }
             escapes[to] = true;
-            tangleto.push(to);
+            tangleto.push_back(to);
         }
     }
     for (unsigned int x = 0; x < tangleto.size(); x++) escapes[tangleto[x]] = false;
@@ -771,6 +783,11 @@ TLParSolver::analyseLazies(const bool broken)
         // (still delayed if it is (as a whole) in the highest region of its player)
         if (broken and tlazy[t] == 1 and lreg[t] >= 0 and (size_t)lreg[t] < regions.size() and
             (pl == 0 ? regions[lreg[t]].highest0 : regions[lreg[t]].highest1)) { lazies[keepn++] = t; continue; }
+        if (!astr) {
+            astr.reset(new int[nodecount()]);
+            LB.resize(nodecount());
+        }
+        prepareExtraction();
         // its vertices in <G> and their strategy, without the vertices of <pl> whose strategy
         // leaves them
         for (int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) {
@@ -786,7 +803,7 @@ TLParSolver::analyseLazies(const bool broken)
         const auto D = dominions;
         pea_curidx = 1;
         for (auto v = LB.find_last(); v != bitset::npos; v = LB.find_prev(v)) {
-            if (pea_vidx[v] == 0) extractTangles((int)v, LB, astr, pr);
+            if (pea_vidx[v] == 0) extractTangles((int)v, LB, astr.get(), pr);
         }
         for (int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) LB[*ptr] = false;
         tpr[t] = -1;
@@ -887,8 +904,13 @@ TLParSolver::tl(void)
         // (the vertices and heads of the region are in <Zx> and <Vx> if the last pass ended it
         // there, see the end of the region below)
         if (zx != keep) {
-            Zx.reset();
-            Vx.reset();
+            if (Zx.empty()) {
+                Zx.resize(nodecount());
+                Vx.resize(nodecount());
+            } else {
+                Zx.reset();
+                Vx.reset();
+            }
             for (size_t i = k.begin; i < kend; i++) Zx[Q[i]] = true;
             for (size_t i = k.hbegin; i < hend; i++) Vx[heads[i]] = true;
         }
@@ -1176,7 +1198,8 @@ TLParSolver::tl(void)
                     if (learnRegion(ridx, pl, pr)) {
                         new_tangles = true;
                     } else {
-                        std::fill(pea_vidx, pea_vidx+nodecount(), '\0');
+                        prepareExtraction();
+                        std::fill_n(pea_vidx.get(), nodecount(), '\0');
                         pea_curidx = 1;
                         for (auto v = V.find_last(); v != bitset::npos; v = V.find_prev(v)) {
                             if (extractTangles(v, Z, str)) new_tangles = true;
@@ -1216,7 +1239,7 @@ TLParSolver::tl(void)
         }
 
         if (pl == 0 ? regions[ridx].highest0 : regions[ridx].highest1) H[pl] = Z;
-        if (ridx == 0 or ridx == xreg) {
+        if ((ridx == 0 or ridx == xreg) and !Zx.empty()) {
             // (keep the vertices and heads of the first region and of an extended region, for
             // the next pass if it extends the region, see above)
             Z.swap(Zx);
@@ -1243,6 +1266,7 @@ TLParSolver::tl(void)
     if (new_tangles) {
         // (a pass that keeps regions needs <regidx> while it runs, see attractTangle)
         if (!kept) {
+            if (!regidx) regidx.reset(new int[nodecount()]);
             for (size_t k = 0; k < regions.size(); k++) {
                 const size_t end = k+1 < regions.size() ? regions[k+1].begin : Q.size();
                 for (size_t i = regions[k].begin; i < end; i++) regidx[Q[i]] = (int)k;
@@ -1321,16 +1345,9 @@ TLParSolver::runPar(lace_worker* lw)
 {
     this->lw = lw;
 
-    tin_off = new size_t[nodecount()];
-    tin_size = new unsigned int[nodecount()];
-    tin_cap = new unsigned int[nodecount()];
-    has_tin.resize(nodecount());
     str = new int[nodecount()];
     escs = new unsigned int[nodecount()];
     gdeg = new unsigned int[nodecount()];
-    regidx = new int[nodecount()];
-    astr = new int[nodecount()];
-    LB.resize(nodecount());
     C.resize(nodecount());
     H[0].resize(nodecount());
     H[1].resize(nodecount());
@@ -1345,21 +1362,10 @@ TLParSolver::runPar(lace_worker* lw)
     W.resize(nodecount());
     R.resize(nodecount());
     Z.resize(nodecount());
-    Zx.resize(nodecount());
-    Vx.resize(nodecount());
-    S.resize(nodecount());
     G = disabled;
     G.flip();
 
     Q.resize(nodecount());
-
-    tangleto.resize(nodecount());
-    escapes.resize(nodecount());
-
-    pea_state.resize(nodecount()*2);
-    pea_S.resize(nodecount());
-    pea_vidx = new unsigned int[nodecount()];
-    pea_root.resize(nodecount());
 
     while (G.any()) {
 #ifndef NDEBUG
@@ -1382,13 +1388,7 @@ TLParSolver::runPar(lace_worker* lw)
 #endif
 
     // Free all explicitly allocated memory
-    delete[] tin_off;
-    delete[] tin_size;
-    delete[] tin_cap;
-    delete[] regidx;
-    delete[] astr;
     delete[] str;
-    delete[] pea_vidx;
     delete[] escs;
     delete[] gdeg;
 }
