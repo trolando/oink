@@ -816,6 +816,8 @@ TLJSolver::improveRegion(int p)
     if (new_heads != 0) {
         if (rcount[p] == 0) { nonempty[pl][p] = true; anyregion[p] = true; }
         rcount[p] += new_heads;
+        // An unassigned head becoming a target can unblock lower regions, just like a pull.
+        pull_lo = 0;
     }
     if (!incremental) {
         for (unsigned i = mbeg[p], e = i+mlen[p]; i < e; i++) {
@@ -941,7 +943,7 @@ TLJSolver::improveRegion(int p)
         }
     }
 
-    // each pulled-up vertex now sits in region p, so it is a valid <pl>-target for
+    // each new head or pulled-up vertex now sits in region p, so it is a valid <pl>-target for
     // every region of parity <pl> at or below p that it did not satisfy before;
     // re-examine those (a predecessor may now attract/close there). For a same-parity
     // move it already satisfied everything up to oldr, so only (oldr, p) is new.

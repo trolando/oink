@@ -26,6 +26,8 @@ All notable changes to Oink will be documented in this file.
   permuting a streamed game.
 - Count strategies once per verifier call, including when verifying
   after a closure check.
+- Replay lower TLJ regions when newly assigned heads can unblock their
+  attraction after a dominion.
 
 ## [1.2.0] - 2026-11-18
 
