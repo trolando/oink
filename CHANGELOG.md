@@ -2,7 +2,7 @@
 
 All notable changes to Oink will be documented in this file.
 
-## [Unreleased]
+## [1.2.1] - 2026-11-19
 
 ### Changed
 
@@ -15,6 +15,10 @@ All notable changes to Oink will be documented in this file.
   mean solve time and measured repetition count.
 - Sequential benchmarks omit solvers whose registry entry redirects
   sequential execution to a different solver.
+- TL, TLJ, TLQ and TLPar allocate their scratch space when they first
+  need it. On large equivalence games this lowers their peak address
+  space by up to 1.8 GiB, and they are up to 6% faster per game on model
+  checking.
 
 ### Fixed
 
@@ -26,8 +30,11 @@ All notable changes to Oink will be documented in this file.
   permuting a streamed game.
 - Count strategies once per verifier call, including when verifying
   after a closure check.
-- Replay lower TLJ regions when newly assigned heads can unblock their
-  attraction after a dominion.
+- TLJ could leave vertices unsolved after removing a dominion: a newly
+  assigned head did not make the lower regions try again. This bug
+  dates from 1.2.0.
+- ZLKPP read an uninitialised flag in its Warsaw variant (undefined
+  behaviour; the solutions were not affected).
 
 ## [1.2.0] - 2026-11-18
 
