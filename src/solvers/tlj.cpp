@@ -48,15 +48,15 @@ TLJSolver::extractTangles(int startvertex, bitset &R, int *str)
     const int pr = priority(startvertex);
     const int pl = pr&1;
 
-    pea_state.push(startvertex);
-    pea_state.push(0);
-    pea_root[startvertex] = true;
-    pea_vidx[startvertex] = pea_curidx++;
-    pea_seen.push_back(startvertex);
-    while (pea_state.nonempty()) {
-pearce_again:
-        const unsigned int n = pea_state.back2();
-        unsigned int i = pea_state.back();
+    unsigned int next_vertex = startvertex;
+begin_visiting:
+    pea_state.push_back({next_vertex, 0});
+    pea_root[next_vertex] = true;
+    pea_vidx[next_vertex] = pea_curidx++;
+    pea_seen.push_back(next_vertex);
+    while (!pea_state.empty()) {
+        const unsigned int n = pea_state.back().vertex;
+        unsigned int i = pea_state.back().edge;
 
         if (owner(n) != pl) {
             auto edges = outs(n);
@@ -72,13 +72,9 @@ pearce_again:
                 if (to == -1) break;
                 if (R[to]) {
                     if (pea_vidx[to] == 0) {
-                        pea_state.back() = i+1;
-                        pea_state.push(to);
-                        pea_state.push(0);
-                        pea_root[to] = true;
-                        pea_vidx[to] = pea_curidx++;
-                        pea_seen.push_back(to);
-                        goto pearce_again;
+                        pea_state.back().edge = i+1;
+                        next_vertex = to;
+                        goto begin_visiting;
                     } else {
                         if (pea_vidx[to] < pea_vidx[n]) {
                             pea_vidx[n] = pea_vidx[to];
@@ -92,13 +88,9 @@ pearce_again:
             const int s = str[n];
             if (i == 0) {
                 if (pea_vidx[s] == 0) {
-                    pea_state.back() = 1;
-                    pea_state.push(s);
-                    pea_state.push(0);
-                    pea_root[s] = true;
-                    pea_vidx[s] = pea_curidx++;
-                    pea_seen.push_back(s);
-                    goto pearce_again;
+                    pea_state.back().edge = 1;
+                    next_vertex = s;
+                    goto begin_visiting;
                 }
             }
             if (pea_vidx[s] < pea_vidx[n]) {
@@ -106,21 +98,21 @@ pearce_again:
                 pea_root[n] = false;
             }
         }
-        pea_state.pop2();
+        pea_state.pop_back();
         if (pea_root[n]) {
             pea_curidx -= 1;
             tangle.push_back(n);
-            while (pea_S.nonempty()) {
+            while (!pea_S.empty()) {
                 const int t = pea_S.back();
                 if (pea_vidx[n]>pea_vidx[t]) break;
-                pea_S.pop();
+                pea_S.pop_back();
                 pea_curidx -= 1;
                 pea_vidx[t] = (unsigned int)-1;
                 tangle.push_back(t);
             }
             pea_vidx[n] = (unsigned int)-1;
         } else {
-            pea_S.push(n);
+            pea_S.push_back(n);
             continue;
         }
 
@@ -139,7 +131,7 @@ pearce_again:
                     int to = *curedge;
                     if (G[to] and !S[to] && !escapes[to]) {
                         escapes[to] = true;
-                        tangleto.push(to);
+                        tangleto.push_back(to);
                     }
                 }
             }
@@ -172,7 +164,7 @@ pearce_again:
         }
         tvdata.push_back(-1);
         toutpos.push_back(toutdata.size());
-        toutdata.insert(toutdata.end(), &tangleto[0], &tangleto[0]+tangleto.size());
+        toutdata.insert(toutdata.end(), tangleto.begin(), tangleto.end());
         toutdata.push_back(-1);
 
         tpr.push_back(pr);
@@ -301,6 +293,7 @@ TLJSolver::dropTangle(const int t)
 bool
 TLJSolver::learnRegion(const int p, const int pl, const int h)
 {
+    if (escapes.empty()) escapes.resize(nodecount());
     bool single = true;
     for (unsigned i = 0; single && i < zlist.size(); i++) {
         const int u = zlist[i];
@@ -310,7 +303,7 @@ TLJSolver::learnRegion(const int p, const int pl, const int h)
             if (Z[to] || escapes[to] || !G[to]) continue;
             if (region[to] != h) { single = false; break; }
             escapes[to] = true;
-            tangleto.push(to);
+            tangleto.push_back(to);
         }
     }
     for (unsigned int x = 0; x < tangleto.size(); x++) escapes[tangleto[x]] = false;
@@ -326,7 +319,7 @@ TLJSolver::learnRegion(const int p, const int pl, const int h)
     }
     tvdata.push_back(-1);
     toutpos.push_back(toutdata.size());
-    toutdata.insert(toutdata.end(), &tangleto[0], &tangleto[0]+tangleto.size());
+    toutdata.insert(toutdata.end(), tangleto.begin(), tangleto.end());
     toutdata.push_back(-1);
     tpr.push_back(p);
     tregion.push_back(1);
@@ -581,10 +574,11 @@ TLJSolver::solveDominion(bitset &Dom, const int pl, const bool attract)
     touched.clear();
     // (each tangle once: <tcnt> is -1 for every tangle here, see improveRegion; <M> is empty)
     for (int tp = 0; promoted != 0 && tp < 2; tp++) {
+        if (has_tin[tp].empty()) continue;
         M = has_tin[tp];
         M &= Dom;
         for (auto v = M.find_first(); v != bitset::npos; v = M.find_next(v)) {
-            for (const int t : tin[tin_index[v]].by_player[tp]) {
+            for (const int t : tin[tin_index[v/TIN_PAGE_SIZE][v%TIN_PAGE_SIZE]].by_player[tp]) {
                 if (tcnt[t] == -3) continue;
                 tcnt[t] = -3;
                 ttouched.push_back(t);
@@ -883,6 +877,8 @@ TLJSolver::improveRegion(int p)
     // for every old member. Its witness advances as newly pulled vertices arrive.
     const bool use_witness = pl_above || incremental;
 
+    const bool has_backlinks = !has_tin[pl].empty();
+
     // grow region p (<zlist> is the queue)
     for (unsigned qi = 0; qi < zlist.size(); qi++) {
         const int v = zlist[qi];
@@ -919,8 +915,8 @@ TLJSolver::improveRegion(int p)
             }
         }
         // tangle attraction (tangles escaping to <v> may now be attractable)
-        if (has_tin[pl][v]) {
-            for (int t : tin[tin_index[v]].by_player[pl]) attractTangleInto(t, qi, p, pl);
+        if (has_backlinks && has_tin[pl][v]) {
+            for (int t : tin[tin_index[v/TIN_PAGE_SIZE][v%TIN_PAGE_SIZE]].by_player[pl]) attractTangleInto(t, qi, p, pl);
         }
     }
     // a promoted region tangle that is not attracted now is deleted (see learnRegion)
@@ -1029,6 +1025,12 @@ TLJSolver::improveRegion(int p)
     // closed region: extract tangles (and possibly dominions)
     const auto dom_before = dominions;
 
+    if (!pea_vidx) {
+        pea_vidx.reset(new unsigned int[nodecount()]());
+        pea_root.resize(nodecount());
+        S.resize(nodecount());
+    }
+    if (escapes.empty()) escapes.resize(nodecount());
     pea_curidx = 1;
     for (auto it = heads.rbegin(); it != heads.rend(); it++) {
         extractTangles(*it, Z, str);
@@ -1074,12 +1076,19 @@ TLJSolver::promote()
             }
             if (!ok || r == -1) { dropTangle((int)t); continue; }
         }
+        if (tin_index.empty()) {
+            tin_index.resize((nodecount()+TIN_PAGE_SIZE-1)/TIN_PAGE_SIZE);
+            has_tin[0].resize(nodecount());
+            has_tin[1].resize(nodecount());
+        }
         int minreg = INT_MAX;
         bool good = true; // whether all escapes are in regions of <tpl>
         for (int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ptr++) {
             const int e = *ptr;
-            int& index = tin_index[e];
-            if (index == -1) {
+            auto &page = tin_index[e/TIN_PAGE_SIZE];
+            if (!page) page.reset(new int[TIN_PAGE_SIZE]);
+            int &index = page[e%TIN_PAGE_SIZE];
+            if (!has_tin[0][e] && !has_tin[1][e]) {
                 index = (int)tin.size();
                 tin.emplace_back();
             }
@@ -1107,9 +1116,6 @@ TLJSolver::promote()
 void
 TLJSolver::run()
 {
-    tin_index.assign(nodecount(), -1);
-    has_tin[0].resize(nodecount());
-    has_tin[1].resize(nodecount());
     tangled.resize(nodecount());
     str = new int[nodecount()];
     region = new int[nodecount()];
@@ -1118,7 +1124,6 @@ TLJSolver::run()
     C.resize(nodecount());
     A.resize(nodecount());
     M.resize(nodecount());
-    S.resize(nodecount());
     G = disabled;
     G.flip();
 
@@ -1127,14 +1132,6 @@ TLJSolver::run()
     zlist.resize(nodecount());
     touched.resize(nodecount());
     flipped.resize(nodecount());
-
-    tangleto.resize(nodecount());
-    escapes.resize(nodecount());
-
-    pea_state.resize(nodecount()*2);
-    pea_S.resize(nodecount());
-    pea_vidx = new unsigned int[nodecount()]();
-    pea_root.resize(nodecount());
 
     const int n = nodecount();
     cnt.assign(n, -1);
@@ -1239,7 +1236,6 @@ TLJSolver::run()
 #endif
 
     delete[] str;
-    delete[] pea_vidx;
     delete[] region;
 }
 

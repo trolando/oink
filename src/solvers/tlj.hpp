@@ -17,6 +17,8 @@
 #ifndef TLJ_HPP
 #define TLJ_HPP
 
+#include <memory>
+
 #include "oink/solver.hpp"
 
 namespace pg {
@@ -63,7 +65,9 @@ protected:
     std::vector<size_t> toutpos; // for each tangle, its escapes in <toutdata>
     struct Backlinks { std::vector<int> by_player[2]; };
     std::vector<Backlinks> tin; // allocated only for vertices with backlinks
-    std::vector<int> tin_index;
+    // The union of <has_tin> marks the initialized entries in these pages.
+    static constexpr unsigned int TIN_PAGE_SIZE = 256;
+    std::vector<std::unique_ptr<int[]>> tin_index;
     bitset has_tin[2]; // vertices with a backlink from each player
     bitset tangled; // the vertices of the opponent attracted into their region with a tangle
                     // (the mark can remain when it moves on: see solveDominion)
@@ -80,15 +84,16 @@ protected:
     int *str; // currently assigned strategy of each vertex (implicit justification)
     int *region; // persistent region (priority) of each vertex, -1 = unassigned
 
-    uintqueue pea_state; // v,i,...
-    uintqueue pea_S;  // S
-    unsigned int* pea_vidx;    // rindex
+    struct PearceFrame { unsigned int vertex, edge; };
+    std::vector<PearceFrame> pea_state; // DFS stack
+    std::vector<unsigned int> pea_S;
+    std::unique_ptr<unsigned int[]> pea_vidx; // rindex
     std::vector<int> pea_seen; // the vertices with a nonzero rindex
     bitset pea_root;  // root
     int pea_curidx;   // index
 
     std::vector<int> tangle; // stores the new tangle
-    uintqueue tangleto; // stores the vertices the tangle can escape to
+    std::vector<int> tangleto; // stores the vertices the tangle can escape to
     bitset escapes; // which escapes we considered
 
     bitset Z; // current region being grown
