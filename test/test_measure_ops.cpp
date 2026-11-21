@@ -18,6 +18,9 @@
  * Unit tests for the operations of the progress measures.
  */
 
+#include <algorithm>
+#include <climits>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -102,6 +105,38 @@ test_measure_ops()
         empty.copy_bot(-1);
         empty.inc(-1);
         require(empty.is_top(-1), "empty Small tuple did not increment to Top");
+
+        // Table sizes and row offsets of Small and Ordered, without allocating tables:
+        // 65,536 vertices with 32,768 components per slot exceed INT_MAX components.
+        const size_t wide = (size_t)(65536+4) * 32768;
+        require(wide > (size_t)INT_MAX, "test size does not exceed INT_MAX");
+        require(measure_table_size(65536+4, 32768, sizeof(int)) == wide, "table size overflowed");
+        require(measure_offset(65535, 32768) == wide - 32768, "row offset of the last vertex overflowed");
+        require(measure_offset(-4, 32768) == 0 and measure_offset(-1, 3) == 9, "scratch slot offsets");
+        require(measure_table_size(0, 5, sizeof(int)) == 0 and measure_table_size(5, 0, sizeof(int)) == 0,
+                "empty table size");
+        if (sizeof(size_t) >= 8) {
+            require(measure_offset(INT_MAX-4, INT_MAX) == (size_t)INT_MAX * (size_t)INT_MAX,
+                    "row offset of the largest slot and width overflowed");
+        }
+        // the largest table that fits, and one slot more
+        const long width = 1024;
+        const long slots = (long)std::min<size_t>(SIZE_MAX / sizeof(int) / width, LONG_MAX);
+        require(measure_table_size(slots, width, sizeof(int)) == (size_t)slots * width, "largest table size");
+        bool rejected = false;
+        try {
+            measure_table_size(slots+1, width, sizeof(int));
+        } catch (const std::length_error&) {
+            rejected = true;
+        }
+        require(rejected, "a table larger than the address space was not rejected");
+        rejected = false;
+        try {
+            measure_table_size(-1, width, sizeof(int));
+        } catch (const std::length_error&) {
+            rejected = true;
+        }
+        require(rejected, "a negative table size was not rejected");
         std::cout << "measure operations passed" << std::endl;
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

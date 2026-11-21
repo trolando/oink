@@ -20,6 +20,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <stdexcept>
+#include <string>
 
 #include "gpm.hpp"
 #include "oink/oink.hpp"
@@ -65,6 +67,16 @@ inline T read_le_advance(const std::vector<std::byte>& buf, size_t& cursor) {
 }
 
 
+size_t
+measure_table_size(long slots, long width, size_t component)
+{
+    if (slots < 0 or width < 0 or (width > 0 and (size_t)slots > SIZE_MAX / component / (size_t)width)) {
+        throw std::length_error("measure table of " + std::to_string(slots) + " slots of " +
+                                std::to_string(width) + " components does not fit in memory");
+    }
+    return (size_t)slots * (size_t)width;
+}
+
 Small::Small(const Game &game, const int player) : game(game)
 {
     this->player = player;
@@ -78,8 +90,9 @@ Small::Small(const Game &game, const int player) : game(game)
     for (int v=0; v<n; v++) this->counts[game.priority(v)]++;
 
     // allocate and initialize the vertices
-    data = new int[l * (n+4)];
-    std::fill(data, data + (l*(n+4)), '\0');
+    const size_t size = measure_table_size((long)n+4, l, sizeof(int));
+    data = new int[size];
+    std::fill(data, data + size, '\0');
     top.resize(n+4);
 }
 
@@ -90,9 +103,9 @@ Small::Small(const Small &src) : game(src.game)
     this->d = src.d;
     this->l = src.l;
     this->counts = new int[d+1];
-    this->data = new int[l * (n+4)];
+    this->data = new int[measure_table_size((long)n+4, l, sizeof(int))];
     std::copy(src.counts, src.counts+(d+1), this->counts);
-    std::copy(src.data, src.data+(l*(n+4)), this->data);
+    std::copy(src.data, src.data+measure_table_size((long)n+4, l, sizeof(int)), this->data);
     this->top = src.top;
 }
 
@@ -112,7 +125,7 @@ Small::set(const Measures &other)
         delete[] data;
         delete[] counts;
         counts = new int[src->d+1];
-        data = new int[src->l * (src->n+4)];
+        data = new int[measure_table_size((long)src->n+4, src->l, sizeof(int))];
     }
 
     this->player = src->player;
@@ -120,7 +133,7 @@ Small::set(const Measures &other)
     this->d = src->d;
     this->l = src->l;
     std::copy(src->counts, src->counts+(d+1), this->counts);
-    std::copy(src->data, src->data+(l*(n+4)), this->data);
+    std::copy(src->data, src->data+measure_table_size((long)n+4, l, sizeof(int)), this->data);
     this->top = src->top;
 }
 
@@ -134,8 +147,8 @@ void Small::copy(int from, int to)
         }
     }
 
-    int *fp = data + (from+4)*l;
-    int *tp = data + (to+4)*l;
+    int *fp = data + measure_offset(from, l);
+    int *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = *fp++;
     top[to+4] = top[from+4];
 }
@@ -152,15 +165,15 @@ void Small::copy_from(const Measures& mother, int from, int to)
         }
     }
 
-    int *fp = other->data + (from+4)*l;
-    int *tp = data + (to+4)*l;
+    int *fp = other->data + measure_offset(from, l);
+    int *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = *fp++;
     top[to+4] = other->top[from+4];
 }
 
 void Small::copy_bot(int to)
 {
-    int *tp = data + (to+4)*l;
+    int *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = 0;
     top[to+4] = 0;
 }
@@ -190,7 +203,7 @@ void Small::see(int tgt, int priority)
     // for player 0 tuple of 0, 2, 4, 6, 8...
     // for player 1 tuple of 1, 3, 5, 7, 9...
 
-    int *tp = data + (tgt+4)*l;
+    int *tp = data + measure_offset(tgt, l);
     for (int i=0; i<l; i++) {
         int tuple_p = this->player + 2*i;
         if (tuple_p < priority) {
@@ -220,7 +233,7 @@ void Small::inc(int tgt)
 {
     if (top[tgt+4]) return; // nothing to do
 
-    int *tp = data + (tgt+4)*l;
+    int *tp = data + measure_offset(tgt, l);
     for (int i=0; i<l; i++) {
         int tuple_p = this->player + 2*i;
         if (tp[i] == counts[tuple_p]) {
@@ -248,8 +261,8 @@ int Small::compare(int i, int j) const
     }
     if (top[j+4]) return -1;
     // Compare tuples, starting at the highest (last) value
-    int *ip = data + (i+4)*l;
-    int *jp = data + (j+4)*l;
+    int *ip = data + measure_offset(i, l);
+    int *jp = data + measure_offset(j, l);
     for (int x=l-1; x>=0; x--) {
         if (ip[x] < jp[x]) return -1;
         if (ip[x] > jp[x]) return 1;
@@ -267,8 +280,8 @@ bool Small::eq(int i, int j) const
     if (top[j+4]) return false;
 
 
-    int *ip = data + (i+4)*l;
-    int *jp = data + (j+4)*l;
+    int *ip = data + measure_offset(i, l);
+    int *jp = data + measure_offset(j, l);
     for (int x = 0; x < l; x++) {
         if (ip[x] != jp[x]) return false;
     }
@@ -277,7 +290,7 @@ bool Small::eq(int i, int j) const
 
 void Small::stream(std::ostream &out, int i) const
 {
-    int *ip = data + (i+4)*l;
+    int *ip = data + measure_offset(i, l);
     if (top[i+4]) {
         out << "Top";
     } else {
@@ -292,7 +305,7 @@ std::vector<std::byte> Small::store(int tgt) const
     std::vector<std::byte> blob;
     blob.reserve(static_cast<size_t>(l) * sizeof(int) + 1); // perf: avoid reallocs
 
-    int *tp = data + (tgt+4) * l;
+    int *tp = data + measure_offset(tgt, l);
     for (int i=0; i<l; i++) {
         push_le<int>(blob, *tp++);
     }
@@ -305,7 +318,7 @@ void Small::load(int tgt, const std::vector<std::byte>& blob)
 {
     size_t cur = 0;
 
-    int* tp = data + (tgt + 4) * l;
+    int* tp = data + measure_offset(tgt, l);
     for (int i = 0; i < l; ++i) {
         *tp++ = read_le_advance<int>(blob, cur);
     }
@@ -352,8 +365,9 @@ Ordered::Ordered(const Game &game, const int player)
     //std::cout << "l=" << l << std::endl;
 
     // allocate and initialize the vertices
-    data = new int[l * (n+4)];
-    std::fill(data, data + (l*(n+4)), -1);
+    const size_t size = measure_table_size((long)n+4, l, sizeof(int));
+    data = new int[size];
+    std::fill(data, data + size, -1);
     top.resize(n+4);
 }
 
@@ -366,8 +380,8 @@ Ordered::Ordered(const Ordered &src)
     this->l = src.l;
     this->max_pr = src.max_pr;
     this->max_opp_pr = src.max_opp_pr;
-    this->data = new int[l * (n+4)];
-    std::copy(src.data, src.data+(l*(n+4)), this->data);
+    this->data = new int[measure_table_size((long)n+4, l, sizeof(int))];
+    std::copy(src.data, src.data+measure_table_size((long)n+4, l, sizeof(int)), this->data);
     this->top = src.top;
     this->priorities = src.priorities;
 }
@@ -385,7 +399,7 @@ Ordered::set(const Measures &other)
     if (src == this) return;
     if (n != src->n or d != src->d or l != src->l) {
         delete[] data;
-        data = new int[src->l * (src->n+4)];
+        data = new int[measure_table_size((long)src->n+4, src->l, sizeof(int))];
     }
 
     this->player = src->player;
@@ -395,15 +409,15 @@ Ordered::set(const Measures &other)
     this->l = src->l;
     this->max_pr = src->max_pr;
     this->max_opp_pr = src->max_opp_pr;
-    std::copy(src->data, src->data+(l*(n+4)), this->data);
+    std::copy(src->data, src->data+measure_table_size((long)n+4, l, sizeof(int)), this->data);
     this->top = src->top;
     this->priorities = src->priorities;
 }
 
 void Ordered::copy(int from, int to)
 {
-    int *fp = data + (from+4)*l;
-    int *tp = data + (to+4)*l;
+    int *fp = data + measure_offset(from, l);
+    int *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = *fp++;
     top[to+4] = top[from+4];
 }
@@ -411,15 +425,15 @@ void Ordered::copy(int from, int to)
 void Ordered::copy_from(const Measures& mother, int from, int to)
 {
     const Ordered *other = dynamic_cast<const Ordered*>(&mother);
-    int *fp = other->data + (from+4)*l;
-    int *tp = data + (to+4)*l;
+    int *fp = other->data + measure_offset(from, l);
+    int *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = *fp++;
     top[to+4] = other->top[from+4];
 }
 
 void Ordered::copy_bot(int to)
 {
-    int *tp = data + (to+4)*l;
+    int *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = -1;
     top[to+4] = 0;
 }
@@ -437,7 +451,7 @@ bool Ordered::is_top(int tgt) const
 int Ordered::val(int tgt) const
 {
     int res = 0;
-    int *tp = data + (tgt+4)*l;
+    int *tp = data + measure_offset(tgt, l);
     bool found = false;
     for (int x=l-1; x>=0; x--) {
         res *= 2;
@@ -457,7 +471,7 @@ void Ordered::see(int tgt, int priority)
     assert(tgt != -3); // (scratch slot; the solvers use -1)
     // the result is the smaller of <tgt> raised by <priority> (computed in place) and of
     // <tgt> first bumped and then raised (computed in -3; bump fails if the lowest value is _)
-    if (data[(tgt+4)*l] == -1) {
+    if (data[measure_offset(tgt, l)] == -1) {
         up(tgt, priority);
     } else {
         copy(tgt, -3);
@@ -469,7 +483,7 @@ void Ordered::see(int tgt, int priority)
             }
         }
     }
-    int last = *(data + (tgt+4)*l + l - 1);
+    int last = *(data + measure_offset(tgt, l) + l - 1);
     if (last != -1 && (last & 1) == player) {
         top[tgt+4] = true;
     }
@@ -477,7 +491,7 @@ void Ordered::see(int tgt, int priority)
 
 bool Ordered::up(int tgt, int p)
 {
-    int *tp = data + (tgt+4)*l;
+    int *tp = data + measure_offset(tgt, l);
 
     // return if already top
     if (top[tgt+4]) return false;
@@ -513,7 +527,7 @@ bool Ordered::bump(int tgt)
 {
     if (top[tgt+4]) return false; // nothing to do
 
-    int *tp = data + (tgt+4)*l;
+    int *tp = data + measure_offset(tgt, l);
 
     if (tp[0] == -1) return false; // nothing to do
 
@@ -555,7 +569,7 @@ void Ordered::inc(int tgt)
 {
     if (top[tgt+4]) return;
 
-    int *tp = data + (tgt+4)*l;
+    int *tp = data + measure_offset(tgt, l);
 
     for (int i=0; i<l; i++) {
         int min = d;
@@ -606,8 +620,8 @@ int Ordered::compare(int i, int j) const
     if (top[j+4]) return -1;
 
     // Compare tuples, starting at the highest (last) value
-    int *ip = data + (i+4)*l;
-    int *jp = data + (j+4)*l;
+    int *ip = data + measure_offset(i, l);
+    int *jp = data + measure_offset(j, l);
     if (std::memcmp(ip, jp, sizeof(int)*l) == 0) return 0;
     for (int x=l-1; x>=0; x--) {
         if (ip[x] == jp[x]) continue;
@@ -635,8 +649,8 @@ bool Ordered::eq(int i, int j) const
     if (top[j+4]) return false;
 
 
-    int *ip = data + (i+4)*l;
-    int *jp = data + (j+4)*l;
+    int *ip = data + measure_offset(i, l);
+    int *jp = data + measure_offset(j, l);
     for (int x = 0; x < l; x++) {
         if (ip[x] != jp[x]) return false;
     }
@@ -645,7 +659,7 @@ bool Ordered::eq(int i, int j) const
 
 void Ordered::stream(std::ostream &out, int i) const
 {
-    int *ip = data + (i+4)*l;
+    int *ip = data + measure_offset(i, l);
     if (top[i+4]) {
         out << "Top";
     } else {
@@ -663,7 +677,7 @@ std::vector<std::byte> Ordered::store(int tgt) const
     std::vector<std::byte> blob;
     blob.reserve(static_cast<size_t>(l) * sizeof(int) + 1); // perf: avoid reallocs
         
-    int *tp = data + (tgt+4) * l; 
+    int *tp = data + measure_offset(tgt, l); 
     for (int i=0; i<l; i++) {
         push_le<int>(blob, *tp++);
     }
@@ -676,7 +690,7 @@ void Ordered::load(int tgt, const std::vector<std::byte>& blob)
 {       
     size_t cur = 0;
 
-    int* tp = data + (tgt + 4) * l;
+    int* tp = data + measure_offset(tgt, l);
     for (int i = 0; i < l; ++i) {
         *tp++ = read_le_advance<int>(blob, cur);
     }

@@ -20,6 +20,7 @@
 #ifndef GPM_HPP
 #define GPM_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -56,6 +57,23 @@ public:
 
     Measures& operator=(const Measures& src) { this->set(src); return *this; }
 };
+
+/**
+ * Small and Ordered store <width> ints per slot, for slots -4..n-1. Both products below
+ * are computed in size_t: with int operands they overflow on large games, for instance
+ * 65,536 vertices with 32,768 components per slot.
+ */
+inline size_t measure_offset(int slot, int width) // first component of <slot>
+{
+    return (size_t)(slot+4) * (size_t)width;
+}
+
+/**
+ * The number of components of a table of <slots> slots of <width> components each.
+ * Throws std::length_error if a table of <component>-byte components does not fit in
+ * the address space.
+ */
+size_t measure_table_size(long slots, long width, size_t component);
 
 enum class MeasureKind {
     Small,

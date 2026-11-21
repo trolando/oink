@@ -30,6 +30,12 @@ All notable changes to Oink will be documented in this file.
   solving). Its halting scans read that state for every vertex, so an
   uninitialised value could count as a strategy change and add a major
   iteration.
+- GPM, PMTL and PMA compute the sizes and row offsets of their small and
+  ordered measure tables in `size_t`, and PSI the row offsets of its
+  valuation table. The `int` products overflowed on large games, for
+  example with 65,536 vertices and 32,768 small-measure components per
+  vertex. A table that does not fit in the address space now raises
+  `std::length_error`.
 
 ## [1.2.1] - 2026-11-19
 

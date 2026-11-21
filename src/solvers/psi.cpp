@@ -15,7 +15,9 @@
  */
 
 #include <cassert>
+#include <cstdint>
 #include <cstring>
+#include <stdexcept>
 #include <string>
 
 #include "psi.hpp"
@@ -59,8 +61,8 @@ PSISolver::si_val_less(int a, int b)
     // if b is won or on even cycle and a is not, then "a < b"
     if (b != -1 && (won[b] || done[b] == 2)) return true;
     // neither a/b are won/on even cycle
-    int *a_val = a == -1 ? NULL : val + k*a;
-    int *b_val = b == -1 ? NULL : val + k*b;
+    int *a_val = a == -1 ? NULL : val + (size_t)k*a;
+    int *b_val = b == -1 ? NULL : val + (size_t)k*b;
     // find highest priority where they differ
     for (int i=k-1; i>=0; i--) {
         const int a_i = a == -1 ? 0 : a_val[i];
@@ -78,7 +80,7 @@ PSISolver::si_top_val(int a)
 {
     // find highest priority
     for (int i=k-1; i>=0; i--) {
-        if (val[k*a+i] != 0) return i;
+        if (val[(size_t)k*a+i] != 0) return i;
     }
     return -1;
 }
@@ -110,9 +112,9 @@ PSISolver::compute_val(int v, std::vector<int>& next)
 
     // compute valuation of current node
     int st = str[v];
-    int *dst = val + k*v;
+    int *dst = val + (size_t)k*v;
     if (st == -1 or halt[st]) memset(dst, 0, sizeof(int[k]));
-    else memcpy(dst, val + k*st, sizeof(int[k])); // copy from successor
+    else memcpy(dst, val + (size_t)k*st, sizeof(int[k])); // copy from successor
     dst[priority(v)]++;
 
     // its predecessors in the strategy are next
@@ -243,10 +245,10 @@ PSISolver::compute_vals_seq(void)
         q.pop_back();
 
         // set valuation
-        int *val_v = val + k*v;
+        int *val_v = val + (size_t)k*v;
         int s = str[v];
         if (s == -1 or halt[s]) memset(val_v, 0, sizeof(int[k]));
-        else memcpy(val_v, val+k*s, sizeof(int[k]));
+        else memcpy(val_v, val+(size_t)k*s, sizeof(int[k]));
         val_v[priority(v)]++;
         done[v] = 1; // mark "1" as processed and not on a cycle
 
@@ -448,7 +450,7 @@ PSISolver::print_debug()
         if (done[i] == 3) continue; // disabled or won
         if (disabled[i]) LOGIC_ERROR;
         logger << "vertex " << label_vertex(i) << ": [";
-        for (int j=0; j<k; j++) logger << (j?" ":"") << val[k*i+j];
+        for (int j=0; j<k; j++) logger << (j?" ":"") << val[(size_t)k*i+j];
         logger << "] ";
         if (done[i] == 2) logger << "c ";
         if (halt[i]) logger << "h ";
@@ -562,7 +564,12 @@ PSISolver::run()
     k++;
 
     // now create the data structure
-    val = new int[k*nodecount()];
+    // (k*n can exceed INT_MAX; rows are addressed as (size_t)k*v)
+    if ((size_t)nodecount() > SIZE_MAX / sizeof(int) / (size_t)k) {
+        throw std::length_error("psi: valuation table of " + std::to_string(nodecount()) + " vertices of " +
+                                std::to_string(k) + " priorities does not fit in memory");
+    }
+    val = new int[(size_t)k*nodecount()];
     str = new int[nodecount()];
     halt = new int[nodecount()];
     done = new int[nodecount()];
