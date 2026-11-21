@@ -83,6 +83,7 @@ private:
     template<bool GoUp, bool UseTangles> bool update(Measures &pm, Measures &target_pm, const int player);
     template<class Measure, bool GoUp, bool UseTangles> bool updateMeasure(Measure &pm, Measure &target_pm, const int player);
     void solve(Measures &pm, const int player);
+    void initOrder(const int pl);
     void shortcuts(const int player, Measures &src, Measures &target1, Measures &target2);
 
     /** stuff for extractTangles **/

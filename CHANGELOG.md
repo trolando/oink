@@ -24,6 +24,11 @@ All notable changes to Oink will be documented in this file.
   effect.
 - ZLKJ stops attracting to a region when its heads exhaust the subgame,
   as ZLK does: no incoming edge of a head can then be attracted.
+- PMTL and PMA build the measures and vertex order of Odd only when an
+  update of Even leaves unsolved vertices, and no longer copy the vertex
+  order when no measure changed. On large games that the first update
+  solves, this lowers their peak address space by up to 8.1 GiB. PMA is
+  3 to 15% faster per game on model and equivalence checking.
 
 ### Fixed
 

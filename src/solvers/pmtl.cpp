@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <memory>
 
 #include "pmtl.hpp"
 #include "oink/uintqueue.hpp"
@@ -500,10 +501,12 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
             else order[j++] = v;
         }
         order.resize(j);
-        std::sort(moved.begin(), moved.end(), max_pm_first);
-        merged.resize(order.size() + moved.size());
-        std::merge(order.begin(), order.end(), moved.begin(), moved.end(), merged.begin(), max_pm_first);
-        order.swap(merged);
+        if (!moved.empty()) {
+            std::sort(moved.begin(), moved.end(), max_pm_first);
+            merged.resize(order.size() + moved.size());
+            std::merge(order.begin(), order.end(), moved.begin(), moved.end(), merged.begin(), max_pm_first);
+            order.swap(merged);
+        }
     }
     Changed[player].reset();
     const int norder = (int)order.size();
@@ -1226,6 +1229,32 @@ PMTLSolver::parseOptions(std::string& opts) {
     return true;
 }
 
+/**
+ * Make the vertex order of player <pl> for its first update.
+ * All measures start at bottom, so the priority order alone defines the order: first the
+ * vertices of priority parity <pl> from high to low priority, then the others from low to
+ * high priority. Shortcuts mark any changes before the first update of <pl>.
+ */
+void
+PMTLSolver::initOrder(const int pl)
+{
+    order[pl].clear();
+    order[pl].reserve(G.count());
+    Changed[pl].resize(nodecount());
+    for (int v=nodecount()-1; v>=0; v--) {
+        if (G[v] and (priority(v)&1) == pl) order[pl].push_back(v);
+    }
+    for (int first=0; first<nodecount();) {
+        int last=first+1;
+        while (last<nodecount() and priority(last) == priority(first)) last++;
+        if ((priority(first)&1) != pl) {
+            for (int v=last-1; v>=first; v--) if (G[v]) order[pl].push_back(v);
+        }
+        first=last;
+    }
+    sorted[pl] = true;
+}
+
 void
 PMTLSolver::run()
 {
@@ -1250,30 +1279,12 @@ PMTLSolver::run()
     }
     Q.resize(nodecount());
 
-    // vertex orders
-    for (int pl=0; pl<2; pl++) {
-        order[pl].clear();
-        Changed[pl].resize(nodecount());
-        // All measures start at bottom, so the priority order alone defines both orders.
-        // Shortcuts mark any changes before the other player's first update.
-        for (int v=nodecount()-1; v>=0; v--) {
-            if (G[v] and (priority(v)&1) == pl) order[pl].push_back(v);
-        }
-        for (int first=0; first<nodecount();) {
-            int last=first+1;
-            while (last<nodecount() and priority(last) == priority(first)) last++;
-            if ((priority(first)&1) != pl) {
-                for (int v=last-1; v>=first; v--) if (G[v]) order[pl].push_back(v);
-            }
-            first=last;
-        }
-        sorted[pl] = true;
-    }
-
-    Measures *pm0 = new_measure(measure_kind, game, 0);
-    Measures *pm1 = new_measure(measure_kind, game, 1);
-    Measures *pm0b = new_measure(measure_kind, game, 0);
-    Measures *pm1b = new_measure(measure_kind, game, 1);
+    // Even updates first. The order and the measures of Odd are only made once an update of
+    // Even leaves unsolved vertices, before the shortcuts of Even can write Odd's measures.
+    initOrder(0);
+    std::unique_ptr<Measures> pm0(new_measure(measure_kind, game, 0));
+    std::unique_ptr<Measures> pm0b(new_measure(measure_kind, game, 0));
+    std::unique_ptr<Measures> pm1, pm1b;
 
     G = disabled;
     G.flip();
@@ -1316,6 +1327,11 @@ PMTLSolver::run()
             evenlifts += lifts - previous_lifts;
             // All remaining vertices may have been solved by dominion attraction.
             if (G.none()) break;
+            if (!pm1) {
+                initOrder(1);
+                pm1.reset(new_measure(measure_kind, game, 1));
+                pm1b.reset(new_measure(measure_kind, game, 1));
+            }
             pm0->set(*pm0b);
             if (use_shortcuts) shortcuts(0, *pm0, *pm1, *pm1b);
             if (!c0) {
@@ -1373,10 +1389,6 @@ PMTLSolver::run()
     delete[] tin;
     delete[] str;
     delete[] pea_vidx;
-    delete pm0;
-    delete pm1;
-    delete pm0b;
-    delete pm1b;
 }
 
 }
