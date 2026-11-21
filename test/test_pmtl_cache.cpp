@@ -82,12 +82,12 @@ public:
         solver.escape_offset.resize(n);
         solver.escape_stamp.resize(n);
         solver.escape_epoch = std::numeric_limits<unsigned int>::max();
-        auto incoming = std::make_unique<std::vector<int>[]>(n);
         auto members = std::make_unique<int[]>(5);
         const int pairs[] = {0, 1, 1, -1, -1};
         std::copy(pairs, pairs+5, members.get());
-        incoming[2].push_back(0);
-        solver.tin = incoming.get();
+        solver.tangleto.push_back(2);
+        solver.addBacklinks(0);
+        solver.tangleto.clear();
         solver.tv.push_back(members.get());
         solver.tpr.push_back(0);
 

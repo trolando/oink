@@ -185,8 +185,56 @@ PMTLSolver::attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitse
 inline void
 PMTLSolver::attractTangles(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio)
 {
-    const auto &in_cur = tin[v];
-    for (int from : in_cur) attractTangle(from, pl, R, Z, G, max_prio);
+    if (has_tin.empty() or !has_tin[v]) return;
+    const Backlinks &links = tin_pages[v/TIN_PAGE_SIZE][v%TIN_PAGE_SIZE];
+    const int *ts = &tin_pool[links.offset];
+    for (unsigned int i = 0, n = links.size; i < n; i++) attractTangle(ts[i], pl, R, Z, G, max_prio);
+}
+
+
+/**
+ * Add the new tangle <tidx> to the backlinks of its escapes in <tangleto>, after the
+ * tangles found before it.
+ */
+void
+PMTLSolver::addBacklinks(const int tidx)
+{
+    if (has_tin.empty()) {
+        has_tin.resize(nodecount());
+        tin_pages.resize((nodecount()+TIN_PAGE_SIZE-1)/TIN_PAGE_SIZE);
+    }
+    for (const int e : tangleto) {
+        auto &page = tin_pages[e/TIN_PAGE_SIZE];
+        if (!page) page.reset(new Backlinks[TIN_PAGE_SIZE]);
+        auto &links = page[e%TIN_PAGE_SIZE];
+        if (!has_tin[e]) {
+            has_tin[e] = true;
+            links = {};
+        }
+        if (links.size == links.capacity) {
+            // move the list of <e> to a new block of twice the size at the end of the pool
+            const unsigned int cap = links.capacity ? 2*links.capacity : 2;
+            const size_t off = tin_pool.size();
+            tin_pool.resize(off+cap);
+            if (links.size) std::copy_n(&tin_pool[links.offset], links.size, &tin_pool[off]);
+            links.offset = off;
+            links.capacity = cap;
+        }
+        tin_pool[links.offset+links.size++] = tidx;
+    }
+}
+
+
+/**
+ * Allocate the workspace of extractTangles when it is first used.
+ */
+void
+PMTLSolver::prepareExtraction()
+{
+    if (pea_vidx) return;
+    pea_vidx.reset(new unsigned int[nodecount()]);
+    pea_root.resize(nodecount());
+    escapes.resize(nodecount());
 }
 
 /**
@@ -209,11 +257,11 @@ PMTLSolver::extractTangles(int startvertex, bitset &R, int *str)
      */
 
     // beginVisiting
-    pea_vS.push(startvertex);
-    pea_iS.push(0);
+    pea_vS.push_back(startvertex);
+    pea_iS.push_back(0);
     pea_root[startvertex] = true;
     pea_vidx[startvertex] = pea_curidx++;
-    while (pea_vS.nonempty()) {
+    while (!pea_vS.empty()) {
 pearce_again:
         // visitLoop
         const unsigned int n = pea_vS.back();
@@ -237,8 +285,8 @@ pearce_again:
                     if (pea_vidx[to] == 0) {
                         pea_iS.back() = i+1;
                         // beginVisiting
-                        pea_vS.push(to);
-                        pea_iS.push(0);
+                        pea_vS.push_back(to);
+                        pea_iS.push_back(0);
                         pea_root[to] = true;
                         pea_vidx[to] = pea_curidx++;
                         goto pearce_again; // break; continue;
@@ -262,8 +310,8 @@ pearce_again:
                 if (pea_vidx[s] == 0) {
                     pea_iS.back() = 1;
                     // beginVisiting
-                    pea_vS.push(s);
-                    pea_iS.push(0);
+                    pea_vS.push_back(s);
+                    pea_iS.push_back(0);
                     pea_root[s] = true;
                     pea_vidx[s] = pea_curidx++;
                     goto pearce_again; // break; continue;
@@ -276,22 +324,22 @@ pearce_again:
             }
         }
         // finishVisiting
-        pea_vS.pop();
-        pea_iS.pop();
+        pea_vS.pop_back();
+        pea_iS.pop_back();
         if (pea_root[n]) {
             pea_curidx -= 1;
             tangle.push_back(n);
-            while (pea_S.nonempty()) {
+            while (!pea_S.empty()) {
                 const int t = pea_S.back();
                 if (pea_vidx[n]>pea_vidx[t]) break;
-                pea_S.pop();
+                pea_S.pop_back();
                 pea_curidx -= 1;
                 pea_vidx[t] = (unsigned int)-1;
                 tangle.push_back(t);
             }
             pea_vidx[n] = (unsigned int)-1;
         } else {
-            pea_S.push(n);
+            pea_S.push_back(n);
             continue;
         }
 
@@ -323,7 +371,7 @@ pearce_again:
                     int to = *curedge;
                     if (G[to] and !escapes[to]) {
                         escapes[to] = true;
-                        tangleto.push(to);
+                        tangleto.push_back(to);
                     }
                 }
             }
@@ -331,7 +379,7 @@ pearce_again:
 
         if (tangle.size()+tangleto.size() < escapes.size()/64) {
             for (const int v : tangle) escapes[v] = false;
-            for (unsigned i=0; i<tangleto.size(); i++) escapes[tangleto[i]] = false;
+            for (const int v : tangleto) escapes[v] = false;
         } else {
             escapes.reset();
         }
@@ -431,11 +479,11 @@ pearce_again:
         const int tidx = tpr.size();
 
         // add back links to all normal vertices in our [out]
-        for (unsigned int x = 0; x < tangleto.size(); x++) tin[tangleto[x]].push_back(tidx);
+        addBacklinks(tidx);
 
         // move tangleto into vout
         int* _tout = new int[tangleto.size()+1];
-        std::copy(&tangleto[0], &tangleto[tangleto.size()], _tout);
+        std::copy(tangleto.begin(), tangleto.end(), _tout);
         _tout[tangleto.size()] = -1;
         tout.push_back(_tout);
 
@@ -784,6 +832,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
                     if (!closed_region) {
                         // TZ := Z without the open heads and the vertices that depend on them
                         // (opponent vertices with an edge to them, and our vertices that play to them)
+                        if (TZ.empty()) TZ.resize(nodecount());
                         for (const int v : Zlist) if (Z[v]) TZ[v] = true;
                         for (const int h : heads) {
                             if (OpenHead[h]) {
@@ -803,6 +852,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
                         }
                         TR = &TZ;
                     }
+                    prepareExtraction();
                     for (const int v : Zlist) pea_vidx[v] = 0; // extractTangles only visits <Z>
                     pea_curidx=1;
                     for (const int h : heads) {
@@ -1063,8 +1113,10 @@ PMTLSolver::shortcuts(const int player, Measures &pm, Measures &target1, Measure
         // vertices, so they are potentially liftable too (without this, a vertex of such a
         // tangle could be given to the opponent and then lifted to top by <player>, leaving it
         // unsolved)
-        if (use_tangles) {
-            for (const int t : tin[v]) {
+        if (use_tangles and !has_tin.empty() and has_tin[v]) {
+            const Backlinks &links = tin_pages[v/TIN_PAGE_SIZE][v%TIN_PAGE_SIZE];
+            for (unsigned int i = 0, n = links.size; i < n; i++) {
+                const int t = tin_pool[links.offset+i];
                 if (tpr[t] == -1 or (tpr[t]&1) != player) continue;
                 for (int *ptr = tv[t]; *ptr != -1; ptr += 2) {
                     const int u = *ptr;
@@ -1266,17 +1318,7 @@ PMTLSolver::run()
     G = disabled;
     G.flip();
     S.resize(nodecount());
-    if (use_tangles) {
-        tin = new std::vector<int>[nodecount()];
-        tangleto.resize(nodecount());
-        escapes.resize(nodecount());
-        pea_vS.resize(nodecount());
-        pea_iS.resize(nodecount());
-        pea_S.resize(nodecount());
-        pea_vidx = new unsigned int[nodecount()];
-        pea_root.resize(nodecount());
-        TZ.resize(nodecount());
-    }
+    // (the tangle storage and the workspace of tangle learning are allocated when used)
     Q.resize(nodecount());
 
     // Even updates first. The order and the measures of Odd are only made once an update of
@@ -1386,9 +1428,7 @@ PMTLSolver::run()
     // Free all explicitly allocated memory
     for (auto &x : tv) delete[] x;
     for (auto &x : tout) delete[] x;
-    delete[] tin;
     delete[] str;
-    delete[] pea_vidx;
 }
 
 }

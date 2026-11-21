@@ -29,6 +29,11 @@ All notable changes to Oink will be documented in this file.
   order when no measure changed. On large games that the first update
   solves, this lowers their peak address space by up to 8.1 GiB. PMA is
   3 to 15% faster per game on model and equivalence checking.
+- PMTL allocates its tangle backlinks and the workspace of tangle
+  learning when it first uses them, as TL does. This lowers its peak
+  address space by up to 1.6 GiB on large games. With the previous
+  change, PMTL is 15 to 22% faster per game on model and equivalence
+  checking.
 
 ### Fixed
 

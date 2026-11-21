@@ -18,6 +18,7 @@
 #define PMTL_HPP
 
 #include <cstdint>
+#include <memory>
 #include <queue>
 
 #include "oink/solver.hpp"
@@ -49,7 +50,14 @@ private:
     bool use_shortcuts = true;
 
     std::vector<int*> tout; // for each tangle
-    std::vector<int> *tin = nullptr; // for each normal vertex
+    // The tangles that escape to a vertex, in discovery order in <tin_pool>.
+    // Only pages with an escape destination have descriptors, and only vertices
+    // marked in <has_tin> have an initialized descriptor.
+    struct Backlinks { size_t offset; unsigned int size, capacity; };
+    static constexpr unsigned int TIN_PAGE_SIZE = 256;
+    std::vector<int> tin_pool;
+    std::vector<std::unique_ptr<Backlinks[]>> tin_pages;
+    bitset has_tin;
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
     std::vector<std::vector<int>> tangles_of_pr; // for each priority, its tangles (in order of creation)
@@ -86,19 +94,21 @@ private:
     void initOrder(const int pl);
     void shortcuts(const int player, Measures &src, Measures &target1, Measures &target2);
 
-    /** stuff for extractTangles **/
-    uintqueue pea_vS; // vS
-    uintqueue pea_iS; // iS
-    uintqueue pea_S;  // S
-    unsigned int* pea_vidx = nullptr;    // rindex
+    /** stuff for extractTangles (the arrays are allocated by prepareExtraction) **/
+    std::vector<unsigned int> pea_vS; // vS
+    std::vector<unsigned int> pea_iS; // iS
+    std::vector<unsigned int> pea_S;  // S
+    std::unique_ptr<unsigned int[]> pea_vidx; // rindex
     bitset pea_root;  // root
     int pea_curidx;   // index
     std::vector<int> tangle; // stores the new tangle
-    uintqueue tangleto; // stores the vertices the tangle can escape to
+    std::vector<int> tangleto; // stores the vertices the tangle can escape to
     bitset escapes; // which escapes we considered
     bitset S; // solved vertices (in queue Q)
     std::vector<int> dom_vector; // stores the solved vertices (in dominions)
+    void prepareExtraction();
     bool extractTangles(int i, bitset &R, int *str);
+    void addBacklinks(const int tidx);
 
 };
 
