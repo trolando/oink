@@ -24,6 +24,7 @@
  * Usage: test_pty <bench_solvers> <oink> <directory of test games> <work directory>
  */
 
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -58,6 +59,11 @@ check(const std::string& name, bool ok)
 
 /**
  * A program running on a pseudo terminal of 100 by 30.
+ *
+ * The program does not lead the session of the terminal: a keeper process does, runs the
+ * program as its child, reports its exit status and keeps the terminal until the test has
+ * read all output. When a session leader exits, the system revokes its terminal, and on FreeBSD
+ * output that was not read yet, such as the last lines before the exit, can then be lost.
  */
 class Session
 {
@@ -75,32 +81,65 @@ public:
         slave = open(slave_name.c_str(), O_RDWR | O_NOCTTY);
         tcgetattr(slave, &before);
 
+        // the keeper reports the exit code of the program on <status>, and exits when the test
+        // writes a byte to <release>; the programs of later sessions must not inherit them
+        int status[2], release[2];
+        if (pipe(status) != 0 || pipe(release) != 0) throw std::runtime_error("cannot create pipes");
+        for (const int fd : {status[0], status[1], release[0], release[1]}) fcntl(fd, F_SETFD, FD_CLOEXEC);
+
         pid = fork();
         if (pid == 0) {
+            close(status[0]);
+            close(release[1]);
             setsid();
             const int tty = open(slave_name.c_str(), O_RDWR);
             ioctl(tty, TIOCSCTTY, 0);
             dup2(tty, 0);
             dup2(tty, 1);
             dup2(tty, 2);
-            if (chdir(directory.c_str()) != 0) _exit(126);
-            setenv("TERM", "xterm-256color", 1);
-            unsetenv("NO_COLOR");
-            std::vector<char*> argv;
-            argv.push_back(const_cast<char*>(program.c_str()));
-            for (const auto& arg : args) argv.push_back(const_cast<char*>(arg.c_str()));
-            argv.push_back(nullptr);
-            execv(program.c_str(), argv.data());
-            _exit(127);
+            int code = 126;
+            if (chdir(directory.c_str()) == 0) {
+                // the signals of the keyboard are for the program
+                for (const int sig : {SIGINT, SIGQUIT, SIGTSTP}) signal(sig, SIG_IGN);
+                const pid_t child = fork();
+                if (child == 0) {
+                    for (const int sig : {SIGINT, SIGQUIT, SIGTSTP}) signal(sig, SIG_DFL);
+                    setenv("TERM", "xterm-256color", 1);
+                    unsetenv("NO_COLOR");
+                    std::vector<char*> argv;
+                    argv.push_back(const_cast<char*>(program.c_str()));
+                    for (const auto& arg : args) argv.push_back(const_cast<char*>(arg.c_str()));
+                    argv.push_back(nullptr);
+                    execv(program.c_str(), argv.data());
+                    _exit(127);
+                }
+                code = 127;
+                int wstatus = 0;
+                if (child > 0) {
+                    while (waitpid(child, &wstatus, 0) < 0 && errno == EINTR) {}
+                    code = WIFEXITED(wstatus) ? WEXITSTATUS(wstatus) : -1;
+                }
+            }
+            if (write(status[1], &code, sizeof(code)) != (ssize_t)sizeof(code)) _exit(1);
+            char byte;
+            while (read(release[0], &byte, 1) < 0 && errno == EINTR) {}
+            _exit(0);
         }
+        close(status[1]);
+        close(release[0]);
+        status_fd = status[0];
+        release_fd = release[1];
     }
 
     ~Session()
     {
         if (pid > 0 && !exited) {
-            kill(pid, SIGKILL);
+            // the process group of the keeper: the keeper and the program
+            if (kill(-pid, SIGKILL) != 0) kill(pid, SIGKILL);
             waitpid(pid, nullptr, 0);
         }
+        close(status_fd);
+        close(release_fd);
         close(slave);
         close(master);
     }
@@ -114,7 +153,7 @@ public:
             if (poll(&fd, 1, 20) <= 0) continue;
             char data[4096];
             const ssize_t n = read(master, data, sizeof(data));
-            if (n <= 0) return; // the program closed the terminal
+            if (n <= 0) return; // the terminal is closed
             output.append(data, (size_t)n);
         }
     }
@@ -140,18 +179,32 @@ public:
         read_for(0.1);
     }
 
-    /** Wait for the program to end; its exit status, or -1. */
+    /**
+     * Wait for the program to end and read all its output; its exit status, or -1 (also when
+     * it did not end within <seconds>).
+     */
     int finish(double seconds = 20)
     {
         const auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
         while (std::chrono::steady_clock::now() < end) {
             read_for(0.05);
-            int status = 0;
-            if (waitpid(pid, &status, WNOHANG) == pid) {
-                exited = true;
-                read_for(0.1);
-                return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+            pollfd fd{status_fd, POLLIN, 0};
+            if (poll(&fd, 1, 0) <= 0) continue;
+            int code = -1;
+            if (read(status_fd, &code, sizeof(code)) != (ssize_t)sizeof(code)) code = -1;
+            // the program has ended, so all its output is in the terminal, which the keeper
+            // still holds: read until nothing is left
+            for (pollfd out{master, POLLIN, 0}; poll(&out, 1, 100) > 0;) {
+                char data[4096];
+                const ssize_t n = read(master, data, sizeof(data));
+                if (n <= 0) break;
+                output.append(data, (size_t)n);
             }
+            const char byte = 0;
+            if (write(release_fd, &byte, 1) != 1) kill(pid, SIGKILL);
+            waitpid(pid, nullptr, 0);
+            exited = true;
+            return code;
         }
         return -1;
     }
@@ -175,7 +228,9 @@ private:
     int slave = -1;
     std::string slave_name;
     termios before{};
-    pid_t pid = -1;
+    int status_fd = -1;
+    int release_fd = -1;
+    pid_t pid = -1; // the keeper
     bool exited = false;
     size_t seen = 0;
 };
@@ -276,7 +331,10 @@ test_experiment(const std::string& bench, const std::string& oink, const std::st
         session.read_for(0.8);
         session.send("\003");
         check("interrupted experiment", session.finish() == 130);
-        check("how to continue", session.expect("--resume="));
+        // after the summary (the experiment also shows how to continue when it starts)
+        const std::string screen = ui::strip(session.output);
+        const size_t summary = screen.rfind("Interrupted; the completed results are kept.");
+        check("how to continue", summary != std::string::npos && screen.find("--resume=", summary) != std::string::npos);
         check("terminal restored after the experiment", session.restored());
     }
     // --experiment again offers to resume, and ignores the other options
