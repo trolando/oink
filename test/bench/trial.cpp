@@ -194,10 +194,10 @@ add_log(Trial& trial, const std::ostringstream& log)
 }
 
 Trial
-execute(const Prepared& prepared, const SolverRun& run, const Options& options, uint32_t seed, const PhaseUpdate& update)
+execute(const Prepared& prepared, const SolverRun& run, const Options& options, uint32_t seed, const PhaseUpdate& update, Trial result)
 {
-    Trial result;
     Phase phase = Phase::Setup;
+    const double earlier_setup = result.setup < 0 ? 0 : result.setup;
     // The solver log is captured only with --trace; otherwise it is discarded.
     std::ostringstream captured;
     std::ostream muted(nullptr);
@@ -219,7 +219,7 @@ execute(const Prepared& prepared, const SolverRun& run, const Options& options, 
         solver.setSolver(run.id);
         solver.setTrace(options.trace < 0 ? 0 : options.trace);
         if (!run.config.empty()) solver.setSolverOptions(run.config);
-        result.setup = seconds_since(start);
+        result.setup = earlier_setup + seconds_since(start);
 
         // the measurement: Oink::run, including SCC decomposition and lazy in-edges
         phase = Phase::Solve;
@@ -255,7 +255,7 @@ execute(const Prepared& prepared, const SolverRun& run, const Options& options, 
         result.status = Status::Ok;
     } catch (const std::exception& error) {
         const double elapsed = seconds_since(start);
-        if (phase == Phase::Setup) result.setup = elapsed;
+        if (phase == Phase::Setup) result.setup = earlier_setup + elapsed;
         else if (phase == Phase::Solve) result.solve = elapsed;
         else if (result.verify < 0) result.verify = elapsed;
         record_failure(result, phase, error);

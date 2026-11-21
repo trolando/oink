@@ -106,6 +106,7 @@ validate(const Options& o, const std::vector<SolverRun>& solvers)
     const int rounds = o.adaptive_sampling() ? o.max_repeats : o.repeats;
     if (o.warmups > std::numeric_limits<int>::max() - rounds) throw std::runtime_error("too many sampling rounds");
     if (o.timeout > 0 && !o.isolate) throw std::runtime_error("a timeout needs isolated trials; use --timeout=0 with --in-process");
+    if (o.fresh_process && !o.isolate) throw std::runtime_error("--fresh-process needs worker process isolation");
     if (o.count < 1 || o.size < 1 || o.maxp < 0 || o.maxe < o.size) throw std::runtime_error("invalid random game parameters (count, size > 0, maxp >= 0, maxe >= size)");
     if (!o.preprocess && (o.inflate || o.compress)) throw std::runtime_error("--inflate and --compress are preprocessing steps; they need --preprocess");
     if (o.inflate && o.compress) throw std::runtime_error("choose --inflate or --compress");
@@ -137,6 +138,7 @@ phase_name(Phase phase)
         case Phase::Setup: return "setup";
         case Phase::Solve: return "solve";
         case Phase::Verify: return "verification";
+        case Phase::Load: return "load";
     }
     return "";
 }
@@ -212,9 +214,10 @@ std::string
 Case::status(size_t s, int repeats) const
 {
     if (fully_preprocessed) return "preprocessed";
+    const Cell& cell = cells[s];
+    if (cell.failure && *cell.failure != Status::SetupError) return status_name(*cell.failure);
     if (input_failed) return "input_error";
     if (prep_failed) return "preparation_error";
-    const Cell& cell = cells[s];
     if (cell.failure) return status_name(*cell.failure);
     return cell.complete(repeats) ? "ok" : "incomplete";
 }

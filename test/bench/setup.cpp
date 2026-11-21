@@ -166,7 +166,9 @@ setup_config(Options& o)
     preprocess.show = [&o] { return std::string(o.preprocess ? "ON" : "OFF"); };
     preprocess.toggle = [&o] {
         o.preprocess = !o.preprocess;
-        return std::string(o.preprocess ? "Preprocessing ON: once per game, outside the solve time." : "Preprocessing OFF.");
+        if (!o.preprocess) return std::string("Preprocessing OFF.");
+        return std::string(o.fresh_process ? "Preprocessing ON: once per trial, outside the solve time." :
+                           "Preprocessing ON: once per game, outside the solve time.");
     };
     config.settings.push_back(preprocess);
     return config;

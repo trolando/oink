@@ -18,8 +18,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <limits>
 #include <numeric>
+#include <sstream>
 
 namespace bench {
 
@@ -215,16 +217,17 @@ cell(const Case& game, size_t s, int repeats, bool heatmap, int color, double be
     if (game.fully_preprocessed) {
         text = "preprocessed";
         code = style::dim;
-    } else if (game.input_failed) {
+    } else if (game.input_failed && c.failure == Status::SetupError) {
         text = "input error";
         code = style::bad;
-    } else if (game.prep_failed) {
+    } else if (game.prep_failed && c.failure == Status::SetupError) {
         text = "prep error";
         code = style::bad;
     } else if (c.failure) {
         if (c.failure_phase == Phase::Setup) text = "setup ";
         if (c.failure_phase == Phase::Solve) text = "solve ";
         if (c.failure_phase == Phase::Verify) text = "verify ";
+        if (c.failure_phase == Phase::Load) text = "load ";
         if (*c.failure == Status::SafetyTimeout) text += "safety";
         else if (*c.failure == Status::MemoryFailure) text += "memory";
         else text += status_name(*c.failure);
@@ -244,6 +247,15 @@ cell(const Case& game, size_t s, int repeats, bool heatmap, int color, double be
             code = style::good;
         }
     }
+}
+
+static std::string
+rss_text(uint64_t bytes)
+{
+    if (!bytes) return "-";
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(1) << bytes / (1024.0 * 1024.0) << " MiB";
+    return out.str();
 }
 
 std::vector<std::string>
@@ -293,7 +305,8 @@ render_table(TableView& view, const TableData& data, int width, int height)
     line(style::bold + header + style::reset);
 
     // the games
-    const size_t body = (size_t)std::max(1, height - (games.empty() ? 11 : 13));
+    const int rss_lines = o.fresh_process ? 2 : o.isolate ? 1 : 0;
+    const size_t body = (size_t)std::max(1, height - (games.empty() ? 11 : 13 + rss_lines));
     view.body = body;
     view.first = ui::keep_visible(view.first, view.selected, games.size(), body);
     for (size_t i = 0; i < body; i++) {
@@ -365,6 +378,18 @@ render_table(TableView& view, const TableData& data, int width, int height)
         }
         line(means);
         line(samples);
+        if (o.fresh_process) {
+            std::string trial_rss = fit("trial peak RSS", name_width) + " |";
+            std::string solve_rss = fit("solve-end RSS", name_width) + " |";
+            for (size_t s = first_column; s < last_column; s++) {
+                trial_rss += fit(rss_text(selected.cells[s].max_trial_rss), cell_width - 1) + " ";
+                solve_rss += fit(rss_text(selected.cells[s].max_solve_rss), cell_width - 1) + " ";
+            }
+            line(trial_rss);
+            line(solve_rss);
+        } else if (o.isolate) {
+            line(fit("Worker process peak RSS  " + rss_text(selected.worker_peak_rss), width));
+        }
     }
 
     // progress, activity and keys

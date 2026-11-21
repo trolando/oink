@@ -95,6 +95,7 @@ public:
     const std::string& directory() const { return root; }
     int session() const { return session_; }
     size_t finished_count() const { return done.size(); }
+    int lock_fd() const { return lock; }
 
 private:
     std::string root;

@@ -64,6 +64,7 @@ settings_arguments(const Options& o)
     if (o.isolate) {
         args.push_back("--timeout=" + exact(o.timeout));
         args.push_back("--safety-timeout=" + exact(o.safety_timeout));
+        if (o.fresh_process) args.push_back("--fresh-process");
     } else {
         args.push_back("--in-process");
     }
@@ -104,7 +105,7 @@ encode_case(const Case& g)
     out << "game " << g.index << ' ' << std::quoted(g.name) << ' ' << std::quoted(g.path) << ' ';
     if (g.seed) out << *g.seed;
     else out << '-';
-    out << ' ' << g.hash << ' ' << g.vertices << ' ' << g.edges << ' ' << g.load << ' ' << g.parse;
+    out << ' ' << std::quoted(g.hash) << ' ' << g.vertices << ' ' << g.edges << ' ' << g.load << ' ' << g.parse;
     out << ' ' << std::quoted(g.error) << ' ' << g.input_failed << ' ' << g.prep_failed << ' ' << g.fully_preprocessed;
     out << ' ' << g.prep.residual_vertices << ' ' << g.prep.residual_edges << ' ' << g.prep.solved_vertices << ' ' << g.prep.seconds << ' ' << std::quoted(g.prep.residual_hash);
     out << ' ' << g.cells.size();
@@ -113,6 +114,8 @@ encode_case(const Case& g)
         out << ' ' << cell.samples().size();
         for (double v : cell.samples()) out << ' ' << v;
     }
+    out << " rss " << g.worker_peak_rss;
+    for (const auto& cell : g.cells) out << ' ' << cell.max_trial_rss << ' ' << cell.max_solve_rss;
     out << " end";
     return out.str();
 }
@@ -125,7 +128,7 @@ decode_case(const std::string& line, Case& g)
     std::string seed;
     in >> word;
     if (word != "game") return false;
-    in >> g.index >> std::quoted(g.name) >> std::quoted(g.path) >> seed >> g.hash >> g.vertices >> g.edges >> g.load >> g.parse;
+    in >> g.index >> std::quoted(g.name) >> std::quoted(g.path) >> seed >> std::quoted(g.hash) >> g.vertices >> g.edges >> g.load >> g.parse;
     in >> std::quoted(g.error) >> g.input_failed >> g.prep_failed >> g.fully_preprocessed;
     in >> g.prep.residual_vertices >> g.prep.residual_edges >> g.prep.solved_vertices >> g.prep.seconds >> std::quoted(g.prep.residual_hash);
     if (!in) return false;
@@ -140,7 +143,7 @@ decode_case(const std::string& line, Case& g)
         int phase = 0;
         size_t count = 0;
         in >> cell.required >> cell.warmups >> failure >> phase >> count;
-        if (!in || failure < -1 || failure > (int)Status::Interrupted || phase < 0 || phase > (int)Phase::Verify || count > 100000000) return false;
+        if (!in || failure < -1 || failure > (int)Status::Interrupted || phase < 0 || phase > (int)Phase::Load || count > 100000000) return false;
         if (failure >= 0) cell.failure = (Status)failure;
         cell.failure_phase = (Phase)phase;
         for (size_t i = 0; i < count; i++) {
@@ -150,6 +153,11 @@ decode_case(const std::string& line, Case& g)
         }
     }
     in >> word;
+    if (word == "rss") {
+        in >> g.worker_peak_rss;
+        for (auto& cell : g.cells) in >> cell.max_trial_rss >> cell.max_solve_rss;
+        in >> word;
+    }
     return (bool)in && word == "end";
 }
 

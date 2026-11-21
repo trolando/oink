@@ -20,11 +20,14 @@
  * The games are read or generated one at a time, in the order of the plan
  * (shuffled with the schedule seed unless --sort). For every game:
  *
- *   1. it is read, parsed and sorted (outside any timing) and prepared once;
+ *   1. it is read, parsed, sorted and prepared to identify the trial input;
  *   2. the rounds run: warm-ups, then measured repetitions until each solver
  *      reaches its sampling target or cap; every round runs the solvers in a
  *      shuffled order, each trial on a fresh copy of the game, verified;
  *   3. its statistics are reported and shown.
+ *
+ * In fresh-process mode the inspection runs in its own process and each
+ * trial repeats the loading and preparation in a fresh executable.
  *
  * A failed trial (solver error, invalid solution, timeout, crash) fails the
  * cell of that solver on that game; its later trials are reported as skipped.
@@ -64,6 +67,9 @@ class Experiment;
  * committed to it.
  */
 int run_benchmark(Options& options, std::vector<SolverRun>& solvers, const std::vector<PlannedGame>& games, const std::string& executable, Experiment* experiment = nullptr);
+
+/** Internal executable entry point for fresh workers. */
+int run_trial_worker(int argc, char** argv);
 
 }
 

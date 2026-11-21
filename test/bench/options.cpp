@@ -39,10 +39,11 @@ metric is the wall time of Oink::run. After warm-ups, measured rounds continue
 for each solver until it reaches both the minimum sample count and the
 accumulated solve-time target, or the repetition cap. Every round runs the
 solvers in a shuffled order. Preprocessing is
-off unless --preprocess: then it runs once per game, outside the timing, the
+off unless --preprocess: then it runs outside the solve timing, the
 solvers solve what it leaves, and their solutions are mapped back and verified
 against the whole game. On POSIX systems the trials run in a worker process,
-so crashes are caught and --timeout applies.
+so crashes are caught and --timeout applies. With --fresh-process each trial
+starts a new process and loads and prepares the game again.
 
 The per-game medians are printed to stderr as each game completes, and the
 summary (sum of medians, the geometric mean over the virtual best solver (VBS),
@@ -105,8 +106,9 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("max-repeat", "Maximum measured repetitions when using an accumulated solve-time target", cxxopts::value<int>()->default_value("10000"))
         ("quick", "One repetition, no warm-up and a fixed count (for testing)")
         ("timeout", "Wall seconds per solve in the worker process; 0 disables (default 30)", cxxopts::value<double>())
-        ("safety-timeout", "Wall seconds each for worker setup and verification (default 300)", cxxopts::value<double>())
+        ("safety-timeout", "Wall seconds each for worker setup, verification and fresh-process loading (default 300)", cxxopts::value<double>())
         ("in-process", "Run the trials in this process: no crash isolation and no timeout")
+        ("fresh-process", "Start a new process for each trial, including loading and preparing the game")
         ("bench-seed", "Seed of the schedule: file order, solver order per round and solver seeds (default: random, reported)", cxxopts::value<uint64_t>())
         ("vary-solver-seed", "Vary the solver RNG seed between rounds (default: fixed per game)")
         ("reference", "Compare the solvers with this one: a selected name, its id, or first (default: none)", cxxopts::value<std::string>())
@@ -133,7 +135,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("artifacts", "Directory for the games and logs of failed trials", cxxopts::value<std::string>()->default_value("benchmark-artifacts"))
         ;
     opts.add_options("Preprocessing")
-        ("preprocess", "Preprocess every game once before its trials, outside the timing: single-parity games, self-loops and winner-controlled winning cycles (default: off)", cxxopts::value<bool>()->implicit_value("true"))
+        ("preprocess", "Preprocess outside the solve time: once per game, or once per fresh trial (default: off)", cxxopts::value<bool>()->implicit_value("true"))
         ("no-preprocess", "Do not preprocess (the default)")
         ("single", "Preprocessing recipe: solve single-parity games (implies --preprocess)")
         ("loops", "Preprocessing recipe: solve self-loops (implies --preprocess)")
@@ -216,6 +218,11 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
 
     // isolation: worker processes where the platform has them
     o.isolate = Worker::supported() && !given(result, "in-process");
+    o.fresh_process = given(result, "fresh-process");
+    if (o.fresh_process && !o.isolate) {
+        if (given(result, "in-process")) throw std::runtime_error("choose --fresh-process or --in-process");
+        throw std::runtime_error("--fresh-process needs worker process isolation");
+    }
     if (!o.isolate) o.timeout = o.safety_timeout = 0;
     if (given(result, "timeout")) o.timeout = result["timeout"].as<double>();
     if (given(result, "safety-timeout")) o.safety_timeout = result["safety-timeout"].as<double>();

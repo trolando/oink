@@ -84,6 +84,7 @@ test_render()
     const double nan = std::numeric_limits<double>::quiet_NaN();
     const auto solvers = roster(3);
     std::vector<Case> games = {game("alpha", {0.002, 0.001, nan}), game("beta", {0.003, 0.004, 0.005})};
+    games.back().worker_peak_rss = 3 * 1024 * 1024;
     TableView view;
     const TableData data{o, solvers, games, 4, 6, 12, 1.5, "beta | s1 | repeat 1/1"};
     const auto lines = render_table(view, data, 100, 30);
@@ -103,9 +104,22 @@ test_render()
           ui::strip(lines[sums + 2]).find("|3.00 ms") != std::string::npos);
     check("selected row sample count", ui::strip(lines[sums + 3]).find("selected solves") == 0 &&
           ui::strip(lines[sums + 3]).find("|1") != std::string::npos);
-    check("progress", ui::strip(lines[sums + 4]).find("50%  6/12") != std::string::npos);
-    check("activity", ui::strip(lines[sums + 5]).find("beta | s1 | repeat 1/1") == 0);
-    check("keys", ui::strip(lines[sums + 6]).find("Space pause/resume") == 0);
+    check("reuse RSS", ui::strip(lines[sums + 4]).find("Worker process peak RSS  3.0 MiB") == 0);
+    check("progress", ui::strip(lines[sums + 5]).find("50%  6/12") != std::string::npos);
+    check("activity", ui::strip(lines[sums + 6]).find("beta | s1 | repeat 1/1") == 0);
+    check("keys", ui::strip(lines[sums + 7]).find("Space pause/resume") == 0);
+
+    o.fresh_process = true;
+    games.back().cells[0].max_trial_rss = 5 * 1024 * 1024;
+    games.back().cells[0].max_solve_rss = 4 * 1024 * 1024;
+    view.review = true;
+    const auto review = render_table(view, data, 100, 30);
+    check("fresh RSS in review", find_row(review, "|5.0 MiB") == find_row(review, "trial peak RSS") &&
+          find_row(review, "|4.0 MiB") == find_row(review, "solve-end RSS") &&
+          find_row(review, "solve-end RSS") < review.size());
+    check("fresh has no reuse RSS", find_row(review, "Worker process peak RSS") == review.size());
+    view.review = false;
+    o.fresh_process = false;
 
     view.heatmap = true;
     const auto heat = render_table(view, data, 100, 30);

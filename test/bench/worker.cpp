@@ -16,8 +16,10 @@
 
 #include "worker.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -29,6 +31,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -62,7 +65,10 @@ struct ReplyHeader
     int32_t parallel;
     int32_t workers;
     uint32_t sizes[3];
-    double times[4];
+    double times[6];
+    uint64_t peak_rss;
+    uint64_t solve_start_rss;
+    uint64_t solve_end_rss;
 };
 
 bool
@@ -110,6 +116,11 @@ send_reply(int fd, const Trial& trial, Phase entering = Phase::None)
     header.times[1] = trial.solve;
     header.times[2] = trial.verify;
     header.times[3] = trial.cpu;
+    header.times[4] = trial.load;
+    header.times[5] = trial.parse;
+    header.peak_rss = trial.peak_rss;
+    header.solve_start_rss = trial.solve_start_rss;
+    header.solve_end_rss = trial.solve_end_rss;
     header.stamp = Clock::now().time_since_epoch().count();
     if (!write_all(fd, &header, sizeof(header)) ||
         !write_all(fd, trial.effective_solver.data(), header.sizes[0]) ||
@@ -136,6 +147,11 @@ parse_reply(std::string& data, Trial& trial, Phase& entering, Clock::time_point&
     trial.solve = header.times[1];
     trial.verify = header.times[2];
     trial.cpu = header.times[3];
+    trial.load = header.times[4];
+    trial.parse = header.times[5];
+    trial.peak_rss = header.peak_rss;
+    trial.solve_start_rss = header.solve_start_rss;
+    trial.solve_end_rss = header.solve_end_rss;
     size_t at = sizeof(header);
     trial.effective_solver = data.substr(at, header.sizes[0]);
     at += header.sizes[0];
@@ -151,6 +167,35 @@ close_fd(int& fd)
 {
     if (fd != -1) ::close(fd);
     fd = -1;
+}
+
+/** Read the process high-water mark without allocating memory in the worker. */
+uint64_t
+peak_rss(long pid = 0)
+{
+#ifdef __linux__
+    char path[64];
+    if (pid) std::snprintf(path, sizeof(path), "/proc/%ld/status", pid);
+    else std::snprintf(path, sizeof(path), "/proc/self/status");
+    const int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0;
+    char status[4096];
+    ssize_t n;
+    do {
+        n = ::read(fd, status, sizeof(status) - 1);
+    } while (n < 0 && errno == EINTR);
+    ::close(fd);
+    if (n <= 0) return 0;
+    status[n] = '\0';
+    const char* hwm = std::strstr(status, "\nVmHWM:");
+    return hwm == nullptr ? 0 : std::strtoull(hwm + 7, nullptr, 10) * 1024;
+#elif defined(__APPLE__)
+    rusage usage{};
+    if (!pid && getrusage(RUSAGE_SELF, &usage) == 0) return (uint64_t)usage.ru_maxrss;
+    return 0;
+#else
+    return 0;
+#endif
 }
 
 }
@@ -177,24 +222,40 @@ Worker::running() const
 }
 
 void
-Worker::start()
+Worker::start(const std::vector<std::string>& command, int lock_fd)
 {
     int requests[2];
     int replies[2];
     int out[2];
-    if (pipe(requests) != 0) throw std::runtime_error("cannot create a pipe for the worker");
+    if (pipe(requests) != 0) throw std::system_error(errno, std::generic_category(), "cannot create a worker pipe");
     if (pipe(replies) != 0) {
+        const int error = errno;
         ::close(requests[0]);
         ::close(requests[1]);
-        throw std::runtime_error("cannot create a pipe for the worker");
+        throw std::system_error(error, std::generic_category(), "cannot create a worker pipe");
     }
     if (pipe(out) != 0) {
+        const int error = errno;
         for (int fd : {requests[0], requests[1], replies[0], replies[1]}) ::close(fd);
-        throw std::runtime_error("cannot create a pipe for the worker");
+        throw std::system_error(error, std::generic_category(), "cannot create a worker pipe");
     }
     // external solvers started by the child must not hold these pipes
     for (int fd : {requests[0], requests[1], replies[0], replies[1], out[0], out[1]}) fcntl(fd, F_SETFD, FD_CLOEXEC);
 
+    std::vector<std::string> args;
+    std::vector<char*> argv;
+    if (!command.empty()) {
+        try {
+            args = {command.front(), "--trial-worker", std::to_string(requests[0]),
+                    std::to_string(replies[1]), std::to_string(lock_fd)};
+            args.insert(args.end(), command.begin() + 1, command.end());
+            for (auto& arg : args) argv.push_back(arg.data());
+            argv.push_back(nullptr);
+        } catch (...) {
+            for (int fd : {requests[0], requests[1], replies[0], replies[1], out[0], out[1]}) ::close(fd);
+            throw;
+        }
+    }
     // the child gets a copy of everything buffered: flush it first
     std::cout.flush();
     std::cerr.flush();
@@ -223,32 +284,16 @@ Worker::start()
         ::close(requests[1]);
         ::close(replies[0]);
         ::close(out[0]);
-        try {
-            bool first = true;
-            Request request;
-            while (read_all(requests[0], &request, sizeof(request))) {
-                Trial trial;
-                Phase phase = Phase::Setup;
-                try {
-                    if (first && begin) begin();
-                    first = false;
-                    trial = body((size_t)request.solver, request.seed, [&](Phase next, const Trial& progress) {
-                        if (next == phase) return;
-                        send_reply(replies[1], progress, next);
-                        phase = next;
-                    });
-                } catch (const std::exception& error) {
-                    record_failure(trial, phase, error);
-                }
-                send_reply(replies[1], trial);
+        if (!argv.empty()) {
+            for (int fd : {requests[0], replies[1], lock_fd}) {
+                if (fd >= 0 && fcntl(fd, F_SETFD, 0) == -1) _exit(3);
             }
-            if (!first && end) end();
-        } catch (const std::bad_alloc&) {
-            _exit(MEMORY_EXIT); // the reply itself could not be built
-        } catch (const std::exception& error) {
-            std::fprintf(stderr, "worker error: %s\n", error.what());
-            _exit(3);
+            execv(argv[0], argv.data());
+            const int error = errno;
+            std::perror("cannot start fresh trial executable");
+            _exit(error == ENOMEM ? MEMORY_EXIT : 3);
         }
+        serve(requests[0], replies[1], false);
         // no destructors or exit handlers: they belong to the benchmark process
         _exit(0);
     }
@@ -269,6 +314,67 @@ Worker::start()
 }
 
 void
+Worker::serve(int requests, int replies, bool once)
+{
+    try {
+        bool first = true;
+        Request request;
+        while (read_all(requests, &request, sizeof(request))) {
+            Trial trial;
+            Phase phase = once ? Phase::Load : Phase::Setup;
+            uint64_t observed_peak = 0;
+            uint64_t solve_start_rss = 0;
+            uint64_t solve_end_rss = 0;
+            try {
+                if (first && begin) begin();
+                first = false;
+                trial = body((size_t)request.solver, request.seed, [&](Phase next, const Trial& progress) {
+                    if (next == phase) return;
+                    if (once) {
+                        const auto rss = peak_rss();
+                        observed_peak = std::max(observed_peak, rss);
+                        if (next == Phase::Solve) solve_start_rss = rss;
+                        if (next == Phase::Verify) solve_end_rss = rss;
+                        Trial update = progress;
+                        update.solve_start_rss = solve_start_rss;
+                        update.solve_end_rss = solve_end_rss;
+                        update.peak_rss = observed_peak;
+                        send_reply(replies, update, next);
+                    } else {
+                        send_reply(replies, progress, next);
+                    }
+                    phase = next;
+                });
+            } catch (const std::exception& error) {
+                record_failure(trial, phase, error);
+            }
+            trial.peak_rss = std::max(peak_rss(), observed_peak);
+            trial.solve_start_rss = solve_start_rss;
+            trial.solve_end_rss = solve_end_rss;
+            send_reply(replies, trial);
+            if (once) break;
+        }
+        if (!first && end) end();
+    } catch (const std::bad_alloc&) {
+        _exit(MEMORY_EXIT); // the reply itself could not be built
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "worker error: %s\n", error.what());
+        _exit(3);
+    }
+}
+
+int
+Worker::serve_once(int requests, int replies, int lock_fd, Body body)
+{
+    for (int fd : {requests, replies, lock_fd}) {
+        if (fd >= 0 && fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) return 3;
+    }
+    Worker worker(std::move(body));
+    worker.serve(requests, replies, true);
+    _exit(0);
+}
+
+void
 Worker::drain_output()
 {
     char data[4096];
@@ -286,10 +392,11 @@ Worker::drain_output()
  * End the child: <force> kills its process group at once; otherwise the child
  * gets a moment to finish after its requests are closed.
  */
-void
+uint64_t
 Worker::kill(bool force)
 {
-    if (pid <= 0) return;
+    if (pid <= 0) return 0;
+    const uint64_t peak = force ? peak_rss(pid) : 0;
     close_fd(request_fd);
     bool reaped = false;
     if (!force) {
@@ -314,6 +421,7 @@ Worker::kill(bool force)
     close_fd(reply_fd);
     close_fd(output_fd);
     pid = -1;
+    return peak;
 }
 
 void
@@ -332,7 +440,7 @@ Worker::crashed(Trial trial, Phase phase)
     pid_t r = 0;
     for (int i = 0; i < 500; i++) {
         r = waitpid((pid_t)pid, &status, WNOHANG);
-        if (r != 0) break;
+        if (r != 0 && !(r < 0 && errno == EINTR)) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     drain_output();
@@ -342,7 +450,7 @@ Worker::crashed(Trial trial, Phase phase)
     } else if (r == (pid_t)pid && WIFEXITED(status)) {
         if (WEXITSTATUS(status) == MEMORY_EXIT) {
             trial.status = Status::MemoryFailure;
-            trial.message = "worker ran out of memory while reporting the trial";
+            trial.message = "worker ran out of memory before reporting a result";
         } else {
             trial.message = "worker exited with status " + std::to_string(WEXITSTATUS(status)) + " without a result";
         }
@@ -365,7 +473,7 @@ Worker::crashed(Trial trial, Phase phase)
         close_fd(output_fd);
         pid = -1;
     } else {
-        kill(true);
+        trial.peak_rss = std::max(trial.peak_rss, kill(true));
     }
     return trial;
 }
@@ -374,7 +482,7 @@ Trial
 Worker::timed_out(Trial trial, Phase phase)
 {
     drain_output();
-    kill(true);
+    trial.peak_rss = std::max(trial.peak_rss, kill(true));
     trial.status = phase == Phase::Solve ? Status::Timeout : Status::SafetyTimeout;
     trial.failure_phase = phase;
     trial.message = std::string(phase_name(phase)) + " exceeded its wall-clock limit";
@@ -383,13 +491,15 @@ Worker::timed_out(Trial trial, Phase phase)
 }
 
 Trial
-Worker::run(size_t solver, uint32_t seed, double timeout, double safety_timeout, volatile std::sig_atomic_t* quit)
+Worker::run(size_t solver, uint32_t seed, double timeout, double safety_timeout, volatile std::sig_atomic_t* quit,
+            const std::vector<std::string>& command, int lock_fd)
 {
     auto started = Clock::now();
     Trial progress;
-    Phase phase = Phase::Setup;
+    const bool fresh = !command.empty();
+    Phase phase = fresh ? Phase::Load : Phase::Setup;
     try {
-        if (!running()) start();
+        if (!running()) start(command, lock_fd);
     } catch (const std::exception& error) {
         record_failure(progress, phase, error);
         return progress;
@@ -403,12 +513,11 @@ Worker::run(size_t solver, uint32_t seed, double timeout, double safety_timeout,
 
     for (;;) {
         if (quit != nullptr && *quit) {
-            kill(true);
-            Trial trial;
-            trial.status = Status::Interrupted;
-            trial.failure_phase = phase;
-            trial.message = "interrupted";
-            return trial;
+            progress.peak_rss = std::max(progress.peak_rss, kill(true));
+            progress.status = Status::Interrupted;
+            progress.failure_phase = phase;
+            progress.message = "interrupted";
+            return progress;
         }
         // Consume queued transitions before deciding which phase is still running.
         // A completed solve's own clock reading excludes the progress messages.
@@ -426,12 +535,14 @@ Worker::run(size_t solver, uint32_t seed, double timeout, double safety_timeout,
             if (limit > 0 && elapsed >= limit) {
                 // The next phase may already have started; report the first overrun.
                 if (phase != Phase::Verify) trial.verify = -1;
-                if (phase == Phase::Setup) trial.solve = trial.cpu = -1;
+                if (phase == Phase::Load || phase == Phase::Setup) trial.solve = trial.cpu = -1;
+                if (phase == Phase::Load) trial.setup = -1;
                 return timed_out(trial, phase);
             }
             if (entering == Phase::None) {
                 drain_output();
                 output.clear();
+                if (fresh) stop();
                 return trial;
             }
             progress = std::move(trial);
@@ -482,14 +593,15 @@ Worker::running() const
 }
 
 void
-Worker::start()
+Worker::start(const std::vector<std::string>&, int)
 {
     throw std::runtime_error("worker processes are not available on this platform");
 }
 
-void
+uint64_t
 Worker::kill(bool)
 {
+    return 0;
 }
 
 void
@@ -509,13 +621,19 @@ Worker::crashed(Trial, Phase)
 }
 
 Trial
-Worker::run(size_t, uint32_t, double, double, volatile std::sig_atomic_t*)
+Worker::run(size_t, uint32_t, double, double, volatile std::sig_atomic_t*, const std::vector<std::string>&, int)
 {
     Trial trial;
     trial.status = Status::SetupError;
     trial.failure_phase = Phase::Setup;
     trial.message = "worker processes are not available on this platform; use --in-process";
     return trial;
+}
+
+int
+Worker::serve_once(int, int, int, Body)
+{
+    return 3;
 }
 
 #endif

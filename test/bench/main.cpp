@@ -20,6 +20,7 @@
  */
 
 #include <csignal>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -37,6 +38,7 @@ main(int argc, char** argv)
 {
     using namespace bench;
     try {
+        if (argc > 1 && std::strcmp(argv[1], "--trial-worker") == 0) return run_trial_worker(argc, argv);
         Options options;
         std::vector<SolverRun> solvers;
         if (!parse_command_line(argc, argv, options, solvers, std::cout, &std::cerr)) return 0;

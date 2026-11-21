@@ -7,6 +7,7 @@ earlier `test_solvers --benchmark`; `test_solvers` itself tests solvers.
 
 ```
 ./build/bench_solvers examples                         # the default solvers on a directory
+./build/bench_solvers --fresh-process --quick --tl examples  # a fresh process per trial
 ./build/bench_solvers --tl --tlq --ppq --reference=tl --jsonl=run.jsonl --csv=run.csv examples
 ./build/bench_solvers -i examples                      # setup screen, live table, review
 ./build/bench_solvers --live --review --heatmap examples
@@ -59,7 +60,8 @@ For every game:
    `--max-repeat` (default 10000). A 10 ms target spans several scheduler
    ticks (4 ms at 250 Hz), so an interruption affects every measurement of
    a fast game alike instead of only some of them, and the extra solve
-   time stays small. Repeated solves of a fast game run with warm caches.
+   time stays small. In the default mode, repeated solves of a fast game
+   share the worker's caches and allocator state.
    Every round
    shuffles the solver order and every solve is verified in full. Warm-ups
    contribute neither solve time nor samples towards the target. Set
@@ -76,25 +78,47 @@ For every game:
    solver on that game. Later trials are reported as skipped, and the game
    and log are saved in `--artifacts` (default `benchmark-artifacts`).
 
-On POSIX systems the trials of a game run in a forked worker process in its
-own process group, which serves all trials of the game. `--timeout` limits
-each solve to 30 wall seconds by default. Use 0 to disable the solve limit.
-`--safety-timeout` gives setup and verification 300 wall seconds each by
-default. The first setup watchdog includes worker and Lace startup. The
-reported setup time measures the per-trial copy and configuration. The
-verification phase includes collecting solver details and checking the
-solution. Input loading and once-per-game preprocessing precede the
-worker's deadlines.
-Either timeout stops the worker and its subprocesses. After a failure the
-next trial gets a new worker. `--in-process` runs the trials in the tool itself,
-without crash isolation or timeouts; this is the only mode on Windows.
+On POSIX systems, the default is to load and prepare each game in the
+benchmark, then fork a worker in its own process group. The worker reuses
+the prepared graph and starts Lace once for the game. The first setup
+watchdog includes worker and Lace startup. The reported setup time
+measures the per-trial copy and configuration.
 
-Trial and result records give the failure phase (`setup`, `solve` or
-`verification`). A solve deadline gives `timeout`, and a safety deadline
+`--fresh-process` starts a new instance of `bench_solvers` for every warm-up
+and measured trial. The child opens and parses the original file or
+regenerates the random game, sorts it, runs the selected preprocessing,
+starts Lace if requested, and sets up, solves and verifies the trial.
+A separate worker first inspects each game to establish its fingerprint,
+residual graph and schedule. The game and preparation records describe
+this inspection. Each trial checks that it got the same graph. Fully
+preprocessed games still have no solver trials. Fresh processes share
+the operating system's file cache.
+
+Fresh trial records give `load_seconds` for opening the file and any
+decompression, and `parse_sort_seconds` for parsing and sorting. Reading
+an uncompressed file happens during parsing. For generated games,
+`parse_sort_seconds` includes generation and `load_seconds` is null.
+`setup_seconds` includes preparation, Lace startup when enabled, the
+graph copy and Oink configuration. The solve still measures `Oink::run`.
+
+`--timeout` limits each solve to 30 wall seconds by default. Use 0 to
+disable the solve limit. `--safety-timeout` gives setup, verification, and
+the fresh worker's load phase 300 wall seconds each by default. The load
+deadline includes launching the executable, parsing or generating the
+game, sorting and fingerprinting it. The verification phase includes
+collecting solver details and checking the solution. Either timeout stops
+the worker and its subprocesses. After a failure the next trial gets a
+new worker. `--in-process` runs trials in the tool itself without crash
+isolation or timeouts. It is the only mode on Windows.
+
+Trial and result records give the failure phase (`load`, `setup`, `solve`
+or `verification`). A solve deadline gives `timeout`, and a safety deadline
 gives `safety_timeout`. Allocation failures with explicit evidence give
-`memory_failure`; unexplained worker exits and signals give `crash`.
+`memory_failure`. Unexplained worker exits and signals give `crash`.
 Trial records retain the timings already reported by the worker and use
-null for unavailable timings. CSV includes the failed cell's phase.
+null for unavailable timings. If the initial inspection fails, the
+result for every solver records the failed phase. CSV includes the
+failed cell's phase.
 
 The schedule seed (`--bench-seed`, random by default and always reported)
 reproduces the file order, the solver order of every round and the solver
@@ -129,11 +153,42 @@ cap. CSV also includes the residual size. Existing reports are only replaced wit
 `--overwrite`. The exit status is 0 on success, 1 if a trial failed, 130 when
 interrupted, and 3 for a bad command line.
 
+### Peak resident memory
+
+In fresh-process mode, each JSON Lines sample has
+`trial_peak_rss_bytes`, the worker's peak resident set size over the
+whole trial, including process startup, loading, setup, solving and
+verification. `solve_start_peak_rss_bytes` and
+`solve_end_peak_rss_bytes` are the same process high-water mark at the
+entry to `Oink::run` and after it returns, before verification. The
+solve-end value includes the setup peak. An increase between these
+readings means the solve reached a new process high. The readings do
+not isolate the solver's allocations. RSS includes the programs,
+libraries and resident data in the worker's address space. External
+solver subprocesses have their own RSS.
+
+Linux reads `VmHWM` from `/proc` and converts KiB to bytes. macOS reads
+`ru_maxrss` in bytes from `getrusage(RUSAGE_SELF)`. Interrupted or failed
+trials without a final reply can report the last available reading as
+a lower bound. Linux can also read a live worker's high-water mark
+before killing it. Unsupported or unavailable readings appear as null
+in JSON Lines and blank in CSV.
+
+JSON Lines results and CSV give `max_trial_peak_rss_bytes` and
+`max_solve_end_peak_rss_bytes`, the largest available readings from
+successful measured trials of each game and solver. In the default
+reuse mode, `worker_process_peak_rss_bytes` is the largest observed
+process peak for the game, including warm-ups and any restarted workers.
+The same value is shown on each solver's result row for that game.
+
 ## Live table and review
 
 `--live` shows a table of the medians that updates as the trials finish, with
 the sums, coverage, mean and sample count for the selected game, a progress
-bar and the current trial below it. A cyan
+bar and the current trial below it. The live table and review show the
+selected game's peak RSS in MiB. Fresh-process runs show the maximum
+trial and solve-end readings under each solver column. Reuse runs show
+one worker process peak for the game. A cyan
 `>` marks the selected game, the fastest complete median of a row is green,
 failures are red. `h` or `--heatmap` colours every timing by its rank in the
 row instead (green for the fastest 5%, red for the slowest 5%).

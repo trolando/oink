@@ -264,7 +264,8 @@ test_command_line()
         check("default roster", solvers.size() == 7 && solvers[0].name == "tl" && solvers[6].name == "zlk");
         check("default sampling", o.repeats == 7 && o.warmups == 1 && near(o.min_solve_time, 0.01) && o.max_repeats == 10000);
         check("inputs", o.inputs == std::vector<std::string>({"some/dir"}));
-        check("isolation by default", o.isolate == Worker::supported() && (o.isolate ? near(o.timeout, 30) : o.timeout == 0));
+        check("reuse by default", !o.fresh_process && o.isolate == Worker::supported() &&
+              (o.isolate ? near(o.timeout, 30) : o.timeout == 0));
         check("setup and verification safety limit by default", o.safety_timeout == (o.isolate ? 300 : 0));
         check("series seed from the schedule seed", o.game_seed == series_seed(o.seed));
     }
@@ -600,9 +601,12 @@ test_experiment_records()
     game.prep.solved_vertices = 2;
     game.prep.seconds = 0.1;
     game.prep.residual_hash = "fedcba9876543210";
+    game.worker_peak_rss = 3 * 1024 * 1024;
     game.cells.resize(3);
     for (double v : {1e-6, 2.5e-6, 1.0 / 7.0}) game.cells[0].add_sample(v);
     game.cells[0].warmups = 1;
+    game.cells[0].max_trial_rss = 5 * 1024 * 1024;
+    game.cells[0].max_solve_rss = 4 * 1024 * 1024;
     game.cells[1].failure = Status::Timeout;
     game.cells[1].failure_phase = Phase::Solve;
     game.cells[2].required = 40;
@@ -614,10 +618,15 @@ test_experiment_records()
     check("decoded sizes and times", back.vertices == 10 && back.edges == 22 && back.load == game.load && back.parse == game.parse);
     check("decoded preparation", back.prep.residual_vertices == 8 && back.prep.solved_vertices == 2 && back.prep.residual_hash == game.prep.residual_hash);
     check("decoded cells", back.cells.size() == 3 && back.cells[0].samples() == game.cells[0].samples() && back.cells[0].warmups == 1);
+    check("decoded RSS", back.worker_peak_rss == game.worker_peak_rss &&
+          back.cells[0].max_trial_rss == game.cells[0].max_trial_rss && back.cells[0].max_solve_rss == game.cells[0].max_solve_rss);
     check("decoded failure", back.cells[1].failure == Status::Timeout && back.cells[1].failure_phase == Phase::Solve);
     check("decoded sampling", back.cells[2].required == 40 && back.cells[2].samples().size() == 40 &&
           back.cells[2].accumulated_solve() == 10);
     check("a cut line is rejected", !decode_case(line.substr(0, line.size() - 10), back));
+    Case old;
+    check("old record without RSS", decode_case(line.substr(0, line.find(" rss ")) + " end", old) &&
+          old.worker_peak_rss == 0 && old.cells[0].max_trial_rss == 0);
     game.seed.reset();
     check("no seed", decode_case(encode_case(game), back) && !back.seed);
 

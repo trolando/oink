@@ -17,12 +17,10 @@
 /**
  * Process isolation of the trials.
  *
- * A worker is a child process that runs the trials of one game, so a crash or
- * a hang of a solver cannot take the benchmark down, and a timeout can stop
- * it. The child is forked from the benchmark, so it already has the game in
- * memory. It serves the trials of its game in turn, sharing the warm caches
- * and allocator state between them as one process would, until it is stopped.
- * After a failure the benchmark starts a fresh worker.
+ * A worker is a child process that isolates solver crashes and enforces
+ * deadlines. It normally inherits the prepared game and serves each of its
+ * trials in turn. A fresh worker instead starts a new executable with one
+ * request and exits after replying.
  *
  * The child runs in its own process group, which also holds the processes of
  * external solvers, so a timeout stops all of them, and SIGINT from the
@@ -65,11 +63,17 @@ public:
 
     /**
      * Run the trial of solver <solver> with seed <seed> in the child, starting
-     * a child if none runs. Limits the solve to <timeout> seconds (0: no
-     * limit) and setup and verification to <safety_timeout> seconds each.
-     * Stops early when <*quit> is set (if given).
+     * a child if none runs. With <command>, start that executable with the
+     * worker pipe descriptors and serve one request. An experiment lock can
+     * be inherited as <lock_fd>. Limits the solve to <timeout> seconds
+     * (0: no limit) and loading, setup and verification to <safety_timeout>
+     * seconds each. Stops early when <*quit> is set (if given).
      */
-    Trial run(size_t solver, uint32_t seed, double timeout, double safety_timeout, volatile std::sig_atomic_t* quit);
+    Trial run(size_t solver, uint32_t seed, double timeout, double safety_timeout, volatile std::sig_atomic_t* quit,
+              const std::vector<std::string>& command = {}, int lock_fd = -1);
+
+    /** Serve the single request in a fresh executable. */
+    static int serve_once(int requests, int replies, int lock_fd, Body body);
 
     /** Stop the child and every process in its group. */
     void stop();
@@ -91,8 +95,9 @@ private:
     std::string reply;      // the reply received so far
     std::string output;     // the end of what the child wrote to stdout and stderr
 
-    void start();
-    void kill(bool force);
+    void start(const std::vector<std::string>& command, int lock_fd);
+    void serve(int requests, int replies, bool once);
+    uint64_t kill(bool force);
     void drain_output();
     Trial crashed(Trial trial, Phase phase);
     Trial timed_out(Trial trial, Phase phase);

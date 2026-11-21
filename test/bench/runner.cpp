@@ -30,6 +30,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "common/external_solver.hpp"
 #include "common/terminal.hpp"
 #include "display.hpp"
 #include "experiment.hpp"
@@ -39,6 +40,7 @@
 #include "oink/game.hpp"
 #include "oink/io.hpp"
 #include "oink/pgparser.hpp"
+#include "options.hpp"
 #include "report.hpp"
 #include "summary.hpp"
 #include "trial.hpp"
@@ -163,6 +165,57 @@ make_run_id()
     return out.str();
 }
 
+void
+identify(Case& game, const PlannedGame& planned)
+{
+    if (planned.seed) {
+        game.seed = planned.seed;
+        game.name = "game " + std::to_string(game.index + 1) + " seed=" + std::to_string(*planned.seed);
+    } else {
+        game.path = planned.path;
+        game.name = fs::path(planned.path).filename().string();
+    }
+}
+
+/** Read or generate a game, parse and sort it, and fill in what we know of it. */
+std::unique_ptr<pg::Game>
+load(Case& game, const Options& o)
+{
+    auto start = Clock::now();
+    std::unique_ptr<pg::Game> result;
+    if (game.seed) {
+        result = std::make_unique<pg::Game>();
+        result->set_random_seed(*game.seed);
+        result->init_random_game(o.size, o.maxp, o.maxe - o.size);
+        result->ensure_sorted();
+        result->renumber();
+        game.parse = seconds_since(start);
+    } else {
+        auto in = pg::open_input(game.path);
+        game.load = seconds_since(start);
+        start = Clock::now();
+        // priorities above INT_MAX are renumbered; self-loops are kept
+        result = std::make_unique<pg::Game>(pg::PGParser::parse_pgsolver_renumber(*in, false));
+        result->ensure_sorted();
+        game.parse = seconds_since(start);
+    }
+    game.vertices = result->nodecount();
+    game.edges = result->edgecount();
+    game.hash = hex64(fingerprint(*result));
+    return result;
+}
+
+std::unique_ptr<Prepared>
+prepare_case(Case& game, const pg::Game& original, const Options& o)
+{
+    std::ostringstream log;
+    auto prepared = prepare(original, o, log);
+    game.prep = prepared->info;
+    if (prepared->identity()) game.prep.residual_hash = game.hash;
+    game.fully_preprocessed = prepared->residual == nullptr;
+    return prepared;
+}
+
 class Runner
 {
 public:
@@ -198,49 +251,18 @@ private:
     size_t per_cell() const { return o.adaptive_sampling() ? 1 : (size_t)o.repeats; }
 
     Progress progress(const std::string& activity) const { return Progress{games, plan.size(), done, slots, activity}; }
-    std::unique_ptr<pg::Game> load(Case& game, const PlannedGame& planned);
-    void measure(Case& game, pg::Game& original, const Prepared& prepared);
+    void measure(Case& game, pg::Game* original, const Prepared* prepared);
     bool service(const std::string& activity, bool force);
     void handle_extract();
     void extract(size_t index);
     std::string extract_game(size_t index);
-    std::string save_failure(const Case& game, size_t solver, pg::Game& original, const Trial& trial);
-    void skip_game(Case& game);
+    std::string save_failure(const Case& game, size_t solver, pg::Game* original, const Trial& trial);
+    void skip_game(Case& game, Status status = Status::SetupError, Phase phase = Phase::None);
     void report_preparation(const Case& game);
+    Trial run_fresh(Worker& worker, const Case& game, const SolverRun* solver, uint32_t seed);
+    bool bench_fresh(Case& game);
     bool bench_game(size_t index);
 };
-
-/** Read or generate a game, parse and sort it, and fill in what we know of it. */
-std::unique_ptr<pg::Game>
-Runner::load(Case& game, const PlannedGame& planned)
-{
-    auto start = Clock::now();
-    std::unique_ptr<pg::Game> result;
-    if (planned.seed) {
-        game.seed = planned.seed;
-        game.name = "game " + std::to_string(game.index + 1) + " seed=" + std::to_string(*planned.seed);
-        result = std::make_unique<pg::Game>();
-        result->set_random_seed(*planned.seed);
-        result->init_random_game(o.size, o.maxp, o.maxe - o.size);
-        result->ensure_sorted();
-        result->renumber();
-        game.parse = seconds_since(start);
-    } else {
-        game.path = planned.path;
-        game.name = fs::path(planned.path).filename().string();
-        auto in = pg::open_input(planned.path);
-        game.load = seconds_since(start);
-        start = Clock::now();
-        // priorities above INT_MAX are renumbered; self-loops are kept
-        result = std::make_unique<pg::Game>(pg::PGParser::parse_pgsolver_renumber(*in, false));
-        result->ensure_sorted();
-        game.parse = seconds_since(start);
-    }
-    game.vertices = result->nodecount();
-    game.edges = result->edgecount();
-    game.hash = hex64(fingerprint(*result));
-    return result;
-}
 
 /**
  * Show the progress between two trials, handle the input, and wait while the
@@ -321,7 +343,8 @@ Runner::extract_game(size_t index)
     if (graph == nullptr) {
         Case copy;
         copy.index = game.index;
-        loaded = load(copy, plan[index]);
+        identify(copy, plan[index]);
+        loaded = load(copy, o);
         if (copy.hash != game.hash) throw std::runtime_error("the game changed since it was benchmarked: " + game.path);
         graph = loaded.get();
     }
@@ -380,18 +403,33 @@ Runner::extract_game(size_t index)
 
 /** Save the game and the log of a failed trial; returns the path of the game. */
 std::string
-Runner::save_failure(const Case& game, size_t solver, pg::Game& original, const Trial& trial)
+Runner::save_failure(const Case& game, size_t solver, pg::Game* original, const Trial& trial)
 {
     if (o.artifacts.empty()) return "";
     try {
         const fs::path dir = fs::path(o.artifacts) / run_id;
         fs::create_directories(dir);
         const std::string stem = (dir / ("case-" + std::to_string(game.index) + "-" + game.hash + "-s" + std::to_string(solver) + "-r" + std::to_string(position))).string();
-        std::ofstream graph(stem + ".pg");
-        original.write_pgsolver(graph);
         std::ofstream log(stem + ".log");
         log << solvers[solver].name << ": " << failure_label(trial.status, trial.failure_phase) << '\n' << trial.message << '\n';
-        if (!graph || !log) return "";
+        if (!log) return "";
+        if (trial.failure_phase == Phase::Load) return stem + ".log";
+        if (!game.path.empty() && original == nullptr) {
+            const auto ext = fs::path(game.path).extension().string();
+            const std::string path = stem + ".pg" + (ext == ".gz" || ext == ".xz" || ext == ".bz2" ? ext : "");
+            fs::copy_file(game.path, path);
+            return path;
+        }
+        std::unique_ptr<pg::Game> generated;
+        if (original == nullptr) {
+            Case copy;
+            copy.seed = game.seed;
+            generated = load(copy, o);
+            original = generated.get();
+        }
+        std::ofstream graph(stem + ".pg");
+        original->write_pgsolver(graph);
+        if (!graph) return "";
         return stem + ".pg";
     } catch (const std::exception&) {
         return "";
@@ -427,11 +465,14 @@ Runner::report_preparation(const Case& game)
 
 /** A game without trials (unreadable, failed preparation, or fully preprocessed). */
 void
-Runner::skip_game(Case& game)
+Runner::skip_game(Case& game, Status status, Phase phase)
 {
     if (!game.fully_preprocessed) {
-        for (auto& cell : game.cells) cell.failure = Status::SetupError;
-        failures = true;
+        for (auto& cell : game.cells) {
+            cell.failure = status;
+            cell.failure_phase = phase;
+        }
+        if (status != Status::Interrupted) failures = true;
     }
     done += solvers.size() * per_cell();
     report->results(game);
@@ -439,11 +480,11 @@ Runner::skip_game(Case& game)
 }
 
 void
-Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
+Runner::measure(Case& game, pg::Game* original, const Prepared* prepared)
 {
     const uint64_t hash = std::stoull(game.hash, nullptr, 16);
     // the worker is forked with the prepared game; Lace runs in the worker
-    Worker worker([&](size_t s, uint32_t seed, const PhaseUpdate& update) { return execute(prepared, solvers[s], o, seed, update); },
+    Worker worker([&](size_t s, uint32_t seed, const PhaseUpdate& update) { return execute(*prepared, solvers[s], o, seed, update); },
                   [&] {
                       if (o.workers >= 0) lace_start((unsigned)o.workers, 10000000UL, 0);
                   },
@@ -487,10 +528,13 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
             first = false;
 
             Trial trial;
-            if (o.isolate) {
+            if (o.fresh_process) {
+                trial = run_fresh(worker, game, &solvers[s], seed);
+            } else if (o.isolate) {
                 trial = worker.run(s, seed, o.timeout, o.safety_timeout, &quit);
+                game.worker_peak_rss = std::max(game.worker_peak_rss, trial.peak_rss);
             } else {
-                trial = execute(prepared, solvers[s], o, seed);
+                trial = execute(*prepared, solvers[s], o, seed);
             }
 
             std::string artifact;
@@ -499,6 +543,8 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
                     cell.warmups++;
                 } else {
                     cell.add_sample(trial.solve);
+                    cell.max_trial_rss = std::max(cell.max_trial_rss, o.fresh_process ? trial.peak_rss : 0);
+                    cell.max_solve_rss = std::max(cell.max_solve_rss, trial.solve_end_rss);
                     cell.extend_sampling(o);
                     rounds = std::max(rounds, o.warmups + cell.target(o.repeats));
                 }
@@ -517,6 +563,61 @@ Runner::measure(Case& game, pg::Game& original, const Prepared& prepared)
     }
 }
 
+/** A fresh worker either inspects the game or runs one selected solver. */
+Trial
+Runner::run_fresh(Worker& worker, const Case& game, const SolverRun* solver, uint32_t seed)
+{
+    std::string external;
+    if (solver != nullptr) {
+        for (const auto& spec : o.externals) {
+            if (spec.substr(0, spec.find(':')) == solver->id) external = spec;
+        }
+    }
+    std::vector<std::string> command = {
+        executable, game.path, game.seed ? std::to_string(*game.seed) : "", game.hash, game.prep.residual_hash,
+        solver ? solver->id : "", solver ? solver->config : "", external,
+    };
+    const auto settings = settings_arguments(o);
+    command.insert(command.end(), settings.begin(), settings.end());
+    return worker.run(0, seed, o.timeout, o.safety_timeout, &quit, command, experiment ? experiment->lock_fd() : -1);
+}
+
+bool
+Runner::bench_fresh(Case& game)
+{
+    service(game.name + " | inspecting input", true);
+    Worker inspector({});
+    Trial inspection = run_fresh(inspector, game, nullptr, 0);
+    if (inspection.status == Status::Ok) {
+        Case inspected;
+        if (!decode_case(inspection.message, inspected)) throw std::runtime_error("invalid fresh worker inspection result");
+        game.hash = std::move(inspected.hash);
+        game.vertices = inspected.vertices;
+        game.edges = inspected.edges;
+        game.prep = std::move(inspected.prep);
+        game.fully_preprocessed = inspected.fully_preprocessed;
+    } else {
+        game.input_failed = inspection.failure_phase == Phase::Load;
+        game.prep_failed = !game.input_failed;
+        game.error = inspection.message;
+    }
+    game.load = inspection.load;
+    game.parse = inspection.parse;
+    report->game(game);
+    if (!game.input_failed) report_preparation(game);
+    if (inspection.status != Status::Ok || game.fully_preprocessed) {
+        skip_game(game, inspection.status, inspection.failure_phase);
+        return !quit;
+    }
+
+    current = game.index;
+    measure(game, nullptr, nullptr);
+    report->results(game);
+    if (!quit) display->completed(game, plan.size());
+    service(game.name + " complete", true);
+    return !quit;
+}
+
 /** Benchmark game <index>; false if it was interrupted before it finished. */
 bool
 Runner::bench_game(size_t index)
@@ -525,10 +626,12 @@ Runner::bench_game(size_t index)
     Case& game = games.back();
     game.index = index;
     game.cells.resize(solvers.size());
+    identify(game, plan[index]);
+    if (o.fresh_process) return bench_fresh(game);
 
     std::unique_ptr<pg::Game> original;
     try {
-        original = load(game, plan[index]);
+        original = load(game, o);
     } catch (const std::exception& error) {
         game.input_failed = true;
         game.error = error.what();
@@ -546,10 +649,7 @@ Runner::bench_game(size_t index)
     }
     std::unique_ptr<Prepared> prepared;
     try {
-        std::ostringstream log;
-        prepared = prepare(*original, o, log);
-        game.prep = prepared->info;
-        if (prepared->identity()) game.prep.residual_hash = game.hash;
+        prepared = prepare_case(game, *original, o);
     } catch (const std::exception& error) {
         game.prep_failed = true;
         game.error = error.what();
@@ -559,15 +659,14 @@ Runner::bench_game(size_t index)
         skip_game(game);
         return true;
     }
-    if (prepared->residual == nullptr) {
-        game.fully_preprocessed = true;
+    if (game.fully_preprocessed) {
         skip_game(game);
         return true;
     }
 
     current = index;
     current_game = original.get();
-    measure(game, *original, *prepared);
+    measure(game, original.get(), prepared.get());
     current_game = nullptr;
     const bool finished = !quit;
     report->results(game);
@@ -666,6 +765,71 @@ Runner::run()
     return failures ? 1 : 0;
 }
 
+}
+
+int
+run_trial_worker(int argc, char** argv)
+{
+    if (argc < 12) throw std::runtime_error("invalid fresh worker arguments");
+    return Worker::serve_once(std::stoi(argv[2]), std::stoi(argv[3]), std::stoi(argv[4]),
+                              [&](size_t, uint32_t seed, const PhaseUpdate& update) {
+        Trial result;
+        Case game;
+        game.load = game.parse = -1;
+        Phase phase = Phase::Load;
+        auto setup_start = Clock::now();
+        try {
+            Options options;
+            std::vector<SolverRun> unused_solvers;
+            std::ostringstream unused_help;
+            std::vector<const char*> args = {argv[0]};
+            args.insert(args.end(), argv + 12, argv + argc);
+            parse_command_line((int)args.size(), args.data(), options, unused_solvers, unused_help);
+            game.path = argv[5];
+            if (*argv[6]) game.seed = (uint32_t)std::stoul(argv[6]);
+            const std::string expected_hash = argv[7];
+            const std::string expected_residual = argv[8];
+            const auto original = load(game, options);
+            if (!expected_hash.empty() && game.hash != expected_hash) {
+                throw std::runtime_error("the game changed since it was inspected: " + game.path);
+            }
+            result.load = game.load;
+            result.parse = game.parse;
+            phase = Phase::Setup;
+            update(phase, result);
+            setup_start = Clock::now();
+            const bool inspecting = !*argv[9];
+            std::unique_ptr<Prepared> prepared;
+            if (inspecting && !options.preprocess) {
+                // The inspection only needs the graph metadata in this case.
+                game.prep.residual_vertices = game.vertices;
+                game.prep.residual_edges = game.edges;
+                game.prep.residual_hash = game.hash;
+            } else {
+                prepared = prepare_case(game, *original, options);
+            }
+
+            if (inspecting) {
+                result.status = Status::Ok;
+                result.message = encode_case(game);
+                return result;
+            }
+            if (prepared->residual == nullptr || expected_residual != game.prep.residual_hash) {
+                throw std::runtime_error("the prepared game changed since it was inspected");
+            }
+            if (*argv[11]) register_external_solver(argv[11]);
+            const SolverRun solver(argv[9], argv[10]);
+            LaceRunning lace(options.workers);
+            result.setup = seconds_since(setup_start);
+            return execute(*prepared, solver, options, seed, update, result);
+        } catch (const std::exception& error) {
+            result.load = game.load;
+            result.parse = game.parse;
+            if (phase == Phase::Setup) result.setup = seconds_since(setup_start);
+            record_failure(result, phase, error);
+            return result;
+        }
+    });
 }
 
 int

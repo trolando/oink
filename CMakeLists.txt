@@ -533,7 +533,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             # short headless runs of bench_solvers (see test/bench/smoke.cmake)
             set(BENCH_MODES basic sampling reference random errors preprocess live experiment)
             if(NOT WIN32)
-                list(APPEND BENCH_MODES timeout) # worker processes
+                list(APPEND BENCH_MODES timeout fresh) # worker processes
                 # the interactive screens on a pseudo terminal
                 add_executable(test_pty test/bench/test_pty.cpp)
                 target_include_directories(test_pty PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)

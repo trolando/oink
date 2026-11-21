@@ -77,7 +77,8 @@ pg::Solution lift(const Prepared& prepared, const pg::Game& trial, const pg::Sol
  * Run solver <run> on a fresh copy of the residual game, with solver seed
  * <seed>, and verify its solution. Never throws: failures are in the status.
  */
-Trial execute(const Prepared& prepared, const SolverRun& run, const Options& options, uint32_t seed, const PhaseUpdate& update = {});
+Trial execute(const Prepared& prepared, const SolverRun& run, const Options& options, uint32_t seed,
+              const PhaseUpdate& update = {}, Trial result = {});
 
 }
 

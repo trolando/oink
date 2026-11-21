@@ -4,6 +4,13 @@ All notable changes to Oink will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `bench_solvers --fresh-process` loads, prepares, solves and verifies
+  every trial in a new process. It reports load and parse times and peak
+  resident memory per trial on Linux and macOS. The default reuse mode
+  reports a worker process peak per game.
+
 ### Changed
 
 - Parallel solvers use their parallel code on games of any size when Lace

@@ -280,7 +280,7 @@ Report::metadata(size_t planned, const std::string& executable, const std::strin
     const Options& o = options;
     Json json;
     json.add("event", "metadata");
-    json.add("schema_version", 7);
+    json.add("schema_version", 8);
     json.add("tool", "bench_solvers");
     json.add("started_utc", utc_now());
     json.add("oink_version", pg::version());
@@ -313,15 +313,21 @@ Report::metadata(size_t planned, const std::string& executable, const std::strin
     else json.null("solve_wall_limit_seconds");
     if (o.isolate) json.add("safety_wall_limit_seconds", o.safety_timeout);
     else json.null("safety_wall_limit_seconds");
-    json.add("isolation", o.isolate ? "worker process per game, restarted after a failure" : "in_process");
+    json.add("isolation", o.fresh_process ? "new executable per trial" :
+             o.isolate ? "worker process per game, restarted after a failure" : "in_process");
+    if (o.isolate) {
+        json.add("rss_metric", o.fresh_process ? "process peak resident bytes for the whole trial, with cumulative high-water marks at solve entry and exit" :
+                 "largest observed worker process peak resident bytes per game");
+    }
     json.add("solver_logging", o.trace >= 0 ? "captured at trace level " + std::to_string(o.trace) : std::string("disabled"));
     json.add("workers_requested", o.workers);
     json.add("force_parallel", o.force_parallel);
     json.raw("machine", machine_json());
     Json prep;
     prep.add("enabled", o.preprocess);
-    prep.add("once_per_game", true);
+    prep.add("once_per_game", !o.fresh_process);
     prep.add("timed", false);
+    if (o.fresh_process) prep.add("included_in_trial_setup", o.preprocess);
     prep.add("renumber", o.preprocess && !o.inflate && !o.compress);
     prep.add("inflate", o.preprocess && o.inflate);
     prep.add("compress", o.preprocess && o.compress);
@@ -363,8 +369,10 @@ Report::game(const Case& game)
     json.add("vertices", game.vertices);
     json.add("edges", game.edges);
     json.add("seed", game.seed);
-    json.add("load_seconds", game.load);
-    json.add("parse_sort_seconds", game.parse);
+    if (game.load >= 0) json.add("load_seconds", game.load);
+    else json.null("load_seconds");
+    if (game.parse >= 0) json.add("parse_sort_seconds", game.parse);
+    else json.null("parse_sort_seconds");
     json.add("error", game.error);
     event(json.str());
 }
@@ -391,6 +399,13 @@ Report::sample(const Case& game, size_t solver, size_t position, int round, cons
         if (executed && seconds >= 0) json.add(name, seconds);
         else json.null(name);
     };
+    if (options.fresh_process) {
+        timing("load_seconds", trial.load);
+        timing("parse_sort_seconds", trial.parse);
+        json.add("trial_peak_rss_bytes", trial.peak_rss ? std::optional(trial.peak_rss) : std::nullopt);
+        json.add("solve_start_peak_rss_bytes", trial.solve_start_rss ? std::optional(trial.solve_start_rss) : std::nullopt);
+        json.add("solve_end_peak_rss_bytes", trial.solve_end_rss ? std::optional(trial.solve_end_rss) : std::nullopt);
+    }
     timing("setup_seconds", trial.setup);
     timing("solve_seconds", trial.solve);
     timing("verification_seconds", trial.verify);
@@ -407,7 +422,10 @@ Report::sample(const Case& game, size_t solver, size_t position, int round, cons
 std::string
 csv_header()
 {
-    return "game,graph_fnv1a64,vertices,edges,game_seed,solver,configuration,status,samples,median_seconds,q1_seconds,q3_seconds,mad_seconds,target_samples,residual_vertices,residual_edges,residual_fnv1a64,preprocessing_seconds,mean_seconds,accumulated_solve_seconds,sampling_capped,failure_phase\n";
+    return "game,graph_fnv1a64,vertices,edges,game_seed,solver,configuration,status,samples,median_seconds,"
+           "q1_seconds,q3_seconds,mad_seconds,target_samples,residual_vertices,residual_edges,residual_fnv1a64,"
+           "preprocessing_seconds,mean_seconds,accumulated_solve_seconds,sampling_capped,failure_phase,"
+           "max_trial_peak_rss_bytes,max_solve_end_peak_rss_bytes,worker_process_peak_rss_bytes\n";
 }
 
 std::string
@@ -434,7 +452,13 @@ csv_rows(const Case& game, const std::vector<SolverRun>& solvers, const Options&
         out << ',';
         if (complete) out << st.mean;
         out << ',' << cell.accumulated_solve() << ',' << (complete && cell.capped(options) ? "true" : "false");
-        out << ',' << phase_name(cell.failure_phase) << '\n';
+        out << ',' << phase_name(cell.failure_phase) << ',';
+        if (cell.max_trial_rss) out << cell.max_trial_rss;
+        out << ',';
+        if (cell.max_solve_rss) out << cell.max_solve_rss;
+        out << ',';
+        if (game.worker_peak_rss) out << game.worker_peak_rss;
+        out << '\n';
     }
     return out.str();
 }
@@ -472,6 +496,9 @@ result_events(const Case& game, const std::vector<SolverRun>& solvers, const Opt
             json.null("q3_seconds");
             json.null("mad_seconds");
         }
+        json.add("max_trial_peak_rss_bytes", cell.max_trial_rss ? std::optional(cell.max_trial_rss) : std::nullopt);
+        json.add("max_solve_end_peak_rss_bytes", cell.max_solve_rss ? std::optional(cell.max_solve_rss) : std::nullopt);
+        json.add("worker_process_peak_rss_bytes", game.worker_peak_rss ? std::optional(game.worker_peak_rss) : std::nullopt);
         events.push_back(json.str());
     }
     return events;

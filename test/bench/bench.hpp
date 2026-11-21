@@ -50,7 +50,7 @@ struct Options
     int trace = -1;                 // trace level of the captured solver log; -1: no log
     bool scc = false;               // solve one bottom SCC at a time (inside the timing)
 
-    // Once-per-game preprocessing (outside the timing)
+    // Preprocessing (outside the solve timing)
     bool preprocess = false;
     bool inflate = false;
     bool compress = false;
@@ -64,8 +64,9 @@ struct Options
     int max_repeats = 10000;        // cap when sampling has a solve-time target
     double min_solve_time = 0.01;   // accumulated solve time per cell; 0: fixed count
     double timeout = 30;            // wall seconds per solve; 0: no solve limit
-    double safety_timeout = 300;    // wall seconds each for worker setup and verification
+    double safety_timeout = 300;    // wall seconds each for loading, setup and verification
     bool isolate = true;            // run the trials in a worker process
+    bool fresh_process = false;     // start a new executable for each trial
     uint64_t seed = 0;              // the schedule seed (--bench-seed)
     bool vary_solver_seed = false;  // vary the solver RNG seed between rounds
     bool sort = false;              // keep the sorted file order
@@ -128,7 +129,7 @@ void validate(const Options& options, const std::vector<SolverRun>& solvers);
  * The outcome of one trial.
  */
 enum class Status { Ok, SolverError, InvalidSolution, SetupError, Timeout, SafetyTimeout, MemoryFailure, Crash, Interrupted };
-enum class Phase { None, Setup, Solve, Verify };
+enum class Phase { None, Setup, Solve, Verify, Load };
 
 const char* status_name(Status status);
 const char* phase_name(Phase phase);
@@ -140,10 +141,15 @@ struct Trial
     Status status = Status::SetupError;
     Phase failure_phase = Phase::None;
     // A negative time means the measurement was unavailable.
+    double load = -1;               // open and, if needed, decompress the input
+    double parse = -1;              // parse or generate, then sort the input
     double setup = -1;              // copy the game and construct Oink, with the in-edges
     double solve = -1;              // Oink::run, the measured time
     double verify = -1;             // map the solution back and verify it
     double cpu = -1;                // CPU seconds of the process during the solve
+    uint64_t peak_rss = 0;          // process peak RSS in bytes; zero means unavailable
+    uint64_t solve_start_rss = 0;   // process peak RSS at entry to the solve
+    uint64_t solve_end_rss = 0;     // process peak RSS after the solve, before verification
     bool parallel = false;          // whether the solver ran in parallel
     int workers = -1;               // Lace workers, -1 when sequential
     std::string effective_solver;   // the solver that ran, after a sequential fallback
@@ -177,6 +183,8 @@ struct Cell
     int required = 0;               // the current target if extended beyond --repeat
     std::optional<Status> failure;  // the first failure; later trials are skipped
     Phase failure_phase = Phase::None;
+    uint64_t max_trial_rss = 0;     // maximum over successful measured fresh trials
+    uint64_t max_solve_rss = 0;     // maximum solve_end_rss over the same trials
 
     int target(int repeats) const { return required ? required : repeats; }
     bool complete(int repeats) const { return !failure && (int)values.size() == target(repeats); }
@@ -196,7 +204,7 @@ private:
     mutable Stats cache;
 };
 
-/** What the once-per-game preparation did to a game. */
+/** What preparation did to a game. */
 struct PrepInfo
 {
     long residual_vertices = 0;
@@ -224,6 +232,7 @@ struct Case
     bool input_failed = false;      // the game could not be read
     bool prep_failed = false;       // the preparation failed
     bool fully_preprocessed = false; // preprocessing solved the whole game
+    uint64_t worker_peak_rss = 0;   // largest observed reuse worker process peak
     PrepInfo prep;
     std::vector<Cell> cells;
 
