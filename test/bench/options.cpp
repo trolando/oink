@@ -150,7 +150,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ;
     opts.add_options("Solving")
         ("w,workers", "Workers for parallel solvers: -1 sequential, 0 autodetect", cxxopts::value<int>()->default_value("-1"))
-        ("force-parallel", "Run parallel solvers in parallel also on games below their size threshold")
+        ("force-parallel", "Deprecated (has no effect)")
         ("scc", "Solve one bottom SCC at a time (part of the measured time)")
         ("t,trace", "Capture the solver log at this trace level, kept with failures", cxxopts::value<int>())
         ("c,configure", "Configuration of the single selected solver (otherwise use --<solver>=<options>)", cxxopts::value<std::string>())

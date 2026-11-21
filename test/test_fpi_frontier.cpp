@@ -66,7 +66,6 @@ check(const char* solver, int invert, int workers)
     controller.setRemoveWCWC(false);
     controller.setSolveSingle(false);
     controller.setWorkers(workers);
-    controller.setForceParallel(workers > 0);
     controller.setSolver(solver);
     controller.run();
     if (workers > 0 && !controller.parallel()) {

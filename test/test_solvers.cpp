@@ -53,7 +53,6 @@ bool opt_sort = false;
 bool opt_progress = false;
 bool opt_show_log = false;
 int opt_workers = -1; // sequential unless -w is given (matches the --help default)
-bool opt_force_parallel = false; // parallel also on games below the solver's threshold
 int opt_trace = -1;
 
 static double
@@ -129,7 +128,6 @@ test_solver(Game &game, const SolverRun& run, double &time, std::ostream &log)
     solver.setRemoveWCWC(opt_wcwc);
     solver.setBottomSCC(opt_scc);
     solver.setWorkers(opt_workers);
-    solver.setForceParallel(opt_force_parallel);
     solver.setSolver(solverid);
     if (opt_trace >= 0) solver.setTrace(opt_trace);
     else solver.setTrace(0);
@@ -200,7 +198,7 @@ main(int argc, char **argv)
         ("t,trace", "Set trace level (0-3) for solver logging (saved to .pg.log on failure; see --show-log)", cxxopts::value<int>())
         ("c,configure", "Configuration options for the solver (with one solver; otherwise use --<solver>=<options>, which may also be given several times with different options)", cxxopts::value<std::string>())
         ("w,workers", "Number of workers for parallel algorithms, or -1 for sequential, 0 for autodetect", cxxopts::value<int>()->default_value("-1"))
-        ("force-parallel", "Run parallel solvers in parallel also on games below their size threshold (to test the parallel code)")
+        ("force-parallel", "Deprecated (has no effect)")
         ("show-log", "Also write solver log output to stdout (use with -t to see trace live)")
         ("progress", "Compact progress output for random games: overwrite each game line, only keep failures")
         ;
@@ -247,7 +245,6 @@ main(int argc, char **argv)
     opt_scc = options.count("scc") != 0;
     opt_sort = options.count("sort") != 0;
     if (options.count("workers")) opt_workers = options["workers"].as<int>();
-    opt_force_parallel = options.count("force-parallel") != 0;
     if (options.count("trace")) opt_trace = options["trace"].as<int>();
     opt_show_log = options.count("show-log") != 0;
     opt_progress = options.count("progress") != 0;

@@ -1331,8 +1331,7 @@ void tlpar_run_CALL(lace_worker* lw, TLParSolver* s)
 void
 TLParSolver::run()
 {
-    // (Oink decides whether to run in parallel; with one worker, this is TL)
-    if (parallel() and lace_worker_count() > 1) {
+    if (parallel()) {
         pbuf.resize(lace_worker_count());
         tlpar_run(this); // runs runPar on a Lace worker
     } else {

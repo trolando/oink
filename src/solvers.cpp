@@ -140,12 +140,6 @@ Solvers::Solvers()
     // No incoming edges required up front; sequential FPI may build them lazily.
     for (const char* id : {"fpi", "fpim", "psi"}) solvers[id].needsInEdges = false;
 
-    // parallel solvers: below these sizes (measured with 8 workers, against Lace's start and
-    // stop of up to a few ms) the game is solved sequentially, by the fallback if any
-    solvers["fpi"].parallelMinVertices = 100000;   // 2x at 92k vertices, little gain below
-    solvers["zlk"].parallelMinVertices = 500000;   // slower at 177k vertices, 2x at 650k
-    solvers["psi"].parallelMinVertices = 100000;   // slower at 92k vertices, faster from 100k
-    solvers["tlpar"].parallelMinVertices = 250000; // no gain below
     solvers["tlpar"].sequentialFallback = "tl";
 }
 

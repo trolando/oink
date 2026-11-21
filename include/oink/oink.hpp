@@ -53,7 +53,7 @@ public:
      */
     void setSolver(std::string solver);
 
-    /** Selected solver after run(), including any sequential fallback. */
+    /** Solver used by run(), including any fallback for a run without workers. */
     std::optional<std::string> effectiveSolver() const { return algorithm_executed_ ? solver : std::nullopt; }
     const std::string& effectiveSolverOptions() const { return options; }
 
@@ -93,21 +93,18 @@ public:
     void setBottomSCC(bool val) { bottomSCC = val; }
 
     /**
-     * Set the number of workers for parallel solvers (psi and zielonka).
+     * Set the number of Lace workers for parallel solvers.
      * -1 for sequential code, 0 for autodetect.
      */
     void setWorkers(int count) { workers = count; }
 
     /**
-     * Run a parallel solver in parallel even on a game smaller than its threshold
-     * (Solvers::parallelMinVertices), for example to test its parallel code. (Default false)
+     * Deprecated. Parallel solvers always use their parallel code when workers are enabled.
      */
-    void setForceParallel(bool val) { forceParallel = val; }
+    void setForceParallel(bool) {}
 
     /**
-     * Whether the solver runs in parallel, as decided by run(): a parallel solver, workers
-     * >= 0, and a game of at least Solvers::parallelMinVertices unsolved vertices (or
-     * setForceParallel). Parallel solvers check this, not whether Lace is running.
+     * Whether run() selected parallel solving. This requires a parallel solver and workers >= 0.
      */
     bool parallel() const { return parallel_; }
 
@@ -204,7 +201,6 @@ protected:
     std::ostream &logger;    // logger for trace/debug messages
     std::optional<std::string> solver; // which solver to use
     int workers = -1;        // number of workers, 0 = autodetect, -1 = use non parallel
-    bool forceParallel = false; // run parallel solvers in parallel also on small games
     bool algorithm_executed_ = false;
     bool parallel_ = false;  // whether the solver runs in parallel (decided by run())
     int trace = 0;           // verbosity (0 for normal, 1 for trace, 2 for debug)

@@ -216,7 +216,6 @@ execute(const Prepared& prepared, const SolverRun& run, const Options& options, 
         solver.setRemoveWCWC(false);
         solver.setBottomSCC(options.scc);
         solver.setWorkers(options.workers);
-        solver.setForceParallel(options.force_parallel);
         solver.setSolver(run.id);
         solver.setTrace(options.trace < 0 ? 0 : options.trace);
         if (!run.config.empty()) solver.setSolverOptions(run.config);

@@ -29,11 +29,9 @@ this is TLPar, whose fallback is TL. An explicit request for a parallel-only
 solver in a sequential run is a command-line error. Use `--workers=0` to
 autodetect the Lace worker count or give a positive count.
 
-With workers, `Oink::run` in `src/oink.cpp` still decides whether a game is
-large enough to run a solver in parallel. Small games use the solver's
-sequential implementation or its registered fallback. For parallel scaling
-on small games, pass `--force-parallel`. Trial records include the effective
-solver and whether it ran in parallel.
+With workers, parallel solvers use their parallel code on games of any size.
+`--force-parallel` is deprecated and has no effect on solving. Trial records
+include the effective solver and whether it ran in parallel.
 
 ## What is measured
 

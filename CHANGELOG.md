@@ -2,6 +2,15 @@
 
 All notable changes to Oink will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Parallel solvers use their parallel code on games of any size when Lace
+  workers are enabled, including for library callers using `Oink::setWorkers`.
+  `--force-parallel` and `Oink::setForceParallel` are deprecated and have no
+  effect.
+
 ## [1.2.1] - 2026-11-19
 
 ### Changed

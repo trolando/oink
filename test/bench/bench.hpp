@@ -46,7 +46,7 @@ struct Options
 {
     // Solving
     int workers = -1;               // Lace workers, -1 for sequential, 0 for autodetect
-    bool force_parallel = false;    // parallel solvers also on small games
+    bool force_parallel = false;    // deprecated flag, retained in reports and saved settings
     int trace = -1;                 // trace level of the captured solver log; -1: no log
     bool scc = false;               // solve one bottom SCC at a time (inside the timing)
 

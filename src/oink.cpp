@@ -513,27 +513,15 @@ Oink::run()
         return;
     }
 
-    /**
-     * A parallel solver runs in parallel only with workers (-w [0..N]) and on a game of at
-     * least its threshold of unsolved vertices, as on smaller games starting Lace costs more
-     * than it saves (unless forced). Otherwise its sequential fallback solves the game, if it
-     * has one, or it runs its own sequential code.
-     */
-    parallel_ = false;
-    if (Solvers::isParallel(*solver)) {
-        const long unsolved = game->nodecount() - (long)solution_.solved().count();
-        const long threshold = Solvers::parallelMinVertices(*solver);
-        if (workers >= 0 and (forceParallel or unsolved >= threshold)) {
-            parallel_ = true;
-        } else {
-            if (workers >= 0) logger << "running sequentially: " << unsolved << " vertices, parallel from " << threshold << std::endl;
-            const std::string fallback = Solvers::sequentialFallback(*solver);
-            if (!fallback.empty()) {
-                logger << "solving with " << fallback << " instead of " << *solver << std::endl;
-                if (!options.empty()) logger << "(not using the options of " << *solver << ": " << options << ")" << std::endl;
-                solver = fallback;
-                options = "";
-            }
+    const bool parallel_solver = Solvers::isParallel(*solver);
+    parallel_ = parallel_solver and workers >= 0;
+    if (parallel_solver and !parallel_) {
+        const std::string fallback = Solvers::sequentialFallback(*solver);
+        if (!fallback.empty()) {
+            logger << "solving with " << fallback << " instead of " << *solver << std::endl;
+            if (!options.empty()) logger << "(not using the options of " << *solver << ": " << options << ")" << std::endl;
+            solver = fallback;
+            options = "";
         }
     }
 

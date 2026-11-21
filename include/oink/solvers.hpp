@@ -97,19 +97,13 @@ public:
     }
 
     /**
-     * Get the number of (unsolved) vertices from which parallel solver <id> runs in parallel;
-     * on smaller games starting Lace costs more than it saves, so they are solved sequentially
-     * (see Oink::setForceParallel)
+     * Deprecated. Always returns 0, as parallel solving has no minimum game size.
      */
-    static long parallelMinVertices(const std::string& id)
-    {
-        auto it = instance().solvers.find(id);
-        return it == instance().solvers.end() ? 0 : it->second.parallelMinVertices;
-    }
+    static long parallelMinVertices(const std::string&) { return 0; }
 
     /**
-     * Get the solver that solves a game instead of parallel solver <id> when it runs
-     * sequentially, or "" if <id> itself does (it then runs its sequential code)
+     * Get the solver used when <id> runs without workers, or "" if <id> itself
+     * has sequential code.
      */
     static std::string sequentialFallback(const std::string& id)
     {
@@ -159,7 +153,6 @@ private:
         SolverConstructor constructor;
         bool experimental = false;
         bool needsInEdges = true;
-        long parallelMinVertices = 100000; // (only for parallel solvers)
         std::string sequentialFallback = "";
         std::string optionsHelp = "";
         Family family = Family::Other;
