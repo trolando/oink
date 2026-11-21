@@ -31,6 +31,7 @@ int test_pma(const char* fixture);
 int test_ppj();
 int test_zlkj();
 int test_psi();
+int test_lace_restart();
 int test_fpj_batch();
 int test_fpi_frontier();
 int test_fpi_parallel();
@@ -63,6 +64,7 @@ const Test tests[] = {
     {"ppj", test_ppj},
     {"zlkj", test_zlkj},
     {"psi", test_psi},
+    {"lace-restart", test_lace_restart},
     {"fpj-batch", test_fpj_batch},
     {"fpi-frontier", test_fpi_frontier},
     {"fpi-parallel", test_fpi_parallel},

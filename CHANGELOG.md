@@ -38,6 +38,10 @@ All notable changes to Oink will be documented in this file.
   example with 65,536 vertices and 32,768 small-measure components per
   vertex. A table that does not fit in the address space now raises
   `std::length_error`.
+- A second parallel `Oink::run` in the same process no longer hangs.
+  Oink took a nonzero Lace worker count to mean that Lace was running,
+  but Lace keeps that count after `lace_stop`; Oink now asks
+  `lace_is_running`.
 
 ## [1.2.1] - 2026-11-19
 

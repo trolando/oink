@@ -379,6 +379,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_ppj.cpp
             test/test_zlkj.cpp
             test/test_psi.cpp
+            test/test_lace_restart.cpp
             test/test_fpj_batch.cpp
             test/test_pma.cpp
             test/test_fpi_frontier.cpp
@@ -433,6 +434,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestPSI COMMAND test_unit psi)
         # fill new memory, so that reading uninitialised solver state shows
         set_tests_properties(TestPSI PROPERTIES ENVIRONMENT "MallocScribble=1;MALLOC_PERTURB_=165")
+        add_test(NAME TestLaceRestart COMMAND test_unit lace-restart)
         add_test(NAME TestPMA COMMAND test_unit pma)
         add_test(NAME TestFPIFrontier COMMAND test_unit fpi-frontier)
         add_test(NAME TestFPIParallel COMMAND test_unit fpi-parallel)

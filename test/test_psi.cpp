@@ -27,7 +27,6 @@
 #include <stdexcept>
 #include <string>
 
-#include "lace.h"
 #include "oink/oink.hpp"
 #include "verifier.hpp"
 
@@ -82,11 +81,8 @@ solve(Game& game, int solved, int workers)
 int
 test_psi()
 {
-    // Oink starts and stops Lace for a parallel solve, but cannot restart it in the same
-    // process, so the parallel solves here run in a Lace instance of their own.
     int failures = 0;
     for (int workers : {-1, 4}) {
-        if (workers > 0) lace_start(workers, 100000, 0);
         Game reference = make_game(0);
         const std::string expected = solve(reference, 0, workers);
         Game game = make_game(30);
@@ -96,7 +92,6 @@ test_psi()
                       << " (without the solved vertices: " << expected << ")" << std::endl;
             failures++;
         }
-        if (workers > 0) lace_stop();
     }
     if (failures) {
         std::cerr << failures << " PSI test(s) failed" << std::endl;
