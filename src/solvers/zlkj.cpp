@@ -73,7 +73,11 @@ ZLKJSolver::attractHeads(int i, int r, std::vector<int> &A, std::vector<int> &H)
     const int pl = priority(i)&1;
     size_t next = A.size();
 
-    while (i >= 0) {
+    while (true) {
+        // With no open vertices left, every predecessor of a head fails the test below
+        // (from > i): the heads cannot attract anything else.
+        if (i < 0) return -1;
+
         const int ri = region[i];
         if (ri == DIS or ri >= 0) {
             // not open: drop it from <open>, continue at the next open vertex
@@ -94,7 +98,8 @@ ZLKJSolver::attractHeads(int i, int r, std::vector<int> &A, std::vector<int> &H)
         i--;
     }
 
-    // every vertex above <i> is now in a region, outside the subgame or disabled
+    // <i> is the first open vertex of the other parity; every vertex above it is now in a
+    // region, outside the subgame or disabled
     for (; next < A.size(); next++) {
         const int cur = A[next];
         for (const int *e = ins(cur); *e != -1; e++) {

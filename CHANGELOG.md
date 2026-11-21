@@ -22,6 +22,8 @@ All notable changes to Oink will be documented in this file.
   workers are enabled, including for library callers using `Oink::setWorkers`.
   `--force-parallel` and `Oink::setForceParallel` are deprecated and have no
   effect.
+- ZLKJ stops attracting to a region when its heads exhaust the subgame,
+  as ZLK does: no incoming edge of a head can then be attracted.
 
 ### Fixed
 
