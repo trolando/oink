@@ -23,6 +23,14 @@ All notable changes to Oink will be documented in this file.
   `--force-parallel` and `Oink::setForceParallel` are deprecated and have no
   effect.
 
+### Fixed
+
+- PSI initialises the halting state of vertices that are already solved
+  when it starts (from a partial solution, preprocessing or bottom SCC
+  solving). Its halting scans read that state for every vertex, so an
+  uninitialised value could count as a strategy change and add a major
+  iteration.
+
 ## [1.2.1] - 2026-11-19
 
 ### Changed

@@ -575,6 +575,8 @@ PSISolver::run()
     for (int i=0; i<nodecount(); i++) {
         if (disabled[i]) {
             str[i] = -2; // set to "disabled sink"
+            halt[i] = 0; // never halt in front of it (the halting scans read every vertex)
+            won[i] = 0;
             done[i] = 3; // set to "disabled/won"
             continue;
         } else {
