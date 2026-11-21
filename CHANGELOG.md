@@ -14,7 +14,7 @@ All notable changes to Oink will be documented in this file.
 ### Changed
 
 - `bench_solvers` skips later rounds of a game and solver configuration
-  after two measured solve timeouts by default. Skipped rounds count as
+  after a measured solve timeout by default. Skipped rounds count as
   timeouts and are marked in the reports and live table. Change the
   threshold with `--skip-after-timeouts`, or set it to 0 to keep trying.
   Named experiments resume after the last completed round.

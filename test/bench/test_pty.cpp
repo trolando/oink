@@ -314,6 +314,7 @@ test_timeout_resume(const std::string& bench, const std::string& games, const st
     {
         Session session(bench, {"--fresh-process", "--experiment=timeout-resume", "-e", "slow:sleep 5",
                                 "--repeat=4", "--warmup=0", "--min-solve-time=0", "--timeout=2",
+                                "--skip-after-timeouts=2",
                                 games + "/vb001"}, work);
         check("timeout experiment starts", session.expect("Experiment: "));
         const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(15);

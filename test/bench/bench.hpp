@@ -64,7 +64,7 @@ struct Options
     int max_repeats = 10000;        // cap when sampling has a solve-time target
     double min_solve_time = 0.01;   // accumulated solve time per cell; 0: fixed count
     double timeout = 30;            // wall seconds per solve; 0: no solve limit
-    int skip_after_timeouts = 2;    // measured solve timeouts per pair; 0: keep trying
+    int skip_after_timeouts = 1;    // measured solve timeouts per pair; 0: keep trying
     double safety_timeout = 300;    // wall seconds each for loading, setup and verification
     bool isolate = true;            // run the trials in a worker process
     bool fresh_process = false;     // start a new executable for each trial

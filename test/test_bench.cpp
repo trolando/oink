@@ -262,7 +262,7 @@ test_command_line()
         std::vector<SolverRun> solvers;
         parse({"some/dir"}, o, solvers);
         check("default roster", solvers.size() == 7 && solvers[0].name == "tl" && solvers[6].name == "zlk");
-        check("default sampling", o.repeats == 7 && o.warmups == 1 && near(o.min_solve_time, 0.01) && o.max_repeats == 10000);
+        check("default sampling", o.repeats == 7 && o.warmups == 1 && near(o.min_solve_time, 0.01) && o.max_repeats == 10000 && o.skip_after_timeouts == 1);
         check("inputs", o.inputs == std::vector<std::string>({"some/dir"}));
         check("reuse by default", !o.fresh_process && o.isolate == Worker::supported() &&
               (o.isolate ? near(o.timeout, 30) : o.timeout == 0));

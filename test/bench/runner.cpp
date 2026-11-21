@@ -566,8 +566,8 @@ Runner::measure(Case& game, pg::Game* original, const Prepared* prepared)
                 trial.status = *cell.failure;
                 trial.failure_phase = cell.failure_phase;
                 if (timeout_skip) {
-                    const std::string limit = o.skip_after_timeouts == 2 ? "two" : std::to_string(o.skip_after_timeouts);
-                    trial.message = "not repeated after " + limit + (o.skip_after_timeouts == 1 ? " timeout" : " timeouts");
+                    const std::string limit = o.skip_after_timeouts == 1 ? "a timeout" : std::to_string(o.skip_after_timeouts) + " timeouts";
+                    trial.message = "not repeated after " + limit;
                 }
             } else if (o.fresh_process) {
                 trial = run_fresh(worker, game, &solvers[s], seed);

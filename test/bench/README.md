@@ -113,8 +113,9 @@ isolation or timeouts. It is the only mode on Windows.
 
 `--skip-after-timeouts=N` skips the remaining scheduled rounds of a game
 and solver configuration once it has timed out in N measured rounds.
-The default is two. Set it to zero to disable skipping after solve
-timeouts. The count is cumulative across rounds, even if a solve finishes
+The default is one: a pair that times out is not run again, since its
+time is at or beyond the limit either way. Set it to zero to disable
+skipping after solve timeouts. The count is cumulative across rounds, even if a solve finishes
 between timeouts.
 A warm-up solve timeout is logged and starts a new worker for the next
 trial. Only measured rounds count toward the threshold, coverage and
@@ -133,7 +134,8 @@ failed cell's phase.
 
 JSON Lines records each skipped round as `status: "timeout"`, with
 `executed: false`, `skip_reason: "timeout_limit"` and the message
-"not repeated after two timeouts" for the default threshold. Results in
+"not repeated after a timeout" for the default threshold (or "not
+repeated after N timeouts"). Results in
 JSON Lines and CSV give `solve_timeouts` and `skipped_timeouts` separately.
 `par2_seconds` is the average across the pair's scheduled measured rounds.
 Each verified solve contributes its solve time, and each executed or

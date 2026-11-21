@@ -107,7 +107,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("max-repeat", "Maximum measured repetitions when using an accumulated solve-time target", cxxopts::value<int>()->default_value("10000"))
         ("quick", "One repetition, no warm-up and a fixed count (for testing)")
         ("timeout", "Wall seconds per solve in the worker process; 0 disables (default 30)", cxxopts::value<double>())
-        ("skip-after-timeouts", "Skip later rounds of a pair after this many measured solve timeouts; 0 keeps trying", cxxopts::value<int>()->default_value("2"))
+        ("skip-after-timeouts", "Skip later rounds of a pair after this many measured solve timeouts; 0 keeps trying", cxxopts::value<int>()->default_value("1"))
         ("safety-timeout", "Wall seconds each for worker setup, verification and fresh-process loading (default 300)", cxxopts::value<double>())
         ("in-process", "Run the trials in this process: no crash isolation and no timeout")
         ("fresh-process", "Start a new process for each trial, including loading and preparing the game")

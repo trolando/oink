@@ -298,12 +298,12 @@ esac
             set(isolation --fresh-process)
         endif()
         # The warm-up times out too. Each pair still gets two measured attempts.
-        bench(1 ${isolation} --tl -e "slow:sleep 5" --repeat=4 --warmup=1
+        bench(1 ${isolation} --tl -e "slow:sleep 5" --repeat=4 --warmup=1 --skip-after-timeouts=2
             --min-solve-time=0 --timeout=0.5 --bench-seed=7 --artifacts=
             --jsonl=${mode}.jsonl --csv=${mode}.csv "${DATA}/vb001" "${DATA}/vb002")
         file(READ "${WORK}/${mode}.jsonl" jsonl)
         count(real "\"solver\":\"slow\",\"phase\":\"measured\"[^\n]*\"status\":\"timeout\"[^\n]*\"executed\":true" "${jsonl}")
-        count(skipped "\"solver\":\"slow\",\"phase\":\"measured\"[^\n]*\"status\":\"timeout\"[^\n]*\"executed\":false,\"skip_reason\":\"timeout_limit\"[^\n]*not repeated after two timeouts" "${jsonl}")
+        count(skipped "\"solver\":\"slow\",\"phase\":\"measured\"[^\n]*\"status\":\"timeout\"[^\n]*\"executed\":false,\"skip_reason\":\"timeout_limit\"[^\n]*not repeated after 2 timeouts" "${jsonl}")
         count(fast "\"solver\":\"tl\",\"phase\":\"measured\"[^\n]*\"status\":\"ok\"" "${jsonl}")
         if(NOT real EQUAL 4 OR NOT skipped EQUAL 4 OR NOT fast EQUAL 8)
             message(FATAL_ERROR "${mode}: ${real} real timeouts, ${skipped} skipped timeouts, ${fast} fast trials")
@@ -316,7 +316,7 @@ esac
 
         # The first two invocations (one warm-up and one measured) time out.
         file(REMOVE "${WORK}/flaky-count")
-        bench(1 ${isolation} --tl -e "flaky:sh flaky.sh \"${OINK}\" %I %O" --repeat=4 --warmup=1
+        bench(1 ${isolation} --tl -e "flaky:sh flaky.sh \"${OINK}\" %I %O" --repeat=4 --warmup=1 --skip-after-timeouts=2
             --min-solve-time=0 --timeout=0.5 --bench-seed=7 --artifacts=
             --jsonl=${mode}-flaky.jsonl "${DATA}/vb001")
         file(READ "${WORK}/${mode}-flaky.jsonl" flaky)
