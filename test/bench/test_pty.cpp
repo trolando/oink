@@ -28,6 +28,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -292,6 +293,63 @@ test_experiment(const std::string& bench, const std::string& oink, const std::st
     check("the saved solvers", output.find("zlk") == std::string::npos);
 }
 
+static void
+test_timeout_review(const std::string& bench, const std::string& games, const std::string& work)
+{
+    Session session(bench, {"--live", "--review", "-e", "slow:sleep 5", "--repeat=3", "--warmup=0",
+                            "--min-solve-time=0", "--timeout=0.3", games + "/vb001"}, work);
+    check("timeout review finishes", session.expect("Finished."));
+    const auto screen = ui::strip(session.output);
+    check("review marks the skipped timeout", screen.find("timeout+skip") != std::string::npos &&
+          screen.find("skipped timeouts") != std::string::npos);
+    session.send("q");
+    check("a skipped timeout still fails coverage", session.finish() == 1);
+}
+
+static void
+test_timeout_resume(const std::string& bench, const std::string& games, const std::string& work)
+{
+    const auto root = fs::path(work) / "timeout-resume";
+    const auto journal = root / "games/0.rounds";
+    {
+        Session session(bench, {"--fresh-process", "--experiment=timeout-resume", "-e", "slow:sleep 5",
+                                "--repeat=4", "--warmup=0", "--min-solve-time=0", "--timeout=2",
+                                games + "/vb001"}, work);
+        check("timeout experiment starts", session.expect("Experiment: "));
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        bool recorded = false;
+        while (std::chrono::steady_clock::now() < until) {
+            std::error_code error;
+            const auto size = fs::file_size(journal, error);
+            if (!error && size != 0) {
+                recorded = true;
+                break;
+            }
+            session.read_for(0.05);
+        }
+        check("the first round finishes before interruption", recorded);
+        session.send("\003");
+        check("the timeout experiment is interrupted", session.finish() == 130);
+    }
+    // Simulate a truncated last write as well as an interrupted trial.
+    std::ofstream(journal, std::ios::app) << "1 1024 1";
+    Session resumed(bench, {"--resume=timeout-resume"}, work);
+    check("the resumed experiment finishes with timeouts", resumed.finish() == 1);
+    std::ifstream events(root / "results.jsonl");
+    std::vector<std::string> trials;
+    for (std::string line; std::getline(events, line);) {
+        if (line.find("\"event\":\"sample\"") != std::string::npos) trials.push_back(line);
+    }
+    check("resume kept the completed round and counted its timeout", trials.size() == 4 &&
+          trials[0].find("\"executed\":true") != std::string::npos &&
+          trials[0].find("\"experiment_session\":1") != std::string::npos &&
+          trials[1].find("\"executed\":true") != std::string::npos &&
+          trials[1].find("\"experiment_session\":2") != std::string::npos &&
+          trials[2].find("\"skip_reason\":\"timeout_limit\"") != std::string::npos &&
+          trials[3].find("\"skip_reason\":\"timeout_limit\"") != std::string::npos);
+    check("the journal was committed", !fs::exists(journal));
+}
+
 int
 main(int argc, char** argv)
 {
@@ -311,6 +369,8 @@ main(int argc, char** argv)
         test_interrupt(bench, games, work);
         test_setup(bench, games, work);
         test_experiment(bench, oink, games, work);
+        test_timeout_review(bench, games, work);
+        test_timeout_resume(bench, games, work);
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << std::endl;
         return 1;

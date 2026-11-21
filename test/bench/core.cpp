@@ -98,6 +98,7 @@ validate(const Options& o, const std::vector<SolverRun>& solvers)
     if (o.repeats < 1) throw std::runtime_error("the number of repetitions must be positive");
     if (o.warmups < 0) throw std::runtime_error("the number of warm-up rounds cannot be negative");
     if (!std::isfinite(o.timeout) || o.timeout < 0) throw std::runtime_error("the timeout must be zero (no limit) or positive");
+    if (o.skip_after_timeouts < 0) throw std::runtime_error("--skip-after-timeouts must be nonnegative");
     if (!std::isfinite(o.safety_timeout) || (o.isolate ? o.safety_timeout <= 0 : o.safety_timeout != 0)) {
         throw std::runtime_error("isolated trials need a positive --safety-timeout; in-process trials have no limits");
     }
@@ -208,6 +209,16 @@ Cell::stats() const
 {
     if (cache.samples != values.size()) cache = summarize(values);
     return cache;
+}
+
+std::optional<double>
+Cell::par2(const Options& o) const
+{
+    if (failure && failure != Status::Timeout) return std::nullopt;
+    const int timeouts = solve_timeouts + skipped_timeouts;
+    const int rounds = target(o.repeats);
+    if (values.size() + (size_t)timeouts != (size_t)rounds) return std::nullopt;
+    return solve_total / rounds + 2 * ((double)timeouts / rounds) * o.timeout;
 }
 
 std::string

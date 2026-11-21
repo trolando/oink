@@ -29,8 +29,8 @@
  * In fresh-process mode the inspection runs in its own process and each
  * trial repeats the loading and preparation in a fresh executable.
  *
- * A failed trial (solver error, invalid solution, timeout, crash) fails the
- * cell of that solver on that game; its later trials are reported as skipped.
+ * Solve timeouts can be retried on later rounds up to the measured timeout
+ * threshold. Other failures stop the solver on that game immediately.
  */
 
 #ifndef OINK_BENCH_RUNNER_HPP

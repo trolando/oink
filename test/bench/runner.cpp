@@ -236,6 +236,8 @@ private:
     std::vector<Case> games;
     std::unique_ptr<Report> report;
     std::unique_ptr<Display> display;
+    std::ostringstream round_events;
+    std::string game_events;
     std::string run_id;
     size_t slots = 0;           // planned slots
     size_t done = 0;            // finished slots
@@ -493,11 +495,47 @@ Runner::measure(Case& game, pg::Game* original, const Prepared* prepared)
                   });
 
     int rounds = o.warmups + o.repeats;
+    const auto observe = [&](int round, const RoundSample& sample) {
+        Cell& cell = game.cells[sample.solver];
+        const bool warmup = round < o.warmups;
+        if (sample.executed && o.isolate && !o.fresh_process) {
+            game.worker_peak_rss = std::max(game.worker_peak_rss, sample.peak_rss);
+        }
+        if (!sample.executed) {
+            if (sample.status == Status::Timeout) cell.skipped_timeouts++;
+        } else if (sample.status == Status::Ok) {
+            if (warmup) {
+                cell.warmups++;
+            } else {
+                cell.add_sample(sample.solve);
+                if (o.fresh_process) cell.max_trial_rss = std::max(cell.max_trial_rss, sample.peak_rss);
+                cell.max_solve_rss = std::max(cell.max_solve_rss, sample.solve_end_rss);
+                cell.extend_sampling(o);
+                rounds = std::max(rounds, o.warmups + cell.target(o.repeats));
+            }
+        } else if (sample.status != Status::Timeout || !warmup) {
+            cell.failure = sample.status;
+            cell.failure_phase = sample.phase;
+            if (sample.status == Status::Timeout) cell.solve_timeouts++;
+            if (sample.status != Status::Interrupted) failures = true;
+        }
+        position++;
+        if (!warmup && (!o.adaptive_sampling() || round - o.warmups + 1 == cell.target(o.repeats))) done++;
+    };
+
+    int start = 0;
+    if (experiment != nullptr) {
+        game_events = round_events.str(); // game and preparation from this session
+        round_events.str("");
+        start = experiment->restore_rounds(game.index, solvers.size(), game_events, observe);
+    }
     bool first = true;
-    for (int round = 0; round < rounds && !quit; round++) {
+    for (int round = start; round < rounds && !quit; round++) {
         const bool warmup = round < o.warmups;
         const char* phase = warmup ? "warmup" : "measured";
         const int repetition = (warmup ? round : round - o.warmups) + 1;
+        std::vector<RoundSample> samples;
+        bool completed = true;
 
         // the solvers of a round run in a shuffled order
         std::vector<size_t> order(solvers.size());
@@ -506,59 +544,57 @@ Runner::measure(Case& game, pg::Game* original, const Prepared* prepared)
         std::shuffle(order.begin(), order.end(), shuffle);
 
         for (size_t s : order) {
-            if (quit) break;
             Cell& cell = game.cells[s];
             if (!warmup && repetition > cell.target(o.repeats)) continue;
             const uint32_t seed = trial_seed(o.seed, hash, o.vary_solver_seed ? round : 0);
 
-            if (cell.failure) {
-                // a failed cell is not run again
-                Trial skipped;
-                skipped.status = *cell.failure;
-                skipped.failure_phase = cell.failure_phase;
-                report->sample(game, s, position++, repetition, phase, seed, worker.generation(), skipped, false, "");
-                if (!warmup && (!o.adaptive_sampling() || repetition == cell.target(o.repeats))) done++;
-                continue;
-            }
-
+            const bool timeout_skip = cell.failure == Status::Timeout && o.skip_after_timeouts > 0 &&
+                                      cell.solve_timeouts >= o.skip_after_timeouts;
+            const bool executed = !timeout_skip && (!cell.failure || cell.failure == Status::Timeout);
             const int total = warmup ? o.warmups : o.repeats;
             std::string activity = game.name + " | " + solvers[s].name + " | " + (warmup ? "warm-up " : "repeat ") + std::to_string(repetition);
             if (repetition <= total) activity += "/" + std::to_string(total);
-            if (!service(activity, first)) break;
+            if (quit || !service(activity, first)) {
+                completed = false;
+                break;
+            }
             first = false;
 
             Trial trial;
-            if (o.fresh_process) {
+            std::string artifact;
+            if (!executed) {
+                trial.status = *cell.failure;
+                trial.failure_phase = cell.failure_phase;
+                if (timeout_skip) {
+                    const std::string limit = o.skip_after_timeouts == 2 ? "two" : std::to_string(o.skip_after_timeouts);
+                    trial.message = "not repeated after " + limit + (o.skip_after_timeouts == 1 ? " timeout" : " timeouts");
+                }
+            } else if (o.fresh_process) {
                 trial = run_fresh(worker, game, &solvers[s], seed);
             } else if (o.isolate) {
                 trial = worker.run(s, seed, o.timeout, o.safety_timeout, &quit);
-                game.worker_peak_rss = std::max(game.worker_peak_rss, trial.peak_rss);
             } else {
                 trial = execute(*prepared, solvers[s], o, seed);
             }
 
-            std::string artifact;
-            if (trial.status == Status::Ok) {
-                if (warmup) {
-                    cell.warmups++;
-                } else {
-                    cell.add_sample(trial.solve);
-                    cell.max_trial_rss = std::max(cell.max_trial_rss, o.fresh_process ? trial.peak_rss : 0);
-                    cell.max_solve_rss = std::max(cell.max_solve_rss, trial.solve_end_rss);
-                    cell.extend_sampling(o);
-                    rounds = std::max(rounds, o.warmups + cell.target(o.repeats));
-                }
-            } else {
-                cell.failure = trial.status;
-                cell.failure_phase = trial.failure_phase;
-                if (trial.status != Status::Interrupted) {
-                    failures = true;
-                    artifact = save_failure(game, s, original, trial);
-                }
+            if (executed && trial.status != Status::Ok) {
+                if (trial.status != Status::Interrupted) artifact = save_failure(game, s, original, trial);
                 worker.stop(); // the next trial gets a fresh worker
             }
-            report->sample(game, s, position++, repetition, phase, seed, worker.generation(), trial, true, artifact);
-            if (!warmup && (!o.adaptive_sampling() || repetition == cell.target(o.repeats))) done++;
+            report->sample(game, s, position, repetition, phase, seed, worker.generation(), trial, executed, artifact);
+            const RoundSample sample{s, executed, trial.status, trial.failure_phase, trial.solve, trial.peak_rss, trial.solve_end_rss};
+            observe(round, sample);
+            if (experiment != nullptr) samples.push_back(sample);
+            if (trial.status == Status::Interrupted) {
+                completed = false;
+                break;
+            }
+        }
+        if (completed && experiment != nullptr) {
+            const auto events = round_events.str();
+            experiment->record_round(round, samples, events);
+            game_events += events;
+            round_events.str("");
         }
     }
 }
@@ -705,18 +741,24 @@ Runner::run()
             done += solvers.size() * per_cell();
             for (const auto& cell : saved->cells) {
                 if (cell.failure) failures = true;
+                if (saved->timed() && !saved->input_failed && !saved->prep_failed) {
+                    position += o.warmups + cell.target(o.repeats);
+                }
             }
             display->completed(games.back(), plan.size());
             continue;
         }
         // an experiment keeps the events of every game apart
-        std::ostringstream events;
-        if (experiment != nullptr) report->copy_to(&events);
+        if (experiment != nullptr) {
+            game_events.clear();
+            round_events.str("");
+            report->copy_to(&round_events);
+        }
         const bool finished = bench_game(index);
         report->copy_to(nullptr);
         if (experiment != nullptr) {
-            if (finished) experiment->commit(games.back(), events.str());
-            else games.pop_back(); // measured again when the experiment resumes
+            if (finished) experiment->commit(games.back(), game_events + round_events.str());
+            else games.pop_back(); // only finished games enter the published results
         }
     }
 

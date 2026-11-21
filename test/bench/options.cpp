@@ -75,9 +75,10 @@ TERM=dumb or NO_COLOR, the output is plain.
 A named experiment (--experiment=DIR) saves its plan, every finished game and
 the reports in DIR, and shows only a progress bar. If it is interrupted,
 --resume=DIR (or --experiment=DIR again, on a terminal) continues it with the
-saved games, solvers and settings: finished games are kept, an interrupted
-game is measured again from its warm-ups. The program, the host and the input
-files must be unchanged. -i with --experiment shows the setup screen first.
+saved games, solvers and settings. Finished games are kept. An interrupted
+game continues after its last completed round. The program, the host and the
+input files must be unchanged. -i with --experiment shows the setup screen
+first.
 
 Exit status: 0 on success, 1 if any trial failed, 130 when interrupted, 3 for
 an invalid command line. The user guide is test/bench/README.md.
@@ -106,6 +107,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
         ("max-repeat", "Maximum measured repetitions when using an accumulated solve-time target", cxxopts::value<int>()->default_value("10000"))
         ("quick", "One repetition, no warm-up and a fixed count (for testing)")
         ("timeout", "Wall seconds per solve in the worker process; 0 disables (default 30)", cxxopts::value<double>())
+        ("skip-after-timeouts", "Skip later rounds of a pair after this many measured solve timeouts; 0 keeps trying", cxxopts::value<int>()->default_value("2"))
         ("safety-timeout", "Wall seconds each for worker setup, verification and fresh-process loading (default 300)", cxxopts::value<double>())
         ("in-process", "Run the trials in this process: no crash isolation and no timeout")
         ("fresh-process", "Start a new process for each trial, including loading and preparing the game")
@@ -225,6 +227,7 @@ parse_command_line(int argc, const char* const* argv, Options& o, std::vector<So
     }
     if (!o.isolate) o.timeout = o.safety_timeout = 0;
     if (given(result, "timeout")) o.timeout = result["timeout"].as<double>();
+    o.skip_after_timeouts = result["skip-after-timeouts"].as<int>();
     if (given(result, "safety-timeout")) o.safety_timeout = result["safety-timeout"].as<double>();
 
     if (given(result, "bench-seed")) {

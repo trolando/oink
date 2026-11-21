@@ -61,6 +61,7 @@ settings_arguments(const Options& o)
     args.push_back("--warmup=" + std::to_string(o.warmups));
     args.push_back("--min-solve-time=" + exact(o.min_solve_time));
     args.push_back("--max-repeat=" + std::to_string(o.max_repeats));
+    args.push_back("--skip-after-timeouts=" + std::to_string(o.skip_after_timeouts));
     if (o.isolate) {
         args.push_back("--timeout=" + exact(o.timeout));
         args.push_back("--safety-timeout=" + exact(o.safety_timeout));
@@ -116,6 +117,8 @@ encode_case(const Case& g)
     }
     out << " rss " << g.worker_peak_rss;
     for (const auto& cell : g.cells) out << ' ' << cell.max_trial_rss << ' ' << cell.max_solve_rss;
+    out << " timeouts";
+    for (const auto& cell : g.cells) out << ' ' << cell.solve_timeouts << ' ' << cell.skipped_timeouts;
     out << " end";
     return out.str();
 }
@@ -156,6 +159,10 @@ decode_case(const std::string& line, Case& g)
     if (word == "rss") {
         in >> g.worker_peak_rss;
         for (auto& cell : g.cells) in >> cell.max_trial_rss >> cell.max_solve_rss;
+        in >> word;
+    }
+    if (word == "timeouts") {
+        for (auto& cell : g.cells) in >> cell.solve_timeouts >> cell.skipped_timeouts;
         in >> word;
     }
     return (bool)in && word == "end";
@@ -382,7 +389,14 @@ Experiment::resume(const std::string& directory, Options& options, std::vector<S
 void
 Experiment::load_done(size_t solvers)
 {
-    std::istringstream in(read_file(fs::path(root) / "done.txt"));
+    const auto path = fs::path(root) / "done.txt";
+    auto contents = read_file(path);
+    if (!contents.empty() && contents.back() != '\n') {
+        const auto last = contents.find_last_of('\n');
+        contents.resize(last == std::string::npos ? 0 : last + 1);
+        fs::resize_file(path, contents.size());
+    }
+    std::istringstream in(contents);
     std::string line;
     while (std::getline(in, line)) {
         if (line.empty()) continue;
@@ -399,6 +413,68 @@ Experiment::finished(size_t index) const
 {
     const auto found = done.find(index);
     return found == done.end() ? nullptr : &found->second;
+}
+
+int
+Experiment::restore_rounds(size_t index, size_t solvers, std::string& events,
+                           const std::function<void(int, const RoundSample&)>& observe)
+{
+    const auto path = fs::path(root) / "games" / (std::to_string(index) + ".rounds");
+    int round = 0;
+    if (fs::exists(path)) {
+        const auto size = fs::file_size(path);
+        std::ifstream in(path, std::ios::binary);
+        if (!in) throw std::runtime_error("cannot read " + path.string());
+        std::streamoff end = 0;
+        std::string line;
+        while (std::getline(in, line)) {
+            std::istringstream header(line);
+            size_t bytes = 0;
+            size_t count = 0;
+            int number = 0;
+            const std::streamoff begin = in.tellg();
+            if (!(header >> number >> bytes >> count) || number != round || count > solvers ||
+                begin < 0 || bytes == 0 || bytes > size - (uintmax_t)begin) break;
+            std::vector<RoundSample> samples;
+            for (size_t i = 0; i < count; i++) {
+                RoundSample sample;
+                int status = 0;
+                int phase = 0;
+                if (!(header >> sample.solver >> sample.executed >> status >> phase >> sample.solve >> sample.peak_rss >> sample.solve_end_rss) ||
+                    sample.solver >= solvers || status < 0 || status > (int)Status::Interrupted ||
+                    phase < 0 || phase > (int)Phase::Load) break;
+                sample.status = (Status)status;
+                sample.phase = (Phase)phase;
+                samples.push_back(sample);
+            }
+            if (samples.size() != count) break;
+            std::string chunk(bytes, '\0');
+            if (!in.read(chunk.data(), bytes) || chunk.back() != '\n') break;
+            end = in.tellg();
+            for (const auto& sample : samples) observe(round, sample);
+            events += chunk;
+            round++;
+        }
+        if (in.bad()) throw std::runtime_error("cannot read " + path.string());
+        in.close();
+        // A process killed during the last write may have left a partial round.
+        if ((uintmax_t)end < size) fs::resize_file(path, end);
+    }
+    rounds.open(path, std::ios::binary | std::ios::app);
+    if (!rounds) throw std::runtime_error("cannot open " + path.string());
+    return round;
+}
+
+void
+Experiment::record_round(int round, const std::vector<RoundSample>& samples, const std::string& events)
+{
+    rounds << std::setprecision(17) << round << ' ' << events.size() << ' ' << samples.size();
+    for (const auto& s : samples) {
+        rounds << ' ' << s.solver << ' ' << s.executed << ' ' << (int)s.status << ' ' << (int)s.phase
+               << ' ' << s.solve << ' ' << s.peak_rss << ' ' << s.solve_end_rss;
+    }
+    rounds << '\n' << events << std::flush;
+    if (!rounds) throw std::runtime_error("cannot write the completed rounds of the experiment");
 }
 
 void
@@ -421,6 +497,8 @@ Experiment::commit(const Case& game, const std::string& events)
     }
 #endif
     done[game.index] = game;
+    if (rounds.is_open()) rounds.close();
+    fs::remove(root_path / "games" / (std::to_string(game.index) + ".rounds"));
 }
 
 void

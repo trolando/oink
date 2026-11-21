@@ -223,6 +223,9 @@ cell(const Case& game, size_t s, int repeats, bool heatmap, int color, double be
     } else if (game.prep_failed && c.failure == Status::SetupError) {
         text = "prep error";
         code = style::bad;
+    } else if (c.skipped_timeouts) {
+        text = "timeout+skip";
+        code = style::bad;
     } else if (c.failure) {
         if (c.failure_phase == Phase::Setup) text = "setup ";
         if (c.failure_phase == Phase::Solve) text = "solve ";
@@ -305,8 +308,11 @@ render_table(TableView& view, const TableData& data, int width, int height)
     line(style::bold + header + style::reset);
 
     // the games
+    const Case* selected = games.empty() ? nullptr : &games[view.order[view.selected]];
+    const bool show_skips = selected && std::any_of(selected->cells.begin(), selected->cells.end(),
+                                                  [](const Cell& c) { return c.skipped_timeouts > 0; });
     const int rss_lines = o.fresh_process ? 2 : o.isolate ? 1 : 0;
-    const size_t body = (size_t)std::max(1, height - (games.empty() ? 11 : 13 + rss_lines));
+    const size_t body = (size_t)std::max(1, height - (selected ? 13 + rss_lines + show_skips : 11));
     view.body = body;
     view.first = ui::keep_visible(view.first, view.selected, games.size(), body);
     for (size_t i = 0; i < body; i++) {
@@ -316,8 +322,8 @@ render_table(TableView& view, const TableData& data, int width, int height)
             continue;
         }
         const Case& game = games[view.order[row]];
-        const bool selected = row == view.selected;
-        std::string text = (selected ? style::title : "") + fit((selected ? "> " : "  ") + game.name, name_width) + style::reset + " |";
+        const bool highlighted = row == view.selected;
+        std::string text = (highlighted ? style::title : "") + fit((highlighted ? "> " : "  ") + game.name, name_width) + style::reset + " |";
         std::vector<double> medians(solvers.size(), std::numeric_limits<double>::quiet_NaN());
         double best = std::numeric_limits<double>::infinity();
         for (size_t s = 0; s < solvers.size(); s++) {
@@ -366,29 +372,31 @@ render_table(TableView& view, const TableData& data, int width, int height)
     line(style::bold + sums + style::reset);
     line(counts);
 
-    if (!games.empty()) {
-        const Case& selected = games[view.order[view.selected]];
+    if (selected) {
         std::string means = fit("selected mean", name_width) + " |";
         std::string samples = fit("selected solves", name_width) + " |";
+        std::string skipped = fit("skipped timeouts", name_width) + " |";
         for (size_t s = first_column; s < last_column; s++) {
-            const Cell& c = selected.cells[s];
+            const Cell& c = selected->cells[s];
             const Stats& st = c.stats();
             means += fit(st.samples && !c.failure ? duration(st.mean) : "-", cell_width - 1) + " ";
             samples += fit(st.samples ? std::to_string(st.samples) : "-", cell_width - 1) + " ";
+            if (show_skips) skipped += fit(std::to_string(c.skipped_timeouts), cell_width - 1) + " ";
         }
         line(means);
         line(samples);
+        if (show_skips) line(skipped);
         if (o.fresh_process) {
             std::string trial_rss = fit("trial peak RSS", name_width) + " |";
             std::string solve_rss = fit("solve-end RSS", name_width) + " |";
             for (size_t s = first_column; s < last_column; s++) {
-                trial_rss += fit(rss_text(selected.cells[s].max_trial_rss), cell_width - 1) + " ";
-                solve_rss += fit(rss_text(selected.cells[s].max_solve_rss), cell_width - 1) + " ";
+                trial_rss += fit(rss_text(selected->cells[s].max_trial_rss), cell_width - 1) + " ";
+                solve_rss += fit(rss_text(selected->cells[s].max_solve_rss), cell_width - 1) + " ";
             }
             line(trial_rss);
             line(solve_rss);
         } else if (o.isolate) {
-            line(fit("Worker process peak RSS  " + rss_text(selected.worker_peak_rss), width));
+            line(fit("Worker process peak RSS  " + rss_text(selected->worker_peak_rss), width));
         }
     }
 

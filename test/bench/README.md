@@ -74,9 +74,9 @@ For every game:
    incoming edges built inside the call, including lazy construction. The
    same boundary applies to every solver. The worker verifies the solution
    and all moves of a multi-strategy against the original game, mapping the
-   solution back when preprocessing was used. A failed trial fails the
-   solver on that game. Later trials are reported as skipped, and the game
-   and log are saved in `--artifacts` (default `benchmark-artifacts`).
+   solution back when preprocessing was used. Failures other than solve
+   timeouts stop that solver on the game. The game and log of a failed
+   trial are saved in `--artifacts` (default `benchmark-artifacts`).
 
 On POSIX systems, the default is to load and prepare each game in the
 benchmark, then fork a worker in its own process group. The worker reuses
@@ -111,6 +111,17 @@ the worker and its subprocesses. After a failure the next trial gets a
 new worker. `--in-process` runs trials in the tool itself without crash
 isolation or timeouts. It is the only mode on Windows.
 
+`--skip-after-timeouts=N` skips the remaining scheduled rounds of a game
+and solver configuration once it has timed out in N measured rounds.
+The default is two. Set it to zero to disable skipping after solve
+timeouts. The count is cumulative across rounds, even if a solve finishes
+between timeouts.
+A warm-up solve timeout is logged and starts a new worker for the next
+trial. Only measured rounds count toward the threshold, coverage and
+PAR2. A measured timeout leaves the pair incomplete for coverage, even
+if later trials finish. The pair continues through its scheduled rounds
+and stops extending its target for adaptive sampling.
+
 Trial and result records give the failure phase (`load`, `setup`, `solve`
 or `verification`). A solve deadline gives `timeout`, and a safety deadline
 gives `safety_timeout`. Allocation failures with explicit evidence give
@@ -119,6 +130,17 @@ Trial records retain the timings already reported by the worker and use
 null for unavailable timings. If the initial inspection fails, the
 result for every solver records the failed phase. CSV includes the
 failed cell's phase.
+
+JSON Lines records each skipped round as `status: "timeout"`, with
+`executed: false`, `skip_reason: "timeout_limit"` and the message
+"not repeated after two timeouts" for the default threshold. Results in
+JSON Lines and CSV give `solve_timeouts` and `skipped_timeouts` separately.
+`par2_seconds` is the average across the pair's scheduled measured rounds.
+Each verified solve contributes its solve time, and each executed or
+skipped solve timeout contributes twice the wall limit. An unfinished
+schedule or a pair with another failure has no PAR2 score. The live table
+and review show `timeout+skip` and list the skipped counts for the selected
+game.
 
 The schedule seed (`--bench-seed`, random by default and always reported)
 reproduces the file order, the solver order of every round and the solver
@@ -262,6 +284,7 @@ screen first. DIR holds:
 | plan.txt | settings, solvers, games in their order with file hashes, program and host |
 | done.txt | one line per finished game, with all its observations |
 | games/N.jsonl | the events of finished game N |
+| games/N.rounds | completed rounds of the active game, until it finishes |
 | sessions/N.jsonl | everything session N did, also trials of an interrupted game |
 | results.jsonl, results.csv | the reports of all finished games, rebuilt after every session |
 | status.json | how many games are finished |
@@ -269,10 +292,14 @@ screen first. DIR holds:
 
 A game is committed when it finishes. `--resume=DIR` (or `--experiment=DIR`
 again, after a prompt on a terminal) continues with the saved plan; the only
-option it takes besides is `--plain`. Finished games are kept, an interrupted
-game is measured again from its warm-ups, and failures are not retried. The
-resume is refused if the program was rebuilt, the host differs or an input
-file changed. Only one benchmark at a time can work on an experiment.
+option it takes besides is `--plain`. Finished games are kept. A game that
+was interrupted continues after its last completed round, with the samples
+and timeout counts from those rounds. Trials from a partial round stay in
+their session log and the round is run again. Trial records include
+`experiment_session` so that worker generations can be read within each
+session. The resume is refused if the program was rebuilt, the host differs
+or an input file changed. Only one benchmark at a time can work on an
+experiment.
 
 A resumed experiment is not an uninterrupted one: the sessions are reported
 apart. For measurements to publish, use an idle machine, run independent

@@ -23,6 +23,7 @@
  *                     the program and the host;
  *   done.txt          one line per finished game with all its observations;
  *   games/N.jsonl     the events of finished game N;
+ *   games/N.rounds    completed rounds of the active game, until it finishes;
  *   sessions/N.jsonl  everything that happened in session N, also the
  *                     trials of a game that was interrupted;
  *   failures/         the games and logs of failed trials;
@@ -30,16 +31,16 @@
  *   results.csv       summary, and the statistics, rebuilt after every session;
  *   status.json       how far the experiment is.
  *
- * The unit of progress is a whole game: an interrupted game is measured again
- * from its warm-ups when the experiment resumes; its partial trials stay in
- * the session log only. Failures are final and are not retried. A resume
- * checks that the program, the host and the input files are unchanged.
+ * Published results contain whole games. An interrupted game resumes after
+ * its last completed round; unfinished rounds stay in the session log only.
+ * A resume checks that the program, the host and the input files are unchanged.
  */
 
 #ifndef OINK_BENCH_EXPERIMENT_HPP
 #define OINK_BENCH_EXPERIMENT_HPP
 
 #include <csignal>
+#include <fstream>
 #include <istream>
 #include <map>
 #include <memory>
@@ -61,6 +62,18 @@ std::vector<std::string> settings_arguments(const Options& options);
 /** One finished game as a line of done.txt, and back (false if the line is incomplete). */
 std::string encode_case(const Case& game);
 bool decode_case(const std::string& line, Case& game);
+
+/** The part of a sample needed to restore the scheduler and the cell. */
+struct RoundSample
+{
+    size_t solver = 0;
+    bool executed = false;
+    Status status = Status::Ok;
+    Phase phase = Phase::None;
+    double solve = -1;
+    uint64_t peak_rss = 0;
+    uint64_t solve_end_rss = 0;
+};
 
 class Experiment
 {
@@ -86,6 +99,11 @@ public:
     /** The finished game <index>, if any. */
     const Case* finished(size_t index) const;
 
+    /** Replay completed rounds in order, then open the journal for appending. */
+    int restore_rounds(size_t index, size_t solvers, std::string& events,
+                       const std::function<void(int, const RoundSample&)>& observe);
+    void record_round(int round, const std::vector<RoundSample>& samples, const std::string& events);
+
     /** Commit finished game <game> with its events <events>. */
     void commit(const Case& game, const std::string& events);
 
@@ -102,6 +120,7 @@ private:
     int session_ = 0;
     int lock = -1;
     std::map<size_t, Case> done;
+    std::ofstream rounds;
 
     Experiment(const std::string& directory);
     void acquire_lock();

@@ -92,6 +92,7 @@ private:
     std::ostream* copy = nullptr;
     std::string jsonl_path_;
     std::string csv_path_;
+    std::string session_;
 };
 
 /** The CSV header and the rows of a finished game. */

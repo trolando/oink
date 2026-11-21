@@ -64,6 +64,7 @@ struct Options
     int max_repeats = 10000;        // cap when sampling has a solve-time target
     double min_solve_time = 0.01;   // accumulated solve time per cell; 0: fixed count
     double timeout = 30;            // wall seconds per solve; 0: no solve limit
+    int skip_after_timeouts = 2;    // measured solve timeouts per pair; 0: keep trying
     double safety_timeout = 300;    // wall seconds each for loading, setup and verification
     bool isolate = true;            // run the trials in a worker process
     bool fresh_process = false;     // start a new executable for each trial
@@ -181,8 +182,10 @@ struct Cell
 {
     int warmups = 0;                // successful warm-up trials
     int required = 0;               // the current target if extended beyond --repeat
-    std::optional<Status> failure;  // the first failure; later trials are skipped
+    std::optional<Status> failure;  // a measured solve timeout or a terminal failure
     Phase failure_phase = Phase::None;
+    int solve_timeouts = 0;         // executed measured rounds that timed out
+    int skipped_timeouts = 0;       // measured rounds skipped at the timeout threshold
     uint64_t max_trial_rss = 0;     // maximum over successful measured fresh trials
     uint64_t max_solve_rss = 0;     // maximum solve_end_rss over the same trials
 
@@ -192,6 +195,7 @@ struct Cell
 
     void add_sample(double seconds);
     void extend_sampling(const Options& o);
+    std::optional<double> par2(const Options& o) const;
     const std::vector<double>& samples() const { return values; }
     double accumulated_solve() const { return solve_total; }
 

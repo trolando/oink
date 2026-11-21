@@ -278,9 +278,10 @@ void
 Report::metadata(size_t planned, const std::string& executable, const std::string& session)
 {
     const Options& o = options;
+    session_ = session;
     Json json;
     json.add("event", "metadata");
-    json.add("schema_version", 8);
+    json.add("schema_version", 9);
     json.add("tool", "bench_solvers");
     json.add("started_utc", utc_now());
     json.add("oink_version", pg::version());
@@ -304,6 +305,7 @@ Report::metadata(size_t planned, const std::string& executable, const std::strin
     json.raw("sampling", sampling.str());
     json.add("repetitions", o.repeats);
     json.add("warmup_rounds", o.warmups);
+    json.add("skip_after_timeouts", o.skip_after_timeouts);
     json.add("order_seed", o.seed);
     json.add("solver_rng_policy", o.vary_solver_seed ? "vary by round" : "fixed per game");
     json.add("cpu_metric", "process CPU time of the trial process during the solve; excludes external subprocesses");
@@ -391,10 +393,12 @@ Report::sample(const Case& game, size_t solver, size_t position, int round, cons
     json.add("warmup", std::string(phase) != "measured");
     json.add("game_rng_seed", seed);
     json.add("worker_generation", generation);
-    json.add("status", executed ? status_name(trial.status) : "skipped");
+    const bool timeout_skip = !executed && trial.status == Status::Timeout;
+    json.add("status", executed || timeout_skip ? status_name(trial.status) : "skipped");
     if (trial.failure_phase != Phase::None) json.add("failure_phase", phase_name(trial.failure_phase));
     else json.null("failure_phase");
     json.add("executed", executed);
+    if (timeout_skip) json.add("skip_reason", "timeout_limit");
     auto timing = [&](const char* name, double seconds) {
         if (executed && seconds >= 0) json.add(name, seconds);
         else json.null(name);
@@ -416,6 +420,7 @@ Report::sample(const Case& game, size_t solver, size_t position, int round, cons
     json.add("actual_workers", trial.workers);
     json.add("message", trial.message);
     json.add("artifact", artifact);
+    if (!session_.empty()) json.raw("experiment_session", session_);
     event(json.str());
 }
 
@@ -425,7 +430,8 @@ csv_header()
     return "game,graph_fnv1a64,vertices,edges,game_seed,solver,configuration,status,samples,median_seconds,"
            "q1_seconds,q3_seconds,mad_seconds,target_samples,residual_vertices,residual_edges,residual_fnv1a64,"
            "preprocessing_seconds,mean_seconds,accumulated_solve_seconds,sampling_capped,failure_phase,"
-           "max_trial_peak_rss_bytes,max_solve_end_peak_rss_bytes,worker_process_peak_rss_bytes\n";
+           "max_trial_peak_rss_bytes,max_solve_end_peak_rss_bytes,worker_process_peak_rss_bytes,"
+           "solve_timeouts,skipped_timeouts,par2_seconds\n";
 }
 
 std::string
@@ -458,6 +464,9 @@ csv_rows(const Case& game, const std::vector<SolverRun>& solvers, const Options&
         if (cell.max_solve_rss) out << cell.max_solve_rss;
         out << ',';
         if (game.worker_peak_rss) out << game.worker_peak_rss;
+        out << ',' << cell.solve_timeouts << ',' << cell.skipped_timeouts << ',';
+        const auto par2 = game.timed() ? cell.par2(options) : std::nullopt;
+        if (par2) out << *par2;
         out << '\n';
     }
     return out.str();
@@ -481,6 +490,9 @@ result_events(const Case& game, const std::vector<SolverRun>& solvers, const Opt
         else json.null("failure_phase");
         json.add("samples", st.samples);
         json.add("target_samples", game.timed() ? cell.target(repeats) : 0);
+        json.add("solve_timeouts", cell.solve_timeouts);
+        json.add("skipped_timeouts", cell.skipped_timeouts);
+        json.add("par2_seconds", game.timed() ? cell.par2(options) : std::nullopt);
         json.add("accumulated_solve_seconds", cell.accumulated_solve());
         json.add("sampling_capped", complete && cell.capped(options));
         if (complete) {
