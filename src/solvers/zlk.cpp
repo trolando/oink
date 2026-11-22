@@ -176,13 +176,18 @@ ZLKSolver::attractPar(lace_worker* lace, int i, int r, std::vector<int>* R, std:
     for (; i>=0; i--) {
         int _r = region[i].load(memory_order_relaxed);
         if (_r == DIS or _r >= 0) continue; // not in subgame or attracted
-        if (!to_inversion and priority(i) != pr) break;
-        if ((priority(i)&1) != pl) { // search until parity inversion
+        // search until parity inversion (or until another priority, if not to_inversion)
+        if ((!to_inversion and priority(i) != pr) or (priority(i)&1) != pl) {
             // first SYNC on all children, who knows this node may be attracted
             while (spawn_count) { attractParT_SYNC(lace); spawn_count--; }
-            // after SYNC, check if node <i> is now attracted.
+            // after SYNC, check if node <i> is now attracted. Reload it: the value read above
+            // may be stale. The SYNC orders all stores of the children before this load, so a
+            // relaxed load sees whether they attracted <i>. The attracted set is now the
+            // attractor of all heads so far, as in attractExt, so the run ends at the same
+            // vertex as there, whatever the timing of the workers.
+            _r = region[i].load(memory_order_relaxed);
             if (_r < 0) break; // not attracted, so we're done!
-            else continue; // already done
+            else continue; // attracted, the run of heads continues below <i> (as in attractExt)
         }
 
         // if spawn_count != 0, then we compete with attractParT and must use a CAS

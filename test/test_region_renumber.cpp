@@ -125,14 +125,17 @@ solve(const Game& game, const std::string& id, int workers)
 /**
  * Solve <game> with each solver, with the normal limit and with each of the tiny <limits>, and
  * compare. The sequential solvers must give the same strategies and summaries; ZLK in parallel
- * the same winners (its strategies and iterations depend on the schedule: the parallel
- * attractor may end a run of heads at a vertex that it attracts at the same time).
+ * the same winners and summary as sequential ZLK (its strategies depend on the schedule: a
+ * vertex may become a head or be attracted by the heads, but after each SYNC the parallel
+ * attractor has the same region, so it takes the same steps).
  */
 void
 check(const Game& game, const std::string& name, const std::vector<int>& limits)
 {
+    Result sequential;
     for (const char* id : solvers) {
         const Result normal = solve(game, id, -1);
+        if (std::string(id) == "zlk") sequential = normal;
         for (int l : limits) {
             limit = l;
             const Result tiny = solve(game, std::string("tiny-") + id, -1);
@@ -143,11 +146,16 @@ check(const Game& game, const std::string& name, const std::vector<int>& limits)
         }
     }
     const Result normal = solve(game, "zlk", 2);
+    if (normal.winner != sequential.winner or normal.summary != sequential.summary) {
+        throw std::runtime_error("parallel zlk differs from sequential zlk on " + name + ":\n" +
+            sequential.summary + normal.summary);
+    }
     for (int l : limits) {
         limit = l;
         const Result tiny = solve(game, "tiny-zlk", 2);
-        if (tiny.winner != normal.winner) {
-            throw std::runtime_error("parallel zlk with region limit " + std::to_string(l) + " differs on " + name);
+        if (tiny.winner != normal.winner or tiny.summary != normal.summary) {
+            throw std::runtime_error("parallel zlk with region limit " + std::to_string(l) + " differs on " + name +
+                ":\n" + normal.summary + tiny.summary);
         }
     }
 }

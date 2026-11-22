@@ -68,6 +68,12 @@ All notable changes to Oink will be documented in this file.
 
 - ZLK and ZLKJ gave wrong solutions after 2^31 steps, when their region
   ids overflowed (from `counter_core 21` on); they now renumber the ids.
+- Parallel ZLK made more iterations than sequential ZLK, depending on
+  the timing (2,563 or 2,564 instead of 1,801 on `tc+ 8`): it ended a
+  run of heads at a vertex of the other parity that the heads had
+  attracted, by a value read before the SYNC. It now makes the same
+  iterations, 16% fewer on the development panels, for 3.7% less solve
+  time per game with 8 workers (geometric mean; none on games over 10 ms).
 - PSI initialises the halting state of vertices that are already solved
   when it starts (from a partial solution, preprocessing or bottom SCC
   solving). Its halting scans read that state for every vertex, so an
