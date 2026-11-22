@@ -88,12 +88,16 @@ TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R)
                     esc_epoch[from] = attract_epoch;
                     if (count_in_G) {
                         // (no successor of <from> was processed yet, see attract)
-                        e = gdeg[from];
-                        if (e == 0) {
-                            for (auto edge = outs(from); *edge != -1; edge++) {
-                                if (G[*edge]) e++;
+                        if (gdeg) {
+                            e = gdeg[from];
+                            if (e == 0) {
+                                for (auto edge = outs(from); *edge != -1; edge++) {
+                                    if (G[*edge]) e++;
+                                }
+                                gdeg[from] = e;
                             }
-                            gdeg[from] = e;
+                        } else {
+                            e = game.outcount(from);
                         }
 #ifndef NDEBUG
                         unsigned int e2 = 0;
@@ -189,6 +193,12 @@ TLQSolver::attract(int pl, bitset &Z, bitset &R, const bitset *crossing, bool re
 void
 TLQSolver::updateDegrees(bool counted)
 {
+    if (!gdeg) {
+        // (until now, every successor of every vertex was in <G>)
+        if (G.none()) return;
+        gdeg = new unsigned int[nodecount()];
+        for (int v=0; v<nodecount(); v++) gdeg[v] = game.outcount(v);
+    }
     if (counted) {
         for (const int u : touched) if (G[u]) gdeg[u] = escs[u];
     } else {
@@ -1147,11 +1157,10 @@ TLQSolver::run()
     Processed.resize(nodecount());
     escs = new unsigned int[nodecount()];
     esc_epoch = new unsigned int[nodecount()]();
-    gdeg = new unsigned int[nodecount()];
-    // if no vertex is disabled, every successor is in <G>; otherwise count lazily
-    if (disabled.none()) {
-        for (int v=0; v<nodecount(); v++) gdeg[v] = game.outcount(v);
-    } else {
+    // if no vertex is disabled, every successor is in <G>, so <gdeg> is only needed once a
+    // dominion leaves <G> (see updateDegrees); otherwise count lazily
+    if (disabled.any()) {
+        gdeg = new unsigned int[nodecount()];
         std::fill_n(gdeg, nodecount(), 0u);
     }
 

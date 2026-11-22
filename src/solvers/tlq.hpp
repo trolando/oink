@@ -82,6 +82,7 @@ protected:
     unsigned int *escs, *esc_epoch; // lazy escape counts, scoped to one attraction
     unsigned int attract_epoch = 0;
     unsigned int *gdeg = nullptr; // number of successors in <G> of each vertex in <G>, or 0 if not known yet
+                                  // (none while all successors of all vertices are in <G>)
     bool count_in_G = false; // the current attraction is in <G> (see attract)
     bool top_is_G = false; // the top level is still the whole unsolved game <G>
     std::vector<int> touched; // the vertices counted by the last attraction in <G>

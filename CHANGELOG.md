@@ -45,7 +45,13 @@ All notable changes to Oink will be documented in this file.
   level when neither level removed vertices presumed won by the opponent,
   as TL does with its first two regions, instead of splitting them into
   tangles.
-- TLQ adopts more of TL's engineering.
+- TLQ adopts more of TL's engineering: it keeps the successor counts of
+  the unsolved game and its escape counts across batches of heads, stores
+  its tangles in flat arrays, re-maximises its top region only from what
+  changed, and does not attract when the heads are already the whole
+  subgame. With the previous change, TLQ is about 3.6 times faster per
+  game on model checking and 1.9 times on equivalence checking and
+  reactive synthesis.
 
 ### Fixed
 
