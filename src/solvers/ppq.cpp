@@ -39,6 +39,64 @@ PPQSolver::~PPQSolver()
 {
 }
 
+/** Vertex <v> leaves its r or u region, for the region sizes. */
+inline void
+PPQSolver::leave(int v)
+{
+    if (r[v] != -1) {
+        if (--rsize[r[v]] == 0) rprios[r[v]] = false;
+    } else if (u[v] != -1) {
+        if (--usize[u[v]] == 0) uprios[u[v]] = false;
+    }
+}
+
+/** Vertex <v> enters its r or u region, for the region sizes. */
+inline void
+PPQSolver::enter(int v)
+{
+    if (r[v] != -1) {
+        if (rsize[r[v]]++ == 0) rprios[r[v]] = true;
+    } else if (u[v] != -1) {
+        if (usize[u[v]]++ == 0) uprios[u[v]] = true;
+    }
+}
+
+/** Move vertex <v> to the r region of priority <p>. */
+inline void
+PPQSolver::setR(int v, int p)
+{
+    if (r[v] == p) return;
+    leave(v);
+    r[v] = p;
+    u[v] = -1;
+    enter(v);
+}
+
+/** Move vertex <v> to the u region of priority <p>. */
+inline void
+PPQSolver::setU(int v, int p)
+{
+    if (u[v] == p) return;
+    leave(v);
+    r[v] = -1;
+    u[v] = p;
+    enter(v);
+}
+
+/**
+ * Is any vertex of G in an r or u region of priority at most <p>?
+ * All such vertices are at most the vtop of a call at priority <p>, so this is false
+ * exactly when the vtop scan of that call would end at -1, but costs no scan.
+ */
+bool
+PPQSolver::anyUpTo(int p)
+{
+    if (p < 0) return false;
+    const auto a = rprios.find_first();
+    const auto b = uprios.find_first();
+    return (a != bitset::npos and (int)a <= p) or (b != bitset::npos and (int)b <= p);
+}
+
 /** Add predecessors that can be attracted to the current region. */
 void
 PPQSolver::attractVertices(int pl, int v, bitset &Z)
@@ -172,6 +230,7 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
         for (unsigned i = 0; i < Q.size(); ++i) {
             const int v = Q[i];
             G[v] = false;
+            leave(v);
             r[v] = -1;
             u[v] = -1;
             attractVertices(pl, v, W);
@@ -185,8 +244,7 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
 
         // attract R to u, then continue attracting...
         for (auto v = R.find_first(); v != bitset::npos; v = R.find_next(v)) {
-            u[v] = best_u;
-            r[v] = -1;
+            setU(v, best_u);
             Q.push(v);
         }
 
@@ -205,8 +263,7 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
         candidates -= R;
         for (unsigned i = 0; i < Q.size(); ++i) {
             const int v = Q[i];
-            u[v] = best_u;
-            r[v] = -1;
+            setU(v, best_u);
             attractVertices(pl, v, R);
         }
         finishSeeds(pl, R, r_seeds);
@@ -218,7 +275,7 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
 
         // attract R to r, then continue attracting...
         for (auto v = R.find_first(); v != bitset::npos; v = R.find_next(v)) {
-            r[v] = best_r;
+            setR(v, best_r);
             Q.push(v);
         }
 
@@ -237,8 +294,7 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
         candidates -= R;
         for (unsigned i = 0; i < Q.size(); ++i) {
             const int v = Q[i];
-            r[v] = best_r;
-            u[v] = -1;
+            setR(v, best_r);
             attractVertices(pl, v, R);
         }
         finishSeeds(pl, R, r_seeds);
@@ -277,8 +333,8 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
         candidates -= R;
         for (unsigned i = 0; i < Q.size(); ++i) {
             const int v = Q[i];
-            r[v] = is_u ? -1 : apr;
-            u[v] = is_u ? apr : -1;
+            if (is_u) setU(v, apr);
+            else setR(v, apr);
             attractVertices(attractor, v, R);
         }
         finishSeeds(attractor, R, seeds);
@@ -306,6 +362,9 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     // no state change
     if (po == 0 || pe == 0) return;
 
+    // if the game of this call is empty, return without walking vtop down to -1
+    if (!anyUpTo(pr)) return; // empty game, bye
+
     // move vtop to the true top, then check for game emptiness
     while (vtop >= 0 and (!G[vtop] or r[vtop] > pr or u[vtop] > pr)) vtop--;
     if (vtop == -1) return; // empty game, bye
@@ -324,6 +383,7 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
 
     // after the left side, a lot can be changed, find our new vtop
 
+    if (!anyUpTo(pr)) return; // empty game, bye
     while (vtop >= 0 and (!G[vtop] or r[vtop] > pr or u[vtop] > pr)) vtop--;
     if (vtop == -1) return; // empty game, bye
 
@@ -355,7 +415,7 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     candidates -= R;
     for (unsigned i = 0; i < Q.size(); ++i) {
         const int v = Q[i];
-        r[v] = pr;    // set r ; we already know/assume that u[v] == -1
+        setR(v, pr); // set r ; we already know/assume that u[v] == -1
         // L[v] = false; // remove from L
         attractVertices(pl, v, R);
     }
@@ -396,14 +456,15 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     }
     // */
 
-    // make a local copy of R, because R/L can be destroyed in the recursion
-    bitset Z(R);
-
     // compute next vtop (for subgame) and the next priority
+    if (!anyUpTo(pr-1)) return; // subgame is actually empty
     int next_vtop = vtop;
     while (next_vtop >= 0 and (!G[next_vtop] or r[next_vtop] >= pr or u[next_vtop] >= pr)) next_vtop--;
     if (next_vtop == -1) return; // subgame is actually empty
     const int subpr = r[next_vtop];
+
+    // make a local copy of R, because R/L can be destroyed in the recursion
+    bitset Z(R);
 
     // run recursively
     solve(vtop, subpr, pr, pe, po);
@@ -414,6 +475,10 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     }
 #endif
 
+    // if the recursion emptied G, then nothing below changes anything:
+    // Und, the attraction to U and the reset only touch vertices in G
+    if (!anyUpTo(INT_MAX)) return; // empty game, bye
+
     // Now we must first perform Und
     // There may be a lower u. If same pl pr, then merge with our u. If different pl pr, reset.
     // There may be a lower r. If other pl, then merge to our u
@@ -423,17 +488,15 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
             // lower u
             if ((u[v]&1) == pl) {
                 // same pl pr, so merge
-                u[v] = pr;
+                setU(v, pr);
             } else {
                 // other pl pr, so reset
-                u[v] = -1;
-                r[v] = priority(v);
+                setR(v, priority(v));
                 str[v] = -1;
             }
         } else if ((subpr&1)!=pl and r[v] != -1 and r[v] < pr) {
             // it's a lower other pl r, merge to our u
-            r[v] = -1;
-            u[v] = pr;
+            setU(v, pr);
         }
     }
 
@@ -474,8 +537,7 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     candidates -= U;
     for (unsigned i = 0; i < Q.size(); ++i) {
         const int v = Q[i];
-        u[v] = pr;
-        r[v] = -1;
+        setU(v, pr);
         attractVertices(1-pl, v, U);
     }
     finishSeeds(1-pl, U, u_seeds);
@@ -515,8 +577,7 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
 #ifndef NDEBUG
                 if (trace >= 2) logger << "reset " << label_vertex(v) << std::endl;
 #endif
-                r[v] = priority(v);
-                u[v] = -1;
+                setR(v, priority(v));
                 str[v] = -1;
             }
         }
@@ -528,6 +589,7 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     }
 
     // move vtop then expand right side of the universal tree
+    if (!anyUpTo(pr)) return; // and we're done, there's nothing left
     while (vtop >= 0 and (!G[vtop] or r[vtop] > pr or u[vtop] > pr)) vtop--;
     if (vtop == -1) return; // and we're done, there's nothing left
 
@@ -552,6 +614,16 @@ PPQSolver::run()
 
     u = new int[nodecount()];
     std::fill(u, u+nodecount(), -1);
+
+    // the sizes of the regions (vertices are sorted by priority)
+    const int maxprio = nodecount() ? priority(nodecount()-1) : 0;
+    rsize.assign(maxprio+1, 0);
+    usize.assign(maxprio+1, 0);
+    rprios.resize(maxprio+1);
+    uprios.resize(maxprio+1);
+    for (int v=0; v<nodecount(); v++) {
+        if (!disabled[v]) enter(v);
+    }
 
     Q.resize(nodecount());
     L.resize(nodecount());

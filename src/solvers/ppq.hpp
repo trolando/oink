@@ -52,6 +52,17 @@ protected:
     bitset W0;
     bitset W1;
 
+    // the number of vertices in the r region and in the u region of each priority,
+    // and the priorities where these are not empty (to see at once if a game is empty)
+    std::vector<int> rsize, usize;
+    bitset rprios, uprios;
+
+    inline void leave(int v);
+    inline void enter(int v);
+    inline void setR(int v, int p);
+    inline void setU(int v, int p);
+    bool anyUpTo(int p);
+
     inline void attractVertices(int pl, int v, bitset &Z);
     void finishSeeds(int pl, const bitset& Z, unsigned seeds);
     bool maybePromote(int pr, int pl, bitset &R, bitset &L);

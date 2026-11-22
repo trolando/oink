@@ -52,6 +52,9 @@ All notable changes to Oink will be documented in this file.
   subgame. With the previous change, TLQ is about 3.6 times faster per
   game on model checking and 1.9 times on equivalence checking and
   reactive synthesis.
+- PPQ keeps the size of each of its regions, so a call whose subgame is
+  empty returns at once instead of walking down through the vertices
+  that are solved or in higher regions.
 
 ### Fixed
 
