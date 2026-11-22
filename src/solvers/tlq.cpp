@@ -767,6 +767,23 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
             Q.push(next);
         }
         if (Q.empty()) break;
+        if (!resume and next < 0) {
+            // The first batch has all vertices of the subgame as heads, so nothing can be
+            // attracted (as TL, which counts the vertices that can still be attracted). The
+            // attraction would only give each head of <pl> its first successor in the queue as
+            // its strategy: the queue holds the heads from the top down, so this is its highest
+            // successor in the subgame. Set that directly, and do not scan the predecessors.
+            for (const int h : heads) {
+                if (owner(h) != pl) continue;
+                for (auto curedge = outs(h); *curedge != -1; curedge++) {
+                    if (SG[*curedge] and *curedge > str[h]) str[h] = *curedge;
+                }
+            }
+            Q.clear();
+            count_in_G = top_is_G and &SG == Rs[0];
+            touched.clear();
+            break;
+        }
         attract(pl, H, SG, nullptr, resume);
         // Attraction can remove the opposite-parity vertex that stopped this batch.
     }
