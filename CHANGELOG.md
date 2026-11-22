@@ -74,6 +74,10 @@ All notable changes to Oink will be documented in this file.
   attracted, by a value read before the SYNC. It now makes the same
   iterations, 16% fewer on the development panels, for 3.7% less solve
   time per game with 8 workers (geometric mean; none on games over 10 ms).
+- `bench_solvers` and `test_solvers` gave each Lace worker a deque of 10M
+  tasks, so parallel ZLK aborted with "lace_task stack overflow" on games
+  of more than 10M vertices; the deques now fit the game, as in
+  `Oink::run`.
 - PSI initialises the halting state of vertices that are already solved
   when it starts (from a partial solution, preprocessing or bottom SCC
   solving). Its halting scans read that state for every vertex, so an

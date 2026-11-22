@@ -131,21 +131,43 @@ plan_games(const Options& o, const std::string& executable)
 
 namespace {
 
+/**
+ * The size of the task deque of each Lace worker for a game of <vertices> vertices: a task for
+ * every vertex, as Oink::run gives it (ZLK's parallel attractor can have that many spawned at
+ * once), but at least the 10M tasks that the benchmark always used. Lace reserves the deques
+ * lazily, so a large deque costs address space but no memory up front.
+ */
+size_t
+lace_deque_size(long vertices)
+{
+    return std::max<size_t>(10000000UL, (size_t)std::max(vertices, 0L) + 1000);
+}
+
 /** Starts Lace for the trials in this process, and stops it again. */
 struct LaceRunning
 {
-    bool running = false;
+    int workers = -1;
+    size_t deque = 0; // the size of the task deques, 0 if Lace does not run
 
-    explicit LaceRunning(int workers)
+    explicit LaceRunning(int workers, long vertices = 0) : workers(workers)
     {
         if (workers < 0) return;
-        lace_start((unsigned)workers, 10000000UL, 0);
-        running = true;
+        deque = lace_deque_size(vertices);
+        lace_start((unsigned)workers, deque, 0);
+    }
+
+    /** Restart Lace with larger deques if a game of <vertices> vertices needs them. */
+    void fit(long vertices)
+    {
+        if (deque == 0 or lace_deque_size(vertices) <= deque) return;
+        lace_stop();
+        deque = lace_deque_size(vertices);
+        lace_start((unsigned)workers, deque, 0);
     }
 
     ~LaceRunning()
     {
-        if (running) lace_stop();
+        if (deque != 0) lace_stop();
     }
 };
 
@@ -248,6 +270,7 @@ private:
     size_t extractions = 0;
     size_t pauses = 0;
     double paused_seconds = 0;
+    std::unique_ptr<LaceRunning> lace; // Lace for all trials, without isolation
 
     /** One progress slot per cell with a solve-time target, else one per trial. */
     size_t per_cell() const { return o.adaptive_sampling() ? 1 : (size_t)o.repeats; }
@@ -485,10 +508,12 @@ void
 Runner::measure(Case& game, pg::Game* original, const Prepared* prepared)
 {
     const uint64_t hash = std::stoull(game.hash, nullptr, 16);
+    // without isolation, the trials run here: give Lace deques that fit this game
+    if (lace) lace->fit(game.vertices);
     // the worker is forked with the prepared game; Lace runs in the worker
     Worker worker([&](size_t s, uint32_t seed, const PhaseUpdate& update) { return execute(*prepared, solvers[s], o, seed, update); },
                   [&] {
-                      if (o.workers >= 0) lace_start((unsigned)o.workers, 10000000UL, 0);
+                      if (o.workers >= 0) lace_start((unsigned)o.workers, lace_deque_size(game.vertices), 0);
                   },
                   [&] {
                       if (o.workers >= 0) lace_stop();
@@ -730,7 +755,6 @@ Runner::run()
         display = std::make_unique<PlainDisplay>(o, solvers);
     }
     // with isolation, Lace runs in the workers; the benchmark itself never forks with threads
-    std::unique_ptr<LaceRunning> lace;
     if (!o.isolate) lace = std::make_unique<LaceRunning>(o.workers);
 
     for (size_t index = 0; index < plan.size() && !quit; index++) {
@@ -861,7 +885,7 @@ run_trial_worker(int argc, char** argv)
             }
             if (*argv[11]) register_external_solver(argv[11]);
             const SolverRun solver(argv[9], argv[10]);
-            LaceRunning lace(options.workers);
+            LaceRunning lace(options.workers, game.vertices);
             result.setup = seconds_since(setup_start);
             return execute(*prepared, solver, options, seed, update, result);
         } catch (const std::exception& error) {

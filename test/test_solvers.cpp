@@ -325,8 +325,19 @@ main(int argc, char **argv)
         return opt_show_log ? *tee_out : static_cast<std::ostream&>(log);
     };
 
+    // Each Lace worker gets a task deque of at least 10M tasks, and a task for every vertex of
+    // the largest game so far, as Oink::run gives it (ZLK's parallel attractor can have that
+    // many spawned at once). Lace reserves the deques lazily, so this costs no memory up front.
+    size_t lace_deque = 0;
+    auto fit_lace = [&](size_t vertices) {
+        if (opt_workers < 0 or std::max<size_t>(10000000UL, vertices + 1000) <= lace_deque) return;
+        if (lace_deque != 0) lace_stop();
+        lace_deque = std::max<size_t>(10000000UL, vertices + 1000);
+        lace_start(opt_workers, lace_deque, 0);
+    };
+
     if (opt_workers >= 0) {
-        lace_start(opt_workers, 10000000UL, 0);
+        fit_lace(0);
         std::cout << "Workers: " << lace_worker_count() << " (Lace"
                   << (opt_workers == 0 ? ", autodetected" : "") << ")" << std::endl;
     } else {
@@ -381,6 +392,7 @@ main(int argc, char **argv)
                 total++;
                 std::cout << "\033[38;5;8m[load " << std::fixed << std::setprecision(3)
                           << (t_loaded - t_open) << "s parse " << (t_parsed - t_loaded) << "s]\033[m ";
+                fit_lace((size_t)game.vertexcount());
                 for (const auto& run : solvers) {
                     const std::string& id = run.name;
                     std::cout << std::flush;
@@ -423,6 +435,7 @@ main(int argc, char **argv)
 
         std::mt19937 generator(seriesseed);
         Game g;
+        fit_lace((size_t)size);
 
         for (unsigned int i=0; i<n && !quit; i++) {
             unsigned int seed;
