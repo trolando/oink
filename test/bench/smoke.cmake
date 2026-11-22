@@ -264,8 +264,10 @@ elseif(MODE STREQUAL "experiment")
 
 elseif(MODE STREQUAL "timeout")
     # POSIX: an external solver that hangs is stopped by the timeout, and a
-    # crash of the worker is caught; the other solvers continue.
-    bench(1 --tl -e "slow:sleep 5" -e "boom:kill -9 $PPID" --repeat=1 --warmup=1 --min-solve-time=0 --timeout=0.3 --bench-seed=2 --jsonl=run.jsonl --csv=run.csv --artifacts=failed "${DATA}/vb001" "${DATA}/vb002")
+    # crash of the worker is caught; the other solvers continue. The limit is
+    # far above the solve time of tl and the start of the crashing command, also
+    # on a busy machine, and far below the sleep.
+    bench(1 --tl -e "slow:sleep 5" -e "boom:kill -9 $PPID" --repeat=1 --warmup=1 --min-solve-time=0 --timeout=1 --bench-seed=2 --jsonl=run.jsonl --csv=run.csv --artifacts=failed "${DATA}/vb001" "${DATA}/vb002")
     file(READ "${WORK}/run.jsonl" jsonl)
     expect("\"status\":\"timeout\",\"failure_phase\":\"solve\"" "${jsonl}" "solve timeout")
     expect("\"status\":\"crash\",\"failure_phase\":\"solve\"" "${jsonl}" "solve crash")
@@ -285,6 +287,12 @@ elseif(MODE STREQUAL "timeout")
     endif()
 
 elseif(MODE STREQUAL "skip")
+    # The limits are far below the sleeps, and far above the solve times of tl
+    # and of the flaky solver when it runs oink (60 ms with the sanitizers), also
+    # on a busy machine. Start oink once first: the first start of a newly
+    # linked executable can take more than half a second (macOS checks its
+    # signature then), and then the flaky solver would time out once more.
+    execute_process(COMMAND "${OINK}" --version OUTPUT_QUIET ERROR_QUIET)
     file(WRITE "${WORK}/flaky.sh" [=[
 case $(cat flaky-count 2>/dev/null) in
     '') echo 1 > flaky-count; sleep 5 ;;
@@ -299,7 +307,7 @@ esac
         endif()
         # The warm-up times out too. Each pair still gets two measured attempts.
         bench(1 ${isolation} --tl -e "slow:sleep 5" --repeat=4 --warmup=1 --skip-after-timeouts=2
-            --min-solve-time=0 --timeout=0.5 --bench-seed=7 --artifacts=
+            --min-solve-time=0 --timeout=1 --bench-seed=7 --artifacts=
             --jsonl=${mode}.jsonl --csv=${mode}.csv "${DATA}/vb001" "${DATA}/vb002")
         file(READ "${WORK}/${mode}.jsonl" jsonl)
         count(real "\"solver\":\"slow\",\"phase\":\"measured\"[^\n]*\"status\":\"timeout\"[^\n]*\"executed\":true" "${jsonl}")
@@ -308,16 +316,16 @@ esac
         if(NOT real EQUAL 4 OR NOT skipped EQUAL 4 OR NOT fast EQUAL 8)
             message(FATAL_ERROR "${mode}: ${real} real timeouts, ${skipped} skipped timeouts, ${fast} fast trials")
         endif()
-        file(STRINGS "${WORK}/${mode}.csv" scores REGEX ",timeout,0,.*[,]2,2,1$")
+        file(STRINGS "${WORK}/${mode}.csv" scores REGEX ",timeout,0,.*[,]2,2,2$")
         list(LENGTH scores n)
         if(NOT n EQUAL 2)
-            message(FATAL_ERROR "${mode}: expected two timed-out pairs with PAR2 of 1 second")
+            message(FATAL_ERROR "${mode}: expected two timed-out pairs with PAR2 of 2 seconds")
         endif()
 
         # The first two invocations (one warm-up and one measured) time out.
         file(REMOVE "${WORK}/flaky-count")
         bench(1 ${isolation} --tl -e "flaky:sh flaky.sh \"${OINK}\" %I %O" --repeat=4 --warmup=1 --skip-after-timeouts=2
-            --min-solve-time=0 --timeout=0.5 --bench-seed=7 --artifacts=
+            --min-solve-time=0 --timeout=2 --bench-seed=7 --artifacts=
             --jsonl=${mode}-flaky.jsonl "${DATA}/vb001")
         file(READ "${WORK}/${mode}-flaky.jsonl" flaky)
         expect("\"samples\":3,\"target_samples\":4,\"solve_timeouts\":1,\"skipped_timeouts\":0" "${flaky}" "retries after one measured timeout")
@@ -397,10 +405,12 @@ elseif(MODE STREQUAL "fresh")
     expect("\"once_per_game\":false" "${resumed}" "fresh preprocessing schedule")
     expect("\"included_in_trial_setup\":true" "${resumed}" "fresh preprocessing is measured in setup")
 
-    # Simulate a Lace allocation failure followed by a fatal worker exit.
+    # Simulate a Lace allocation failure followed by a fatal worker exit. (The
+    # limit is far above the solve time of tl and the start of the failing
+    # command, also on a busy machine, and far below the sleep.)
     bench(1 --fresh-process --tl -e "slow:sleep 5"
         -e "memory:printf 'Lace error: unable to allocate memory for the workers\\n' >&2 && kill -9 $PPID"
-        --repeat=2 --warmup=0 --min-solve-time=0 --timeout=0.3 --bench-seed=2 --jsonl=failures.jsonl "${DATA}/vb001")
+        --repeat=2 --warmup=0 --min-solve-time=0 --timeout=1 --bench-seed=2 --jsonl=failures.jsonl "${DATA}/vb001")
     file(READ "${WORK}/failures.jsonl" failed)
     expect("\"status\":\"timeout\",\"failure_phase\":\"solve\"" "${failed}" "fresh solve deadline")
     expect("\"status\":\"memory_failure\",\"failure_phase\":\"solve\"" "${failed}" "fresh memory failure")
