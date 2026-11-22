@@ -51,6 +51,61 @@ make_game(int maxp)
     return game;
 }
 
+/**
+ * Small::copy_see gives the same measures as copy and see, also when vertices reach Top
+ * (which lowers the bounds of the carries), and when the target is a vertex (which lowers
+ * the bounds as copy does). Two copies of the measures follow the same pseudo-random steps,
+ * one with copy and see, one with copy_see, and must keep the same values.
+ */
+static void
+check_small_copy_see(const Game& game, int player, int steps, unsigned seed)
+{
+    Small a(game, player);
+    Small b(game, player);
+    const int n = game.nodecount(), maxp = game.priority(n-1);
+    unsigned x = seed;
+    auto next = [&](unsigned m) { x = x * 1103515245u + 12345u; return (int)((x >> 8) % m); };
+    for (int s = -4; s < n; s++) {
+        a.copy_bot(s);
+        b.copy_bot(s);
+    }
+    for (int i = 0; i < steps; i++) {
+        const int from = next(n+4) - 4;
+        const int op = next(10);
+        // (mostly into a scratch slot, as the lift does)
+        int to = op < 4 ? -1 - next(2) : next(n+4) - 4;
+        if (to == from) to = from == -1 ? -2 : -1;
+        if (op < 6) {
+            // the operation under test
+            const int p = next(maxp+1);
+            a.copy(from, to);
+            a.see(to, p);
+            b.copy_see(from, to, p);
+        } else if (op < 8) {
+            // grow the measures, to have carries
+            const int p = next(3) == 0 ? player : next(maxp+1);
+            for (int k = 1 + next(8); k > 0; k--) {
+                a.see(from, p);
+                b.see(from, p);
+            }
+        } else if (op == 8 and next(4) == 0) {
+            // lower a bound
+            a.copy_top(from);
+            b.copy_top(from);
+        } else {
+            a.inc(from);
+            b.inc(from);
+        }
+        require(a.is_top(to) == b.is_top(to), "copy_see differs in Top from copy and see");
+        require(a.is_top(to) or a.store(to) == b.store(to), "copy_see differs from copy and see");
+        require(a.compare(to, from) == b.compare(to, from), "copy_see compares differently");
+    }
+    for (int s = -4; s < n; s++) {
+        require(a.is_top(s) == b.is_top(s) and (a.is_top(s) or a.store(s) == b.store(s)),
+                "copy_see left different measures");
+    }
+}
+
 int
 test_measure_ops()
 {
@@ -106,6 +161,21 @@ test_measure_ops()
         empty.copy_bot(-1);
         empty.inc(-1);
         require(empty.is_top(-1), "empty Small tuple did not increment to Top");
+
+        // copy_see is copy and see, on games with few and with many vertices per priority
+        for (int player = 0; player < 2; player++) {
+            for (int maxp : {0, 1, 2, 3, 6, 9, 40}) {
+                check_small_copy_see(make_game(maxp), player, 20000, 7u + maxp + 100u*player);
+            }
+            for (int n : {12, 40, 90}) {
+                Game few(n);
+                few.vec_init();
+                for (int v = 0; v < n; v++) few.init_vertex(v, v % 7, v&1);
+                few.vec_finish();
+                few.sort();
+                check_small_copy_see(few, player, 50000, 11u + n + player);
+            }
+        }
 
         // Table sizes and row offsets of Small and Ordered, without allocating tables:
         // 65,536 vertices with 32,768 components per slot exceed INT_MAX components.

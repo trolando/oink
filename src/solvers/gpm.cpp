@@ -22,6 +22,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include "gpm.hpp"
 #include "oink/oink.hpp"
@@ -227,6 +228,47 @@ void Small::see(int tgt, int priority)
             break;
         }
     }
+}
+
+void Small::copy_see(int from, int to, int priority)
+{
+    assert(from != to);
+    // decrease counts? (as copy)
+    if (to >= 0 && top[to+4] == 0 && top[from+4] == 1) {
+        int pr = game.priority(to);
+        if ((pr&1)==player) {
+            counts[pr]--;
+        }
+    }
+    top[to+4] = top[from+4];
+    if (top[from+4]) return; // see keeps Top (and the components of a Top slot are not used)
+
+    // for player 0 tuple of 0, 2, 4, 6, 8...
+    // for player 1 tuple of 1, 3, 5, 7, 9...
+
+    const int *fp = data + measure_offset(from, l);
+    int *tp = data + measure_offset(to, l);
+    // the components of the priorities below <priority> become 0
+    int i = below(priority);
+    std::fill_n(tp, i, 0);
+    if ((priority&1) == player) {
+        // the component of <priority> is incremented, with carries against the current bounds
+        for (; i<l; i++, priority+=2) {
+            if (fp[i] < counts[priority]) {
+                tp[i] = fp[i] + 1;
+                i++;
+                break;
+            }
+            tp[i] = 0;
+            // on carry overflow, this is a \Top (the carry is then out of the highest component)
+            if ((priority+2) > d) {
+                top[to + 4] = 1;
+                return; // done
+            }
+        }
+    }
+    // and the other components are copied
+    std::copy(fp + i, fp + l, tp + i);
 }
 
 void Small::inc(int tgt)
@@ -1411,7 +1453,7 @@ GPMSolver::~GPMSolver()
 {
 }
 
-template<class Measure>
+template<class Measure, bool Skip>
 bool
 GPMSolver::lift(Measure &pm, const int player, int v) {
     const int p = priority(v);
@@ -1422,6 +1464,20 @@ GPMSolver::lift(Measure &pm, const int player, int v) {
     // Detailed tracing reports the lifted value of every successor.
     if (trace >= 2) select_before_see = false;
 #endif
+    // <to> := <from> seeing <p>; with Skip (Small with many components), without reading the
+    // components below <p>, which see sets to 0, if there are enough of them (see updateMeasure)
+    bool skip = false;
+    if constexpr (Skip) skip = pm.below(p) >= SKIP_COMPONENTS;
+    auto copy_see = [&](int from, int to) {
+        if constexpr (Skip) {
+            if (skip) {
+                pm.copy_see(from, to, p);
+                return;
+            }
+        }
+        pm.copy(from, to);
+        pm.see(to, p);
+    };
     if (select_before_see) {
         const bool maximize = owner(v) == player;
         int best = -1;
@@ -1438,8 +1494,7 @@ GPMSolver::lift(Measure &pm, const int player, int v) {
         if (best == -1) return false;
 
         // A monotone see operation preserves the minimum or maximum value.
-        pm.copy(best, -4);
-        pm.see(-4, p);
+        copy_see(best, -4);
         return true;
     }
 
@@ -1449,8 +1504,7 @@ GPMSolver::lift(Measure &pm, const int player, int v) {
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
             int to = *curedge;
             if (!G[to]) continue;
-            pm.copy(to, -1);
-            pm.see(-1, priority(v));
+            copy_see(to, -1);
 #ifndef NDEBUG
             if (trace >= 2) {
                 logger << "Lift option (takes highest) " << label_vertex(v) << " to " << label_vertex(to) << " ";
@@ -1468,8 +1522,7 @@ GPMSolver::lift(Measure &pm, const int player, int v) {
         for (auto curedge = outs(v); *curedge != -1; curedge++) {
             int to = *curedge;
             if (!G[to]) continue;
-            pm.copy(to, -1);
-            pm.see(-1, priority(v));
+            copy_see(to, -1);
 #ifndef NDEBUG
             if (trace >= 2) {
                 logger << "Lift option (takes lowest) " << label_vertex(v) << " to " << label_vertex(to) << " ";
@@ -1497,13 +1550,22 @@ GPMSolver::updateMeasure(Measure &pm, const int player) {
 
     QQ.reset();
     L.reset();
+    // (on games with few priorities, Small has too few components to skip any, see lift)
+    bool skip = false;
+    if constexpr (std::is_same_v<Measure, Small>) skip = pm.components() >= SKIP_COMPONENTS;
+    auto lift_v = [&](int v) {
+        if constexpr (std::is_same_v<Measure, Small>) {
+            if (skip) return lift<Small, true>(pm, player, v);
+        }
+        return lift(pm, player, v);
+    };
     for (std::size_t word = 0; word < Q.block_count(); ++word) {
         uint64_t pending = Q.data()[word];
         while (pending != 0) {
             const int v = int(word * 64 + intrinsics::countr_zero64(pending));
             pending &= pending - 1;
             lift_attempts++;
-            if (lift(pm, player, v)) {
+            if (lift_v(v)) {
                 auto res = pm.compare(-4, v);
                 if (res < 0) {
 #ifndef NDEBUG

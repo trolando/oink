@@ -29,6 +29,9 @@ All notable changes to Oink will be documented in this file.
   priorities allow it, with the same lifts: up to 12 GiB less peak memory on
   the largest equivalence games, and 10 to 31% faster per game on model and
   equivalence checking.
+- GPM-small lifts a vertex without reading the components of the measures
+  of its successors below its priority, which the lift sets to 0: about
+  twice as fast on random games with many priorities.
 - ZLKQ is marked experimental: ZLKW and ZLKWJ are the quasi-polynomial
   Zielonka solvers to use.
 - `bench_solvers` skips later rounds of a game and solver configuration

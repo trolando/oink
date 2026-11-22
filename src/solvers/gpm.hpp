@@ -20,6 +20,7 @@
 #ifndef GPM_HPP
 #define GPM_HPP
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -119,6 +120,12 @@ public:
     std::vector<std::byte> store(int tgt) const override;
     void load(int tgt, const std::vector<std::byte>& blob) override;
     int code_size() const override { return sizeof(int); }
+    int components() const { return l; }
+    // the number of components below <priority>, which see sets to 0
+    int below(int priority) const { return priority <= player ? 0 : std::min(l, (priority - player + 1) / 2); }
+    // <to> := <from> seeing <priority>, as copy and see, without reading the components of
+    // <from> below <priority> (<from> and <to> differ)
+    void copy_see(int from, int to, int priority);
 
 
 private:
@@ -375,7 +382,10 @@ private:
     bitset L1; // lifted in last iteration for 1
 
     void attractVertices(int pl, int v, bitset &R, bitset &Z);
-    template<class Measure>
+    // Small skips the components below the priority of the lifted vertex (Small::copy_see) only
+    // with at least this many of them: for fewer, copy and see cost less than memset and memmove
+    static constexpr int SKIP_COMPONENTS = 8;
+    template<class Measure, bool Skip = false>
     bool lift(Measure &pm, const int player, int v);
     template<class Measure>
     bool updateMeasure(Measure &pm, const int player);
