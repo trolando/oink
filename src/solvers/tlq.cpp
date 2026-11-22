@@ -86,9 +86,28 @@ TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R)
                 // count includes the edge to v that is consumed here.
                 if (esc_epoch[from] != attract_epoch) {
                     esc_epoch[from] = attract_epoch;
-                    e = 0;
-                    for (auto edge = outs(from); *edge != -1; edge++) {
-                        if (R[*edge] and !Processed[*edge]) e++;
+                    if (count_in_G) {
+                        // (no successor of <from> was processed yet, see attract)
+                        e = gdeg[from];
+                        if (e == 0) {
+                            for (auto edge = outs(from); *edge != -1; edge++) {
+                                if (G[*edge]) e++;
+                            }
+                            gdeg[from] = e;
+                        }
+#ifndef NDEBUG
+                        unsigned int e2 = 0;
+                        for (auto edge = outs(from); *edge != -1; edge++) {
+                            if (G[*edge]) e2++;
+                        }
+                        if (e != e2) THROW_ERROR("wrong number of successors in G");
+#endif
+                        touched.push_back(from);
+                    } else {
+                        e = 0;
+                        for (auto edge = outs(from); *edge != -1; edge++) {
+                            if (R[*edge] and !Processed[*edge]) e++;
+                        }
                     }
                 } else {
                     e = escs[from];
@@ -122,6 +141,12 @@ TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R)
  * With resume, continue the last attraction (to the same Z in the same R) with new seeds that
  * were not processed yet, as for the next batch of heads of a region: Z has only grown since,
  * so its escape counts and completed tangles are still valid, and need not be computed again.
+ *
+ * If R is the unsolved game G (the attraction of a dominion, or of the top level while it is
+ * the whole game), the escape count of a vertex starts from its number of successors in G,
+ * kept in <gdeg>, instead of counting them. This is the same count: the seeds in Z are
+ * queued, Z holds no other vertex of R, and a successor processed earlier would have counted
+ * the vertex then. The counted vertices are recorded in <touched> (see updateDegrees).
  */
 bool
 TLQSolver::attract(int pl, bitset &Z, bitset &R, const bitset *crossing, bool resume)
@@ -133,8 +158,15 @@ TLQSolver::attract(int pl, bitset &Z, bitset &R, const bitset *crossing, bool re
             std::fill(tdone.begin(), tdone.end(), 0u);
             ++attract_epoch;
         }
-        Processed = Z;
-        for (unsigned i=0; i<Q.size(); i++) Processed[Q[i]] = false;
+        count_in_G = &R == &G or (top_is_G and &R == Rs[0]);
+        touched.clear();
+        if (!count_in_G) {
+            Processed = Z;
+            for (unsigned i=0; i<Q.size(); i++) Processed[Q[i]] = false;
+        }
+#ifndef NDEBUG
+        if (count_in_G and R != G) THROW_ERROR("top level is not the whole game");
+#endif
     }
     bool crossed = false;
     for (unsigned qi=0; qi<Q.size(); qi++) {
@@ -146,6 +178,23 @@ TLQSolver::attract(int pl, bitset &Z, bitset &R, const bitset *crossing, bool re
     }
     Q.clear();
     return crossed;
+}
+
+
+/**
+ * After removing a dominion from G: if it was attracted in G (see attract), each vertex left
+ * in G with a successor in it was counted, and its count of successors not in the dominion
+ * (in <escs>) is its new number of successors in G. Otherwise, count them again lazily.
+ */
+void
+TLQSolver::updateDegrees(bool counted)
+{
+    if (counted) {
+        for (const int u : touched) if (G[u]) gdeg[u] = escs[u];
+    } else {
+        std::fill_n(gdeg, nodecount(), 0u);
+    }
+    touched.clear();
 }
 
 
@@ -716,6 +765,9 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
             Wm |= H;
             Wo -= H;
             G -= H;
+            // (if <H> was attracted in <G>, see attract, and the top level is <G> again)
+            updateDegrees(count_in_G);
+            top_is_G = true;
         } else {
             if (!pea_vidx) {
                 pea_vidx.reset(new unsigned int[nodecount()]);
@@ -738,6 +790,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
                 Wm |= S;
                 Wo -= S;
                 G -= S;
+                updateDegrees(true);
                 S.reset();
             }
         }
@@ -926,6 +979,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
     if (opponent_attracted_from_us) {
         Wm -= SG;  // reset Wm prior to recursion
         SG -= Wo;  // remove opponent won vertices from subgame
+        if (Rs.size() == 1) top_is_G = false;
 
         if (SG.any()) {
             // Expand the right side of the current level of the universal tree
@@ -944,6 +998,13 @@ TLQSolver::run()
     Processed.resize(nodecount());
     escs = new unsigned int[nodecount()];
     esc_epoch = new unsigned int[nodecount()]();
+    gdeg = new unsigned int[nodecount()];
+    // if no vertex is disabled, every successor is in <G>; otherwise count lazily
+    if (disabled.none()) {
+        for (int v=0; v<nodecount(); v++) gdeg[v] = game.outcount(v);
+    } else {
+        std::fill_n(gdeg, nodecount(), 0u);
+    }
 
     Q.resize(nodecount());
     W0.resize(nodecount());
@@ -955,6 +1016,7 @@ TLQSolver::run()
     Rs.push_back(&GG);
     for (;;) {
         const auto previous_dominions = dominions;
+        top_is_G = true;
         solve(GG, nodecount()-1, nodecount(), nodecount());
         if (G.none() or dominions == previous_dominions) break;
 
@@ -1014,6 +1076,7 @@ TLQSolver::run()
     delete[] str;
     delete[] escs;
     delete[] esc_epoch;
+    delete[] gdeg;
     for (auto &x : tv) delete[] x;
     for (auto &x : tout) delete[] x;
 }

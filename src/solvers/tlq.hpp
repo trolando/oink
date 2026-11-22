@@ -79,6 +79,11 @@ protected:
     bitset Processed; // already processed vertices of the current attraction
     unsigned int *escs, *esc_epoch; // lazy escape counts, scoped to one attraction
     unsigned int attract_epoch = 0;
+    unsigned int *gdeg = nullptr; // number of successors in <G> of each vertex in <G>, or 0 if not known yet
+    bool count_in_G = false; // the current attraction is in <G> (see attract)
+    bool top_is_G = false; // the top level is still the whole unsolved game <G>
+    std::vector<int> touched; // the vertices counted by the current attraction in <G>
+    void updateDegrees(bool counted);
     bool attract(int pl, bitset &Z, bitset &R, const bitset *crossing = nullptr, bool resume = false);
     int *str;
 
