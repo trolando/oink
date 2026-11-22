@@ -45,7 +45,10 @@ protected:
     unsigned int dominions = 0;
     unsigned int tangles = 0;
 
-    std::vector<int*> tout; // for each tangle
+    std::vector<int> tvdata; // the vertex-strategy pairs of the tangles (each ending with -1)
+    std::vector<int> toutdata; // the escapes of the tangles (each ending with -1)
+    std::vector<size_t> tvpos; // for each tangle, its vertex-strategy pairs in <tvdata>
+    std::vector<size_t> toutpos; // for each tangle, its escapes in <toutdata>
     // The tangles that escape to a vertex, in discovery order in <tin_pool>.
     // Only pages with an escape destination have descriptors, and only vertices
     // marked in <has_tin> have an initialized descriptor.
@@ -54,7 +57,6 @@ protected:
     std::vector<int> tin_pool;
     std::vector<std::unique_ptr<Backlinks[]>> tin_pages;
     bitset has_tin;
-    std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
     std::vector<unsigned int> tdone; // all members in Z in this attraction
 

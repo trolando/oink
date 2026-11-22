@@ -53,8 +53,10 @@ public:
         tangleto = {2, 3};
         addBacklinks(0);
         tangleto.clear();
-        tv.push_back(new int[5]{0, 1, 1, -1, -1});
-        tout.push_back(new int[3]{2, 3, -1});
+        tvpos.push_back(tvdata.size());
+        tvdata.insert(tvdata.end(), {0, 1, 1, -1, -1});
+        toutpos.push_back(toutdata.size());
+        toutdata.insert(toutdata.end(), {2, 3, -1});
         tpr.push_back(0);
         tdone.push_back(1);
         attract_epoch = std::numeric_limits<unsigned>::max();
@@ -65,8 +67,6 @@ public:
         delete[] str;
         delete[] escs;
         delete[] esc_epoch;
-        for (auto p : tv) delete[] p;
-        for (auto p : tout) delete[] p;
     }
 
     void check()

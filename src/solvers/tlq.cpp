@@ -221,7 +221,7 @@ TLQSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G)
      * Check if the tangle can escape to G\Z.
      */
     {
-        int *ptr = tout[t];
+        const int *ptr = &toutdata[toutpos[t]];
         int v;
         while ((v=*ptr++) != -1) {
             if (Z[v]) continue;
@@ -235,7 +235,7 @@ TLQSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G)
      */
     {
         bool can_attract_new = false;
-        int *ptr = tv[t];
+        const int *ptr = &tvdata[tvpos[t]];
         for (;;) {
             const int v = *ptr++;
             if (v == -1) break;
@@ -264,7 +264,7 @@ TLQSolver::attractTangle(int t, const int pl, bitset &R, bitset &Z, bitset &G)
      * Attract!
      */
     {
-        int *ptr = tv[t];
+        const int *ptr = &tvdata[tvpos[t]];
         for (;;) {
             const int v = *ptr++;
             if (v == -1) break;
@@ -524,20 +524,17 @@ begin_visiting:
 
         addBacklinks(tidx);
 
-        // move tangleto into vout
-        int* _tout = new int[tangleto.size()+1];
-        std::copy(tangleto.begin(), tangleto.end(), _tout);
-        _tout[tangleto.size()] = -1;
-        tout.push_back(_tout);
-
-        // move tangle into vv
-        int* _vv = new int[tangle.size()*2+1], c=0;
+        // store the tangle: its vertex-strategy pairs and its escapes (each ending with -1),
+        // in flat arrays as in TL, instead of two allocations per tangle
+        toutpos.push_back(toutdata.size());
+        toutdata.insert(toutdata.end(), tangleto.begin(), tangleto.end());
+        toutdata.push_back(-1);
+        tvpos.push_back(tvdata.size());
         for (const int v : tangle) {
-            _vv[c++] = v;
-            _vv[c++] = str[v];
+            tvdata.push_back(v);
+            tvdata.push_back(str[v]);
         }
-        _vv[c] = -1;
-        tv.push_back(_vv);
+        tvdata.push_back(-1);
 
         // and set p to pr
         tpr.push_back(pr);
@@ -1077,8 +1074,6 @@ TLQSolver::run()
     delete[] escs;
     delete[] esc_epoch;
     delete[] gdeg;
-    for (auto &x : tv) delete[] x;
-    for (auto &x : tout) delete[] x;
 }
 
 }
