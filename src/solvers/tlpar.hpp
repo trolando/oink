@@ -61,11 +61,11 @@ public:
     void roundChunk(int start, int n);
 
 protected:
-    int iterations = 0;
-    int dominions = 0;
-    int tangles = 0;
-    long par_rounds = 0; // number of parallel rounds
-    long par_vertices = 0; // vertices processed in parallel rounds
+    uint64_t iterations = 0;
+    uint64_t dominions = 0;
+    uint64_t tangles = 0;
+    uint64_t par_rounds = 0; // number of parallel rounds
+    uint64_t par_vertices = 0; // vertices processed in parallel rounds
 
     std::vector<int> tvdata; // the vertex-strategy pairs of the tangles (each ending with -1)
     std::vector<int> toutdata; // the escapes of the tangles (each ending with -1)

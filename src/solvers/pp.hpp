@@ -31,7 +31,7 @@ public:
     virtual ~PPSolver();
     virtual void run();
 
-    int promotions;
+    uint64_t promotions;
 
 protected:
     int *inverse;

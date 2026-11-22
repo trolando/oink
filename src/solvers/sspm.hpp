@@ -112,8 +112,8 @@ protected:
         return node;
     }
 
-    int lift_count = 0;
-    int lift_attempt = 0;
+    uint64_t lift_count = 0;
+    uint64_t lift_attempt = 0;
 
     void run(int nbits, int depth, int player);
 };

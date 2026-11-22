@@ -42,8 +42,8 @@ public:
 
 protected:
     unsigned long long iterations = 0;
-    unsigned int dominions = 0;
-    unsigned int tangles = 0;
+    uint64_t dominions = 0;
+    uint64_t tangles = 0;
 
     std::vector<int> tvdata; // the vertex-strategy pairs of the tangles (each ending with -1)
     std::vector<int> toutdata; // the escapes of the tangles (each ending with -1)

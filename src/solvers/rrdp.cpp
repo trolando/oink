@@ -137,11 +137,11 @@ RRDPSolver::run()
 
     // reset statistics
     promotions = 0;
-    int performances = 0;
+    uint64_t performances = 0;
 
     // set to track delayed promotions
     std::vector<int> P;
-    int del0 = 0, del1 = 0, discarded = 0;
+    uint64_t del0 = 0, del1 = 0, discarded = 0;
 
     /**
      * Two loops: the outer (normal) loop, and the inner (promotion-chain) loop.

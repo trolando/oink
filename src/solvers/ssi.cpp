@@ -433,7 +433,7 @@ SSISolver::run()
         }
     }
 
-    int minor = 0, major = 0;
+    uint64_t minor = 0, major = 0;
     auto remaining = G.count();
 
     for (;;) {

@@ -562,7 +562,7 @@ QPTSolver::run()
     if (bounded) {
         int i;
         for (i=1; i<=big_k; i++) {
-            long _l = lift_count, _a = lift_attempt;
+            uint64_t _l = lift_count, _a = lift_attempt;
             uint64_t _c = count_unsolved();
             uint64_t c = _c;
 

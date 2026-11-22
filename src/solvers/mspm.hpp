@@ -47,8 +47,8 @@ public:
     virtual void run();
     virtual bool parseOptions(std::string& opts);
 
-    long lift_attempt = 0;
-    long lift_count = 0;
+    uint64_t lift_attempt = 0;
+    uint64_t lift_count = 0;
 
 protected:
     int k = 0; // number of positions in a measure: highest priority + 1 (at least 2)

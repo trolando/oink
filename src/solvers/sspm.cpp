@@ -666,7 +666,7 @@ SSPMSolver::run()
     int i = bounded ? 1 : ml;
 
     for (; i<=ml; i++) {
-        int _l = lift_count, _a = lift_attempt;
+        uint64_t _l = lift_count, _a = lift_attempt;
         uint64_t _c = count_unsolved(), c;
 
         if (ODDFIRST) {

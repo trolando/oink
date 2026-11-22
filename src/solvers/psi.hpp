@@ -35,7 +35,7 @@ public:
     virtual bool parseOptions(std::string& opts);
     void setWorkers(int count) { workers = count; }
 
-    int minor = 0, major = 0;
+    uint64_t minor = 0, major = 0;
 
     // variables are public to avoid warnings due to C/C++ issues
     int workers = 0; // number of workers for Lace

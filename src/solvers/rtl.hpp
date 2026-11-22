@@ -40,9 +40,9 @@ protected:
     int max_prio;
     // int *inverse; // reverse lookup priority->vertex
 
-    int iterations = 0;
-    int dominions = 0;
-    int tangles = 0;
+    uint64_t iterations = 0;
+    uint64_t dominions = 0;
+    uint64_t tangles = 0;
 
     std::vector<int*> tout; // for each tangle
     std::vector<int> *tin; // for each normal vertex

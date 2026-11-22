@@ -38,8 +38,8 @@ public:
 private:
     friend class PMTLCacheProbe;
     std::uint64_t iterations = 0;
-    int dominions = 0;
-    int tangles = 0;
+    std::uint64_t dominions = 0;
+    std::uint64_t tangles = 0;
     std::vector<int> escape_offset;
     std::vector<unsigned int> escape_stamp;
     unsigned int escape_epoch = 0;

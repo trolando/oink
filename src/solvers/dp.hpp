@@ -33,7 +33,7 @@ public:
 
 protected:
     int *region_;
-    int delayed = 0;
+    uint64_t delayed = 0;
 
     virtual int getRegionStatus(int index, int priority);
 };

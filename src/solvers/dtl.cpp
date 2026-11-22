@@ -1009,8 +1009,8 @@ DTLSolver::search_rec(bitset &R, const int player, const int depth)
 bool
 DTLSolver::search(const int player)
 {
-    const int T = tangles;
-    const int D = dominions;
+    const auto T = tangles;
+    const auto D = dominions;
 
 #ifndef NDEBUG
     int val1[nodecount()], val2[nodecount()];
@@ -1112,8 +1112,8 @@ DTLSolver::run()
     pea_vidx = new unsigned int[nodecount()];
     pea_root.resize(nodecount());
 
-    int even_iterations = 0;
-    int odd_iterations = 0;
+    uint64_t even_iterations = 0;
+    uint64_t odd_iterations = 0;
 
     if (!interleaved) {
         // First solve for player Odd, then solve for player Even

@@ -38,8 +38,8 @@ protected:
     int max, maxo;       // highest priority for current player / opponent
     unsigned long goal;  // number of vertices of <pl> parity
 
-    long lift_count;
-    long lift_attempt;
+    uint64_t lift_count;
+    uint64_t lift_attempt;
 
     uintqueue todo;
     bitset dirty;

@@ -89,6 +89,10 @@ All notable changes to Oink will be documented in this file.
   Oink took a nonzero Lace worker count to mean that Lace was running,
   but Lace keeps that count after `lace_stop`; Oink now asks
   `lace_is_running`.
+- The counters that TL, DTL, RTL, TLJ, TLPar, TLQ, PMTL, PP and its
+  variants, SSPM, QPT, MSPM, PSI and SSI log (iterations, dominions,
+  tangles, promotions, lifts and others) are 64-bit, so that long runs
+  no longer wrap them.
 
 ## [1.2.1] - 2026-11-19
 

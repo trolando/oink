@@ -31,7 +31,7 @@ public:
 
     void run() override;
 
-    int delayed = 0;
+    uint64_t delayed = 0;
 
 protected:
     int *region_;
