@@ -79,7 +79,7 @@ protected:
     bitset Processed; // already processed vertices of the current attraction
     unsigned int *escs, *esc_epoch; // lazy escape counts, scoped to one attraction
     unsigned int attract_epoch = 0;
-    bool attract(int pl, bitset &Z, bitset &R, const bitset *crossing = nullptr);
+    bool attract(int pl, bitset &Z, bitset &R, const bitset *crossing = nullptr, bool resume = false);
     int *str;
 
     bitset W0, W1; // current approximation of winning areas

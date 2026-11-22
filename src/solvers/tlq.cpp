@@ -119,18 +119,23 @@ TLQSolver::attractVertices(const int pl, const int v, bitset &Z, bitset &R)
  * Queued seeds are unprocessed even when already in Z. Some seeds (for example k_U)
  * are outside R: they trigger attraction but must not decrement its escape counters.
  * If crossing is given, report whether the attraction visits it.
+ * With resume, continue the last attraction (to the same Z in the same R) with new seeds that
+ * were not processed yet, as for the next batch of heads of a region: Z has only grown since,
+ * so its escape counts and completed tangles are still valid, and need not be computed again.
  */
 bool
-TLQSolver::attract(int pl, bitset &Z, bitset &R, const bitset *crossing)
+TLQSolver::attract(int pl, bitset &Z, bitset &R, const bitset *crossing, bool resume)
 {
     if (Q.empty()) return false;
-    if (++attract_epoch == 0) {
-        std::fill(esc_epoch, esc_epoch+nodecount(), 0u);
-        std::fill(tdone.begin(), tdone.end(), 0u);
-        ++attract_epoch;
+    if (!resume) {
+        if (++attract_epoch == 0) {
+            std::fill(esc_epoch, esc_epoch+nodecount(), 0u);
+            std::fill(tdone.begin(), tdone.end(), 0u);
+            ++attract_epoch;
+        }
+        Processed = Z;
+        for (unsigned i=0; i<Q.size(); i++) Processed[Q[i]] = false;
     }
-    Processed = Z;
-    for (unsigned i=0; i<Q.size(); i++) Processed[Q[i]] = false;
     bool crossed = false;
     for (unsigned qi=0; qi<Q.size(); qi++) {
         const int v = Q[qi];
@@ -604,8 +609,10 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
     Hs.push_back(&H);
 
     // Seed the same-parity heads together, as in TL, before expanding their attractor.
+    // (the batches after the first continue its attraction, see attract)
     int next = vtop;
     while (next >= 0) {
+        const bool resume = !heads.empty();
         for (; next >= 0; next--) {
             if (!SG[next] or H[next]) continue;
             if ((priority(next)&1) != pl) break;
@@ -615,7 +622,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
             Q.push(next);
         }
         if (Q.empty()) break;
-        attract(pl, H, SG);
+        attract(pl, H, SG, nullptr, resume);
         // Attraction can remove the opposite-parity vertex that stopped this batch.
     }
 
