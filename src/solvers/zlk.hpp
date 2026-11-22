@@ -18,6 +18,7 @@
 #define ZLK_HPP
 
 #include <atomic>
+#include <climits>
 #include <cstdint>
 #include <memory>
 #include <queue>
@@ -36,7 +37,7 @@ public:
 
     virtual void run();
 
-    int iterations;
+    uint64_t iterations = 0;
 
     int *inverse;
     int max_prio;
@@ -69,10 +70,17 @@ public:
     };
     std::vector<par_buffer> pvec;
 
+    // The region ids stay below this limit: they are renumbered before they reach it (see
+    // renumber() in zlk.cpp). A test may set it low, to renumber often. (After the other members,
+    // which keep their offsets in the hot code.)
+    int region_limit = INT_MAX;
+    uint64_t renumbered = 0; // how often the region ids were renumbered
+
     int attractExt(int i, int r, std::vector<int> *R, std::vector<int> *H);
     int attractLosing(int i, int r, std::vector<int> *H, std::vector<int> *R);
     void attractParT(lace_worker*, int pl, int cur, int r);
     int attractPar(lace_worker*, int i, int r, std::vector<int>* R, std::vector<int>* H);
+    [[gnu::cold, gnu::noinline]] int renumber(std::vector<int> &history);
     // friend void updateOutcount_WORK(WorkerP*, Task*, int, int, ZLKSolver*);
 };
 

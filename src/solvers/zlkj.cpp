@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <stdexcept>
 #include <vector>
 
 #include "zlkj.hpp"
@@ -382,6 +383,53 @@ ZLKJSolver::compact(int p, size_t start)
     for (size_t j = start; j < k; j++) seen[L[j]] = false;
 }
 
+/**
+ * Renumber the region ids, before they reach <region_limit>. <live> holds the ids of the frames
+ * on the stack, from the bottom up, and gets their new ids; returns the next id.
+ *
+ * Every frame takes a new region id when it is pushed, and so does every round that attracts
+ * reset vertices back (<r2> in reattract), so the ids count the steps of the whole run, not the
+ * depth. After 2^31 steps they would overflow into the negative values of region[] (DIS, BOT
+ * and the escape counters), and the new regions would look open or disabled.
+ *
+ * Only the ids of the frames on the stack (F.r in <frames>) are live: every comparison of a
+ * region id is with 0 (ids versus the negative values), with DIS or BOT, or with the id r of
+ * the top frame: rt >= 0 and rt < r in attractHeads, region < r and region >= r in
+ * attractLosing, resetClosure, reattract and finish; the one exception is rt == r2 in
+ * reattract, which takes its id just before and gives it to no frame. A frame lower on the
+ * stack compares with its id again when it is the top frame. The other ids, of the frames that
+ * are done and of the vertices attracted back, are dead: they stay in region[], but only to be
+ * compared with the live ids. The ids on the stack increase from the bottom up, and a new frame
+ * has the highest id. The justifications (strategy) and the vectors W hold vertices, not ids.
+ *
+ * So the k-th live id from the bottom (k = 1..L) becomes 2k, and every other id becomes the odd
+ * number between the live ids around it: 2k+1 for an id between the k-th and the (k+1)-th, 1
+ * below the first, 2L+1 above the last. Every comparison of an id with a live id (<, >=, ==)
+ * then has the same answer as before; the negative values stay; and the next id is 2L+2, above
+ * all ids. So the solver takes the same steps, with the same regions and strategies.
+ * This runs at the top of the main loop of run(), before it reads the frame.
+ */
+int
+ZLKJSolver::renumber(std::vector<int> &live)
+{
+#ifndef NDEBUG
+    for (size_t k = 1; k < live.size(); k++) if (live[k-1] >= live[k]) LOGIC_ERROR;
+#endif
+    if (live.size() >= (size_t)INT_MAX/2) throw std::runtime_error("zlkj: out of region ids");
+
+    auto map = [&](int x) {
+        const long k = std::upper_bound(live.begin(), live.end(), x) - live.begin();
+        return (int)((k > 0 and live[k-1] == x) ? 2*k : 2*k+1);
+    };
+    for (long v = 0; v < nodecount(); v++) {
+        if (region[v] >= 0) region[v] = map(region[v]);
+    }
+    for (size_t k = 0; k < live.size(); k++) live[k] = (int)(2*k+2);
+
+    renumbered++;
+    return (int)(2*live.size()+2);
+}
+
 void
 ZLKJSolver::run()
 {
@@ -448,9 +496,20 @@ ZLKJSolver::run()
     };
 
     int next_r = 0;
+    const int limit = region_limit; // see renumber
     push(top, next_r++);
 
     while (!frames.empty()) {
+        // An iteration takes at most two region ids. Renumber them first when they run out: the
+        // ids of the frames go to renumber in a vector of their own, so that <frames> stays
+        // local to run().
+        if (next_r >= limit - 1) {
+            std::vector<int> live;
+            for (const Frame &G : frames) live.push_back(G.r);
+            next_r = renumber(live);
+            for (size_t k = 0; k < frames.size(); k++) frames[k].r = live[k];
+        }
+
         Frame &F = frames.back();
         const int r = F.r;
         const int pl = priority(F.i)&1;
@@ -520,6 +579,7 @@ ZLKJSolver::run()
     W[1].clear();
     workspace.reset();
 
+    if (renumbered) logger << "renumbered the region ids " << renumbered << " times." << std::endl;
     logger << "solved with " << iterations << " iterations, " << rounds << " rounds, " << resets << " resets and " << reattracted << " attracted back." << std::endl;
 }
 

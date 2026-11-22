@@ -380,6 +380,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             test/test_solution.cpp
             test/test_ppj.cpp
             test/test_zlkj.cpp
+            test/test_region_renumber.cpp
             test/test_psi.cpp
             test/test_lace_restart.cpp
             test/test_fpj_batch.cpp
@@ -433,6 +434,16 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         add_test(NAME TestFPJBatch COMMAND test_unit fpj-batch)
         add_test(NAME TestPPJ COMMAND test_unit ppj)
         add_test(NAME TestZLKJ COMMAND test_unit zlkj)
+        add_test(NAME TestRegionRenumber COMMAND test_unit region-renumber)
+        if(OINK_BUILD_EXTRA_TOOLS)
+            # the same on the counter families, made with the extra tools
+            add_test(NAME TestRegionRenumberCounters
+                COMMAND ${CMAKE_COMMAND}
+                    -DTEST_UNIT=$<TARGET_FILE:test_unit>
+                    "-DTOOLS=$<TARGET_FILE:counter_core>|$<TARGET_FILE:counter_dp>|$<TARGET_FILE:counter_m>|$<TARGET_FILE:counter_ortl>|$<TARGET_FILE:counter_qpt>|$<TARGET_FILE:counter_rob>|$<TARGET_FILE:counter_rr>|$<TARGET_FILE:counter_symsi>|$<TARGET_FILE:tc>|$<TARGET_FILE:tc+>"
+                    -DWORK=${CMAKE_CURRENT_BINARY_DIR}/region-renumber
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/test/test_region_renumber.cmake)
+        endif()
         add_test(NAME TestPSI COMMAND test_unit psi)
         # fill new memory, so that reading uninitialised solver state shows
         set_tests_properties(TestPSI PROPERTIES ENVIRONMENT "MallocScribble=1;MALLOC_PERTURB_=165")

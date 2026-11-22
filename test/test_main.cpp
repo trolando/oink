@@ -21,6 +21,7 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <vector>
 
 int test_measure_ops();
 int test_parser();
@@ -30,6 +31,8 @@ int test_solution();
 int test_pma(const char* fixture);
 int test_ppj();
 int test_zlkj();
+int test_region_renumber();
+int test_region_renumber_files(const std::vector<std::string>& paths);
 int test_psi();
 int test_lace_restart();
 int test_fpj_batch();
@@ -63,6 +66,7 @@ const Test tests[] = {
     {"pma", [] { return test_pma(OINK_TEST_DATA_DIR "/vb232"); }},
     {"ppj", test_ppj},
     {"zlkj", test_zlkj},
+    {"region-renumber", test_region_renumber},
     {"psi", test_psi},
     {"lace-restart", test_lace_restart},
     {"fpj-batch", test_fpj_batch},
@@ -118,6 +122,16 @@ main(int argc, char** argv)
         const std::string mode = argv[1];
         if (mode == "parser-input-fast" or mode == "parser-input-renumber") {
             return test_parser_input(mode == "parser-input-renumber", argv[2]);
+        }
+    }
+    if (argc >= 3 and std::string(argv[1]) == "region-renumber-files") {
+        // the region-renumber test on the given games (see test/test_region_renumber.cmake)
+        std::cout << "[region-renumber-files]" << std::endl;
+        try {
+            return test_region_renumber_files(std::vector<std::string>(argv+2, argv+argc));
+        } catch (const std::exception& error) {
+            std::cerr << "region-renumber-files: " << error.what() << std::endl;
+            return 1;
         }
     }
     std::cerr << "Usage: " << argv[0] << " [--list|TEST]" << std::endl;

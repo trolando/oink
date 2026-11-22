@@ -449,6 +449,56 @@ ZLKWSolver::store(const int d, const long pc, const long po, const uint64_t key,
 }
 
 /**
+ * Renumber the region ids, when <next_r> reaches <region_limit>.
+ *
+ * Every step takes a new region id, and so does a call that takes an earlier result (reuse)
+ * or presumes its whole subgame won, so the ids count the steps of the whole run, not the
+ * depth. After 2^31 steps they would overflow into the negative values of region[] (DIS, BOT
+ * and the escape counters), and the new regions would look open or disabled. But only the ids
+ * of the calls on the stack (L.r of the levels below <depth>) are live: every comparison of a
+ * region id is with 0 (ids versus the negative values), with DIS, or with the id r of the
+ * current step of the current call: rt >= 0 and rt < r in attract, region < r in
+ * attractLosing, region >= r in the strategy fix at the end of a call. A call lower on the
+ * stack compares with its id again when its recursive call returns. The other ids, of earlier
+ * steps, of calls that are done and of reused results, are dead: they stay in region[], but
+ * only to be compared with the live ids. The ids on the stack increase from the bottom up, and
+ * a new step has the highest id. The stored results (slots) and the vectors of the levels hold
+ * vertices and strategies, not ids.
+ *
+ * So the k-th live id from the bottom (k = 1..L) becomes 2k, and every other id becomes the odd
+ * number between the live ids around it: 2k+1 for an id between the k-th and the (k+1)-th, 1
+ * below the first, 2L+1 above the last. Every comparison of an id with a live id (<, >=, ==)
+ * then has the same answer as before; the negative values stay; and the next id is 2L+2, above
+ * all ids. So the solver takes the same steps, with the same regions and strategies.
+ */
+void
+ZLKWSolver::renumber()
+{
+    std::vector<int> live;
+    for (int d = 0; d < depth; d++) {
+        if (levels[d].r >= 0) live.push_back(levels[d].r);
+    }
+#ifndef NDEBUG
+    for (size_t k = 1; k < live.size(); k++) if (live[k-1] >= live[k]) LOGIC_ERROR;
+#endif
+    if (live.size() >= (size_t)INT_MAX/2) throw std::runtime_error("zlkw: out of region ids");
+
+    auto map = [&](int x) {
+        const long k = std::upper_bound(live.begin(), live.end(), x) - live.begin();
+        return (int)((k > 0 and live[k-1] == x) ? 2*k : 2*k+1);
+    };
+    for (long v = 0; v < nodecount(); v++) {
+        if (region[v] >= 0) region[v] = map(region[v]);
+    }
+    for (int d = 0; d < depth; d++) {
+        if (levels[d].r >= 0) levels[d].r = map(levels[d].r);
+    }
+
+    next_r = (int)(2*live.size()+2);
+    renumbered++;
+}
+
+/**
  * The hash of the subgame of the <n> open vertices at or below <top>.
  */
 uint64_t
@@ -505,7 +555,8 @@ ZLKWSolver::solve(const int top, const int pl, long n, const long pc, const long
     // them open again (a step that runs out of precision does not).
     bool listed = false;
     bool changed = false; // whether the opponent attracted vertices in the last step
-    int r = -1; // the region id of the last step
+    int &r = L.r; // the region id of the last step (in L, as renumber() changes it)
+    r = -1;
 
     /**
      * One step of the loop with precision <p> for the opponent, as do_step in zlkpp.cpp.
@@ -739,6 +790,7 @@ ZLKWSolver::run()
     winning.reset();
     strategy.reset();
 
+    if (renumbered) logger << "renumbered the region ids " << renumbered << " times." << std::endl;
     logger << "solved with " << iterations << " iterations (" << calls << " calls, " << presumed << " presumed, " << reused << " reused)." << std::endl;
 }
 

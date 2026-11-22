@@ -17,6 +17,7 @@
 #ifndef ZLKWJ_HPP
 #define ZLKWJ_HPP
 
+#include <climits>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -56,7 +57,8 @@ protected:
      * Per vertex: DIS (disabled), BOT (open), a negative escape counter (open), or the id of the
      * region that holds it. Region ids grow with time: a call takes a new id when it starts, and
      * its subgame is then the set of open vertices; afterwards it is the set of vertices with a
-     * region id at least that id that are open or won by the player of the call.
+     * region id at least that id that are open or won by the player of the call. (renumber()
+     * makes the ids small again, in the same order.)
      */
     std::unique_ptr<int[]> region;
     std::unique_ptr<int8_t[]> winning;
@@ -90,9 +92,12 @@ protected:
      * Y: the vertices the opponent won (the removed opponent attractors).
      * U: the pending vertices: won by the player of the call, but their justification edge was
      *    lost, or their winner is presumed. The next step that does work resets them.
+     * r0: the region id of the heads of the call, or -1 before the call takes it; here, and not
+     *    in a local variable, because renumber() changes it.
      */
     struct Level {
         std::vector<int> H, G, Y, U;
+        int r0 = -1;
     };
     std::deque<Level> levels;
     int depth = 0;
@@ -174,6 +179,12 @@ protected:
     }
     size_t pool = 0;
 
+    // The region ids stay below this limit: they are renumbered when <next_r> reaches it (see
+    // renumber()). A test may set it low, to renumber often. (After the other members, which keep
+    // their offsets in the hot code.)
+    int region_limit = INT_MAX;
+    uint64_t renumbered = 0; // how often the region ids were renumbered
+
     static inline uint64_t vhash(uint64_t v)
     {
         // the finaliser of splitmix64
@@ -185,9 +196,10 @@ protected:
 
     int new_region()
     {
-        if (next_r == INT32_MAX) throw std::runtime_error("zlkwj: out of region ids");
+        if (next_r >= region_limit) renumber();
         return next_r++;
     }
+    [[gnu::cold, gnu::noinline]] void renumber();
 
     int attractHeads(int i, int pl, int r, std::vector<int> &A, std::vector<int> &H);
     long attractLosing(int r, int pl, std::vector<int> &O, const std::vector<int> &H, std::vector<int> &U);

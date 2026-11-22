@@ -21,6 +21,7 @@
 #ifndef ZLKJ_HPP
 #define ZLKJ_HPP
 
+#include <climits>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -80,12 +81,19 @@ protected:
     // and the vertices that are reset.
     std::vector<int> lost, reset;
 
+    // The region ids stay below this limit: they are renumbered before they reach it (see
+    // renumber() in zlkj.cpp). A test may set it low, to renumber often. (After the other members,
+    // which keep their offsets in the hot code.)
+    int region_limit = INT_MAX;
+    uint64_t renumbered = 0; // how often the region ids were renumbered
+
     int attractHeads(int i, int r, std::vector<int> &A, std::vector<int> &H);
     int attractLosing(int r, int pl, std::vector<int> &O, size_t start, std::vector<int> &H);
     void resetClosure(int r, int pl);
     int reattract(int r, int r2, int pl, std::vector<int> &A);
     void finish(int r, int pl, std::vector<int> &H);
     void compact(int p, size_t start);
+    [[gnu::cold, gnu::noinline]] int renumber(std::vector<int> &live);
 };
 
 }

@@ -530,6 +530,58 @@ ZLKWJSolver::store(const int d, const long pc, const long po, const uint64_t key
 }
 
 /**
+ * Renumber the region ids, when <next_r> reaches <region_limit>.
+ *
+ * Every call takes a new region id for its heads, every step that attracts reset vertices back
+ * takes one for them (<r2> in reattract), and so does a call that takes an earlier result
+ * (reuse), so the ids count the steps of the whole run, not the depth. After 2^31 steps they
+ * would overflow into the negative values of region[] (DIS, BOT and the escape counters), and
+ * the new regions would look open or disabled. But only the ids of the calls on the stack (L.r0
+ * of the levels below <depth>) are live: every comparison of a region id is with 0 (ids versus
+ * the negative values), with DIS or BOT, or with the id r0 of the current call: rt >= 0 and
+ * rt < r0 in attractHeads, region < r0 and region >= r0 in attractLosing, resetClosure,
+ * reattract, compact and at the end of a call; the one exception is rt == r2 in reattract,
+ * which takes its id just before and does not keep it. A call lower on the stack compares with
+ * its id again when its recursive call returns. The other ids, of calls that are done, of
+ * vertices attracted back and of reused results, are dead: they stay in region[], but only to
+ * be compared with the live ids. The ids on the stack increase from the bottom up, and a new
+ * call has the highest id. The justifications (strategy), the unjust marks, the stored results
+ * (slots) and the vectors of the levels hold vertices, not ids.
+ *
+ * So the k-th live id from the bottom (k = 1..L) becomes 2k, and every other id becomes the odd
+ * number between the live ids around it: 2k+1 for an id between the k-th and the (k+1)-th, 1
+ * below the first, 2L+1 above the last. Every comparison of an id with a live id (<, >=, ==)
+ * then has the same answer as before; the negative values stay; and the next id is 2L+2, above
+ * all ids. So the solver takes the same steps, with the same regions and strategies.
+ */
+void
+ZLKWJSolver::renumber()
+{
+    std::vector<int> live;
+    for (int d = 0; d < depth; d++) {
+        if (levels[d].r0 >= 0) live.push_back(levels[d].r0);
+    }
+#ifndef NDEBUG
+    for (size_t k = 1; k < live.size(); k++) if (live[k-1] >= live[k]) LOGIC_ERROR;
+#endif
+    if (live.size() >= (size_t)INT_MAX/2) throw std::runtime_error("zlkwj: out of region ids");
+
+    auto map = [&](int x) {
+        const long k = std::upper_bound(live.begin(), live.end(), x) - live.begin();
+        return (int)((k > 0 and live[k-1] == x) ? 2*k : 2*k+1);
+    };
+    for (long v = 0; v < nodecount(); v++) {
+        if (region[v] >= 0) region[v] = map(region[v]);
+    }
+    for (int d = 0; d < depth; d++) {
+        if (levels[d].r0 >= 0) levels[d].r0 = map(levels[d].r0);
+    }
+
+    next_r = (int)(2*live.size()+2);
+    renumbered++;
+}
+
+/**
  * The hash of the subgame of the <n> open vertices at or below <top>.
  */
 uint64_t
@@ -585,7 +637,10 @@ ZLKWJSolver::solve(const int top, long n, const long pc, const long po, bool &rb
     if (!Wm.empty() or !Wo.empty() or !L.G.empty() or !L.Y.empty() or !L.U.empty()) LOGIC_ERROR;
 #endif
 
-    const int r0 = new_region(); // the region of the heads; the subgame has region ids >= r0
+    // the region of the heads; the subgame has region ids >= r0 (in L, as renumber() changes it)
+    int &r0 = L.r0;
+    r0 = -1; // (not live while new_region() may renumber)
+    r0 = new_region();
     bool started = false; // whether a step attracted the heads
 
     // remove the stale entries and duplicates from L.G
@@ -641,7 +696,8 @@ ZLKWJSolver::solve(const int top, long n, const long pc, const long po, bool &rb
                 return false;
             }
             iterations++;
-            j = reattract(r0, new_region(), pl, L.G);
+            const int r2 = new_region(); // (first: renumbering changes r0)
+            j = reattract(r0, r2, pl, L.G);
             for (int v : reset) {
                 if (is_open(region[v])) {
                     nh++;
@@ -869,6 +925,7 @@ ZLKWJSolver::run()
     winning.reset();
     strategy.reset();
 
+    if (renumbered) logger << "renumbered the region ids " << renumbered << " times." << std::endl;
     logger << "solved with " << iterations << " iterations (" << calls << " calls, " << presumed << " presumed, " << reused << " reused, " << resets << " resets, " << reattracted << " attracted back)." << std::endl;
 }
 

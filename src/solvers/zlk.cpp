@@ -20,6 +20,7 @@
 #include <queue>
 #include <cassert>
 #include <cstring>
+#include <stdexcept>
 
 #include "zlk.hpp"
 #include "lace.h"
@@ -450,10 +451,62 @@ ZLKSolver::attractLosing(const int i, const int r, std::vector<int> *H, std::vec
     return R->size() - initial;
 }
 
+/**
+ * Renumber the region ids, before they reach <region_limit>, also the ids of the frames on the
+ * stack in <history>; returns the next id.
+ *
+ * Every frame takes a new region id when it is pushed, so the ids count the steps of the whole
+ * run, not the depth. After 2^31 steps they would overflow into the negative values of region[]
+ * (DIS, BOT and the escape counters), and the new regions would look open or disabled. But only
+ * the ids of the frames on the stack (in <history>) are live: every comparison of a region id
+ * in the solver is with 0 (ids versus the negative values), with DIS, or with the id <r> of the
+ * top frame:
+ * - attractExt, attractPar and attractParT: _r >= 0 (attracted), also on the values that a
+ *   compare-and-swap returns, and rt >= 0 and rt < r (in a higher region) when they count the
+ *   escapes;
+ * - attractLosing and the strategy fix in phase 1: region < r (not in the subgame).
+ * A frame lower on the stack compares with its id again when it is the top frame (in phase 2
+ * it no longer does, but its id stays live here). The other ids, of the frames that are done,
+ * are dead: they stay in region[], but only to be compared with the live ids. The ids on the
+ * stack increase from the bottom up, and the top frame has the highest id when it attracts.
+ *
+ * So the k-th live id from the bottom (k = 1..L) becomes 2k, and every other id becomes the odd
+ * number between the live ids around it: 2k+1 for an id between the k-th and the (k+1)-th, 1
+ * below the first, 2L+1 above the last. Every comparison of an id with a live id (<, >=, ==)
+ * then has the same answer as before; the negative values stay; and the next id is 2L+2, above
+ * all ids. So the solver takes the same steps, with the same regions and strategies.
+ * This runs when a frame is pushed, between the steps, when no Lace worker is attracting.
+ */
+int
+ZLKSolver::renumber(std::vector<int> &history)
+{
+    std::vector<int> live;
+    for (size_t k = 1; k < history.size(); k += 3) live.push_back(history[k]);
+#ifndef NDEBUG
+    for (size_t k = 1; k < live.size(); k++) if (live[k-1] >= live[k]) LOGIC_ERROR;
+#endif
+    if (live.size() >= (size_t)INT_MAX/2) throw std::runtime_error("zlk: out of region ids");
+
+    auto map = [&](int x) {
+        const long k = std::upper_bound(live.begin(), live.end(), x) - live.begin();
+        return (int)((k > 0 and live[k-1] == x) ? 2*k : 2*k+1);
+    };
+
+    for (long v = 0; v < nodecount(); v++) {
+        const int x = region[v].load(std::memory_order_relaxed);
+        if (x >= 0) region[v].store(map(x), std::memory_order_relaxed);
+    }
+    for (size_t k = 1; k < history.size(); k += 3) history[k] = (int)(2*(k/3)+2);
+
+    renumbered++;
+    return (int)(2*live.size()+2);
+}
+
 void
 ZLKSolver::run()
 {
     iterations = 0;
+    renumbered = 0;
 
     // allocate and initialize data structures
     region = std::make_unique<std::atomic<int>[]>(nodecount());
@@ -519,6 +572,13 @@ ZLKSolver::run()
     int i = inverse[max_prio];
     int next_r = 0;
 
+    // a new region id (see renumber)
+    const int limit = region_limit;
+    auto new_region = [&]() {
+        if (next_r >= limit) next_r = renumber(history);
+        return next_r++;
+    };
+
     bool usePar = parallel();
 
     if (usePar) {
@@ -531,7 +591,7 @@ ZLKSolver::run()
     // initialize first level (i, r=0, phase=0)
     push_level();
     history.push_back(i);
-    history.push_back(next_r++);
+    history.push_back(new_region());
     history.push_back(0);
 
     while (true) {
@@ -591,7 +651,7 @@ ZLKSolver::run()
                 // go recursive (subgame not empty)
                 push_level();
                 history.push_back(j);
-                history.push_back(next_r++);
+                history.push_back(new_region());
                 history.push_back(0);
             }
         } else if (phase == 1) {
@@ -723,7 +783,7 @@ ZLKSolver::run()
                     history.back() = 2; // set current phase to 2
                     push_level();
                     history.push_back(new_i);
-                    history.push_back(next_r++);
+                    history.push_back(new_region());
                     history.push_back(0);
                 }
             }
@@ -776,6 +836,7 @@ ZLKSolver::run()
     winning.reset();
     strategy.reset();
 
+    if (renumbered) logger << "renumbered the region ids " << renumbered << " times." << std::endl;
     logger << "solved with " << iterations << " iterations." << std::endl;
 }
 

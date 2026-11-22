@@ -66,6 +66,8 @@ All notable changes to Oink will be documented in this file.
 
 ### Fixed
 
+- ZLK and ZLKJ gave wrong solutions after 2^31 steps, when their region
+  ids overflowed (from `counter_core 21` on); they now renumber the ids.
 - PSI initialises the halting state of vertices that are already solved
   when it starts (from a partial solution, preprocessing or bottom SCC
   solving). Its halting scans read that state for every vertex, so an

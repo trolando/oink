@@ -17,6 +17,7 @@
 #ifndef ZLKW_HPP
 #define ZLKW_HPP
 
+#include <climits>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -54,6 +55,7 @@ protected:
      * Per vertex: DIS (disabled), BOT (open), a negative escape counter (open), or the id of the
      * region that holds it. Region ids grow with time, so a call's subgame is the set of open
      * vertices when it starts, and afterwards the vertices with a region id >= its first id.
+     * (renumber() makes the ids small again, in the same order.)
      */
     std::unique_ptr<int[]> region;
     std::unique_ptr<int8_t[]> winning;
@@ -78,9 +80,12 @@ protected:
      * G: the subgame of the call after the last step (A and the part of the lower subgame won
      *    by the player of the call, minus what the opponent attracted).
      * Y: the vertices the opponent won so far (the removed opponent attractors).
+     * r: the region id of the current step of the call, or -1 before its first step; here, and
+     *    not in a local variable, because renumber() changes it.
      */
     struct Level {
         std::vector<int> A, H, G, Y;
+        int r = -1;
     };
     std::deque<Level> levels;
     int depth = 0;
@@ -166,6 +171,12 @@ protected:
     }
     size_t pool = 0;
 
+    // The region ids stay below this limit: they are renumbered when <next_r> reaches it (see
+    // renumber()). A test may set it low, to renumber often. (After the other members, which keep
+    // their offsets in the hot code.)
+    int region_limit = INT_MAX;
+    uint64_t renumbered = 0; // how often the region ids were renumbered
+
     /**
      * The hash of a vertex; the hash of a subgame is the sum over its vertices.
      */
@@ -183,9 +194,10 @@ protected:
 
     int new_region()
     {
-        if (next_r == INT32_MAX) throw std::runtime_error("zlkw: out of region ids");
+        if (next_r >= region_limit) renumber();
         return next_r++;
     }
+    [[gnu::cold, gnu::noinline]] void renumber();
 
     int attract(int i, int pl, int r, std::vector<int> &A, std::vector<int> &H);
     long attractLosing(int r, int pl, const std::vector<int> &H, std::vector<int> &R);
