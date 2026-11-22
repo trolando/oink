@@ -43,6 +43,7 @@ All notable changes to Oink will be documented in this file.
 - TLQ solves a closed region of its top level as a dominion while the
   top level is the whole unsolved game, as TL does with its first region,
   instead of splitting it into tangles.
+- TLQ adopts more of TL's engineering.
 
 ### Fixed
 

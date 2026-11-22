@@ -637,16 +637,29 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
 
     /**
      * Now check if H has any escapes to R-H
+     * A head of <pl> can stay in H iff it has a strategy: it got one from the first of its
+     * successors in H that attracted from it (one attracting before the head was added would
+     * have attracted the head). If H is the whole subgame (no vertex was left to stop the
+     * heads), there is nothing to check, as every vertex of a subgame has a successor in it.
      */
 
     bool leaky = false;
-    for (auto v : heads) {
-        if (!attracts(pl, v, H, SG)) {
-            leaky = true;
-            break;
-            // TODO: consider learning tangles from partially leaky regions
+    if (next >= 0) {
+        for (auto v : heads) {
+            if (owner(v) == pl ? str[v] == -1 : !attracts(pl, v, H, SG)) {
+                leaky = true;
+                break;
+                // TODO: consider learning tangles from partially leaky regions
+            }
         }
     }
+#ifndef NDEBUG
+    for (auto v : heads) {
+        const bool closed = attracts(pl, v, H, SG);
+        if (next < 0 and !closed) THROW_ERROR("head of the whole subgame is open");
+        if (owner(v) == pl and closed != (str[v] != -1)) THROW_ERROR("strategy of a head does not match");
+    }
+#endif
 
     /**
      * If not leaky, then we can learn tangles from H
