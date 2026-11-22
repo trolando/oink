@@ -84,8 +84,9 @@ protected:
     unsigned int *gdeg = nullptr; // number of successors in <G> of each vertex in <G>, or 0 if not known yet
     bool count_in_G = false; // the current attraction is in <G> (see attract)
     bool top_is_G = false; // the top level is still the whole unsolved game <G>
-    std::vector<int> touched; // the vertices counted by the current attraction in <G>
+    std::vector<int> touched; // the vertices counted by the last attraction in <G>
     void updateDegrees(bool counted);
+    void remaximizeTop(int pl, bitset &Z, bitset &R, const bitset *removed, unsigned int firstnew);
     bool attract(int pl, bitset &Z, bitset &R, const bitset *crossing = nullptr, bool resume = false);
     int *str;
 

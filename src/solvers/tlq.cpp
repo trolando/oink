@@ -194,7 +194,91 @@ TLQSolver::updateDegrees(bool counted)
     } else {
         std::fill_n(gdeg, nodecount(), 0u);
     }
-    touched.clear();
+}
+
+
+/**
+ * Re-maximize the region <Z> of the top level, while the top level is the whole game <G> (in
+ * <R>), after learning: <Z> was closed under attraction in <G> before, and since then only the
+ * tangles from <firstnew> were learned, and the dominions in <removed> (if given) left <G>.
+ * Attracting from all of <Z> again would only attract more via these changes, so start from
+ * them instead: the vertices of the opponent next to the dominions (counted by their attraction
+ * in <touched>, see attract) that no longer escape, and the new tangles and the tangles that
+ * escaped to the dominions, if they have an escape in <Z> (attracting from <Z> would try them).
+ * The region is the same, only the order of attraction (and so the strategies) can differ.
+ */
+void
+TLQSolver::remaximizeTop(int pl, bitset &Z, bitset &R, const bitset *removed, unsigned int firstnew)
+{
+    if (++attract_epoch == 0) {
+        std::fill(esc_epoch, esc_epoch+nodecount(), 0u);
+        std::fill(tdone.begin(), tdone.end(), 0u);
+        ++attract_epoch;
+    }
+    count_in_G = false;
+    Processed = Z;
+    if (removed) {
+        for (const int u : touched) {
+            if (!G[u] or Z[u] or owner(u) == pl) continue;
+            bool escapes = false, hasZ = false;
+            for (auto curedge = outs(u); *curedge != -1; curedge++) {
+                if (Z[*curedge]) hasZ = true;
+                else if (R[*curedge]) { escapes = true; break; }
+            }
+            if (escapes or !hasZ) continue;
+            Z[u] = true;
+            str[u] = -1;
+            Q.push(u);
+        }
+    }
+    auto attractEscaping = [&] (const int t) {
+        if (tpr[t] == -1 or (tpr[t]&1) != pl) return;
+        for (const int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ptr++) {
+            if (Z[*ptr]) { attractTangle(t, pl, R, Z, R); return; }
+        }
+    };
+    for (unsigned int t = firstnew; t < tpr.size(); t++) attractEscaping(t);
+    if (removed and !has_tin.empty()) {
+        for (auto v = removed->find_first(); v != bitset::npos; v = removed->find_next(v)) {
+            if (!has_tin[v]) continue;
+            const Backlinks &links = tin_pages[v/TIN_PAGE_SIZE][v%TIN_PAGE_SIZE];
+            for (unsigned int i = 0; i < links.size; i++) attractEscaping(tin_pool[links.offset+i]);
+        }
+    }
+    for (unsigned qi=0; qi<Q.size(); qi++) {
+        const int v = Q[qi];
+        attractVertices(pl, v, Z, R);
+        Processed[v] = true;
+        attractTangles(pl, v, R, Z, R);
+    }
+    Q.clear();
+#ifndef NDEBUG
+    // (check that <Z> is closed under attraction in <R>, as attracting from all of it gives)
+    for (auto u = R.find_first(); u != bitset::npos; u = R.find_next(u)) {
+        if (Z[u]) continue;
+        bool escapes = false, hasZ = false;
+        for (auto curedge = outs(u); *curedge != -1; curedge++) {
+            if (Z[*curedge]) hasZ = true;
+            else if (R[*curedge]) escapes = true;
+        }
+        if (hasZ and (owner(u) == pl or !escapes)) THROW_ERROR("top region not closed after re-maximization");
+    }
+    for (unsigned int t = 0; t < tpr.size(); t++) {
+        if (tpr[t] == -1 or (tpr[t]&1) != pl) continue;
+        bool hasZ = false, blocked = false;
+        for (const int *ptr = &toutdata[toutpos[t]]; *ptr != -1; ptr++) {
+            if (Z[*ptr]) hasZ = true;
+            else if (R[*ptr]) blocked = true;
+        }
+        if (!hasZ or blocked) continue;
+        bool open = false, gone = false;
+        for (const int *ptr = &tvdata[tvpos[t]]; *ptr != -1; ptr += 2) {
+            if (!G[*ptr]) gone = true;
+            else if (!Z[*ptr]) open = true;
+        }
+        if (open and !gone) THROW_ERROR("top region misses a tangle after re-maximization");
+    }
+#endif
 }
 
 
@@ -720,6 +804,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
 
     if (!leaky) {
         const auto T = tangles, D = dominions;
+        const bitset *removed = nullptr; // the dominions removed from G, if not the top region
         if (!heads.empty() and Rs.size() == 1 and *Rs[0] == G) {
             /**
              * A closed region of the top level, while the top level is the whole unsolved game
@@ -788,7 +873,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
                 Wo -= S;
                 G -= S;
                 updateDegrees(true);
-                S.reset();
+                removed = &S; // (cleared after the re-maximization)
             }
         }
         if (D != dominions or T != tangles) {
@@ -837,10 +922,15 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
 #endif
                 // maximize H
                 k_H &= k_R;
-                for (auto v = k_H.find_last(); v != bitset::npos; v = k_H.find_prev(v)) {
-                    Q.push(v);
+                if (k == 0 and top_is_G) {
+                    // (only what changed can attract more, see remaximizeTop)
+                    remaximizeTop(k_pl, k_H, k_R, removed, T);
+                } else {
+                    for (auto v = k_H.find_last(); v != bitset::npos; v = k_H.find_prev(v)) {
+                        Q.push(v);
+                    }
+                    attract(k_pl, k_H, k_R);
                 }
-                attract(k_pl, k_H, k_R);
                 (k_pl == 1 ? W1 : W0) |= k_H;
                 (k_pl == 1 ? W0 : W1) -= k_H;
 #ifndef NDEBUG
@@ -854,6 +944,7 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
 #endif
             }
         }
+        if (removed) S.reset();
     }
 
     heads.clear();
