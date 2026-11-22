@@ -204,6 +204,7 @@ target_sources(oink
     src/solvers/zlkj.cpp
     src/solvers/zlkq.cpp
     src/solvers/zlkw.cpp
+    src/solvers/zlkwj.cpp
     src/solvers/npp.cpp
     src/solvers/ppj.cpp
     src/solvers/pp.cpp
@@ -520,6 +521,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverZLKpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w 0 --force-parallel)
             add_test(NAME TestSolverZLKQ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkq)
             add_test(NAME TestSolverZLKW COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkw)
+            add_test(NAME TestSolverZLKWJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkwj)
             add_test(NAME TestSolverUZLK COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --uzlk)
             add_test(NAME TestSolverZLKJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkj)
             add_test(NAME TestSolverZLKPP1 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkpp-std)
@@ -530,6 +532,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverTLscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --tl --scc)
             add_test(NAME TestSolverZLKscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk --scc)
             add_test(NAME TestSolverZLKJscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkj --scc)
+            add_test(NAME TestSolverZLKWJscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkwj --scc)
             add_test(NAME TestSolverPPscc COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --pp --scc)
             # multi-strategies in solution files, with oink and --sol (see test/test_multisol.cmake)
             add_test(NAME TestMultiStrategyFiles

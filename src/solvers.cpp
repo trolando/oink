@@ -45,6 +45,7 @@
 #include "solvers/zlkpp.hpp"
 #include "solvers/zlkq.hpp"
 #include "solvers/zlkw.hpp"
+#include "solvers/zlkwj.hpp"
 #include "solvers/ppq.hpp"
 #include "solvers/dtl.hpp"
 #include "solvers/tlq.hpp"
@@ -57,6 +58,7 @@ Solvers::Solvers()
 {
     _add("zlkq", "qpt Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKQSolver>(oink, game); });
     _add("zlkw", "Warsaw quasi-polynomial Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKWSolver>(oink, game); });
+    _add("zlkwj", "Warsaw quasi-polynomial Zielonka with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKWJSolver>(oink, game); });
     _add("zlk", "parallel Zielonka", 1, [] (Oink& oink, Game& game) { return std::make_unique<ZLKSolver>(oink, game); });
     _add("zlkj", "Zielonka with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKJSolver>(oink, game); });
     _add("uzlk", "unoptimized Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<UnoptimizedZLKSolver>(oink, game); }, true);
@@ -126,7 +128,7 @@ Solvers::Solvers()
     group(Family::FixpointIteration, {"fpi", "fpim", "fpj", "fpjg", "fpjm"});
     group(Family::PriorityPromotion, {"npp", "pp", "ppj", "ppp", "rr", "dp", "rrdp", "ppq"});
     group(Family::StrategyImprovement, {"psi", "ssi"});
-    group(Family::Zielonka, {"zlk", "zlkj", "uzlk", "zlkq", "zlkw", "zlkpp-std", "zlkpp-waw", "zlkpp-liv"});
+    group(Family::Zielonka, {"zlk", "zlkj", "uzlk", "zlkq", "zlkw", "zlkwj", "zlkpp-std", "zlkpp-waw", "zlkpp-liv"});
 
     solvers["mspm"].optionsHelp = "even | odd (default: smaller measure domain)";
     solvers["psi"].optionsHelp = "parmin=N,chunk=N (positive integers; defaults: 2048,256)";

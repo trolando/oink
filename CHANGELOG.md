@@ -13,6 +13,10 @@ All notable changes to Oink will be documented in this file.
   one priority to the next and stops as Zielonka's algorithm does when
   the precision never ran out. A call on the same subgame with the same
   precisions as an earlier call takes its stored result.
+- ZLKWJ, ZLKW with the justifications of ZLKJ (Lapauw, Bruynooghe and
+  Denecker 2020): after the first step of a call, a step solves again only
+  the vertices whose justification the opponent attracted or whose winner
+  was presumed, and the vertices that depend on them.
 - `bench_solvers --fresh-process` loads, prepares, solves and verifies
   every trial in a new process. It reports load and parse times and peak
   resident memory per trial on Linux and macOS. The default reuse mode

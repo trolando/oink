@@ -117,6 +117,7 @@ ZLKJ            | Zielonka with justifications
 UZLK (e)        | an unoptimized version of Zielonka for research purposes
 ZLKQ            | Quasi-polynomial time recursive algorithm (optimized implementation by TvD)
 ZLKW            | Quasi-polynomial time recursive algorithm (Warsaw version, implementation by TvD)
+ZLKWJ           | Quasi-polynomial time recursive algorithm with justifications (Warsaw version, implementation by TvD)
 ZLKPP-STD (e)   | Zielonka's recursive algorithm (standard version, by Pawel Parys)
 ZLKPP-WAW (e)   | Quasi-polynomial time recursive algorithm (Warsaw version, by Pawel Parys)
 ZLKPP-LIV (e)   | Quasi-polynomial time recursive algorithm (Liverpool version, by Pawel Parys)
