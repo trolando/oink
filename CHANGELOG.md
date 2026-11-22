@@ -41,8 +41,10 @@ All notable changes to Oink will be documented in this file.
   change, PMTL is 15 to 22% faster per game on model and equivalence
   checking.
 - TLQ solves a closed region of its top level as a dominion while the
-  top level is the whole unsolved game, as TL does with its first region,
-  instead of splitting it into tangles.
+  top level is the whole unsolved game, and a closed region of its second
+  level when neither level removed vertices presumed won by the opponent,
+  as TL does with its first two regions, instead of splitting them into
+  tangles.
 - TLQ adopts more of TL's engineering.
 
 ### Fixed

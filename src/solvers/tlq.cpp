@@ -198,6 +198,21 @@ TLQSolver::updateDegrees(bool counted)
 
 
 /**
+ * Returns whether the second level is all of the top level without its region, that is,
+ * whether the second level did not remove vertices presumed won by the opponent.
+ */
+bool
+TLQSolver::secondIsWhole()
+{
+    const uint64_t *r0 = Rs[0]->data(), *h0 = Hs[0]->data(), *r1 = Rs[1]->data();
+    for (size_t k = 0; k < Rs[0]->block_count(); k++) {
+        if ((r0[k] & ~h0[k]) != r1[k]) return false;
+    }
+    return true;
+}
+
+
+/**
  * Re-maximize the region <Z> of the top level, while the top level is the whole game <G> (in
  * <R>), after learning: <Z> was closed under attraction in <G> before, and since then only the
  * tangles from <firstnew> were learned, and the dominions in <removed> (if given) left <G>.
@@ -851,17 +866,46 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
             updateDegrees(count_in_G);
             top_is_G = true;
         } else {
-            if (!pea_vidx) {
-                pea_vidx.reset(new unsigned int[nodecount()]);
-                pea_root.resize(nodecount());
-                S.resize(nodecount());
-                escapes.resize(nodecount());
+            if (!heads.empty() and Rs.size() == 2 and top_is_G and secondIsWhole()) {
+                /**
+                 * A closed region of the second level is a dominion too, as the second region in
+                 * TL (the highest region of its player), if neither level removed vertices
+                 * presumed won by the opponent: the top level is then the whole game <G>, and
+                 * the second level is <G> without the region of the top level, which is closed
+                 * under attraction by the opponent in <G>. So a vertex of the opponent in this
+                 * region with an edge into the top region would have been attracted there, and
+                 * the opponent can again only leave to dominions of <pl>. Its SCCs are not
+                 * extracted, as for the top region, but it is attracted in <G> below: the top
+                 * region can have vertices of <pl> that play into it.
+                 */
+#ifndef NDEBUG
+                if (trace) logger << "\033[1;38;5;201mdominion \033[36m" << pr << "\033[m (second region)" << std::endl;
+                for (auto v = H.find_first(); v != bitset::npos; v = H.find_next(v)) {
+                    if (owner(v) == pl) {
+                        if (str[v] == -1 or !H[str[v]]) THROW_ERROR("second region dominion without strategy");
+                    } else {
+                        for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                            if (G[*curedge] and !H[*curedge]) THROW_ERROR("second region dominion is not closed");
+                        }
+                    }
+                }
+#endif
+                if (S.empty()) S.resize(nodecount());
+                S |= H;
+                dominions++;
+            } else {
+                if (!pea_vidx) {
+                    pea_vidx.reset(new unsigned int[nodecount()]);
+                    pea_root.resize(nodecount());
+                    S.resize(nodecount());
+                    escapes.resize(nodecount());
+                }
+                std::fill_n(pea_vidx.get(), nodecount(), '\0');
+                pea_curidx = 1;
+                // Extract this batch against a fixed H and strategy. Maximize its dominions
+                // before using the new tangles to re-maximize all regions once.
+                for (const int v : heads) extractTangles(v, H);
             }
-            std::fill_n(pea_vidx.get(), nodecount(), '\0');
-            pea_curidx = 1;
-            // Extract this batch against a fixed H and strategy. Maximize its dominions
-            // before using the new tangles to re-maximize all regions once.
-            for (const int v : heads) extractTangles(v, H);
             if (D != dominions) {
                 // maximize the found dominions
                 for (auto v = S.find_last(); v != bitset::npos; v = S.find_prev(v)) {

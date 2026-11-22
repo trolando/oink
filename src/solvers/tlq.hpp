@@ -87,6 +87,7 @@ protected:
     std::vector<int> touched; // the vertices counted by the last attraction in <G>
     void updateDegrees(bool counted);
     void remaximizeTop(int pl, bitset &Z, bitset &R, const bitset *removed, unsigned int firstnew);
+    bool secondIsWhole();
     bool attract(int pl, bitset &Z, bitset &R, const bitset *crossing = nullptr, bool resume = false);
     int *str;
 
