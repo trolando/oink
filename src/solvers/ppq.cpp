@@ -503,8 +503,8 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     // make a local copy of R, because R/L can be destroyed in the recursion
     bitset Z(R);
 
-    // run recursively
-    solve(vtop, subpr, pr, pe, po);
+    // run recursively (the top of the subgame is next_vtop)
+    solve(next_vtop, subpr, pr, pe, po);
 
 #ifndef NDEBUG
     if (trace >= 2) {
@@ -520,7 +520,12 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     // There may be a lower u. If same pl pr, then merge with our u. If different pl pr, reset.
     // There may be a lower r. If other pl, then merge to our u
 
-    for (int v = vtop; v >= 0; v--) {
+    // Only the vertices in a lower u, and in a lower r if subpr is of the other player,
+    // change here, so we skip this when there are none.
+    const auto lowu = uprios.find_first(), lowr = rprios.find_first();
+    const bool und = (lowu != bitset::npos and (int)lowu < pr) or
+                     ((subpr&1) != pl and lowr != bitset::npos and (int)lowr < pr);
+    for (int v = und ? vtop : -1; v >= 0; v--) {
         if (u[v] != -1 and u[v] < pr) {
             // lower u
             if ((u[v]&1) == pl) {
@@ -608,8 +613,9 @@ PPQSolver::solve(int vtop, const int pr, const int prc, const int pe, const int 
     }
 
     if (reset_R) {
-        // reset everything with r <= pr
-        for (auto v = vtop; v >= 0; v--) {
+        // reset everything with r <= pr (if there is anything)
+        const auto low = rprios.find_first();
+        for (int v = (low != bitset::npos and (int)low <= pr) ? vtop : -1; v >= 0; v--) {
             if (r[v] != -1 && r[v] <= pr) {
 #ifndef NDEBUG
                 if (trace >= 2) logger << "reset " << label_vertex(v) << std::endl;

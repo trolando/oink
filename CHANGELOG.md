@@ -53,10 +53,11 @@ All notable changes to Oink will be documented in this file.
   game on model checking and 1.9 times on equivalence checking and
   reactive synthesis.
 - PPQ keeps the size of each of its regions, so a call whose subgame is
-  empty returns at once instead of walking down through the vertices
-  that are solved or in higher regions. It also sorts the vertices by
-  rank once per maximisation after a promotion, instead of scanning the
-  game again for every region.
+  empty returns at once, and its Und step and reset are skipped when they
+  would change nothing. It also sorts the vertices by rank once per
+  maximisation after a promotion, instead of scanning the game again for
+  every region. PPQ is 15 to 23% faster per game on model and equivalence
+  checking and 28% on random games, and solves larger counter games.
 
 ### Fixed
 
