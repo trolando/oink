@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -54,12 +55,13 @@ public:
     virtual void set(const Measures& other) = 0;
     virtual std::vector<std::byte> store(int tgt) const = 0;
     virtual void load(int tgt, const std::vector<std::byte>& blob) = 0;
+    virtual int code_size() const = 0; // bytes per stored component (see measure_code_size)
 
     Measures& operator=(const Measures& src) { this->set(src); return *this; }
 };
 
 /**
- * Small and Ordered store <width> ints per slot, for slots -4..n-1. Both products below
+ * Small and Ordered store <width> components per slot, for slots -4..n-1. Both products below
  * are computed in size_t: with int operands they overflow on large games, for instance
  * 65,536 vertices with 32,768 components per slot.
  */
@@ -81,6 +83,18 @@ enum class MeasureKind {
     Succinct,
     Strahler
 };
+
+/**
+ * Ordered, Succinct and Strahler store every component of a measure as a code of <Code>, the
+ * narrowest of 8, 16 and 32 bits that holds every code that can occur in the game, including
+ * the markers for empty, end and Top. The codes, and so the order of the measures and every
+ * operation on them, are the same in every width: on games with few priorities, the tables
+ * are only smaller. Both players get the same width, so that their tables have the same type.
+ * (Ordered uses 8 or 32 bits: its loops over 16-bit components were slower on games with that
+ * many priorities, which are small.)
+ * Returns the number of bytes per component of <kind> for <game> (Small: always an int).
+ */
+int measure_code_size(MeasureKind kind, const Game &game);
 
 
 class Small final : public Measures
@@ -104,6 +118,7 @@ public:
     void inc(int i) override; // smallest increment to <tgt>
     std::vector<std::byte> store(int tgt) const override;
     void load(int tgt, const std::vector<std::byte>& blob) override;
+    int code_size() const override { return sizeof(int); }
 
 
 private:
@@ -118,6 +133,11 @@ private:
 };
 
 
+/**
+ * Ordered measures with <l> components per slot: a priority, or -1 for _ (empty). <Code> is a
+ * signed integer type that holds the highest priority (see measure_code_size: 8 or 32 bits).
+ */
+template<class Code>
 class Ordered final : public Measures
 {
 public:
@@ -139,9 +159,10 @@ public:
     void inc(int i) override; // smallest increment to <tgt>
     std::vector<std::byte> store(int tgt) const override;
     void load(int tgt, const std::vector<std::byte>& blob) override;
+    int code_size() const override { return sizeof(Code); }
 
 private:
-    int *data;
+    Code *data;
     int n;
     int d;
     int l;
@@ -158,6 +179,7 @@ private:
 };
 
 
+template<class Code>
 class Succinct final : public Measures
 {
 public:
@@ -179,6 +201,7 @@ public:
     void inc(int i) override; // smallest increment to <tgt>
     std::vector<std::byte> store(int tgt) const override;
     void load(int tgt, const std::vector<std::byte>& blob) override;
+    int code_size() const override { return sizeof(Code); }
 
 private:
     int player; // are we doing even or odd?
@@ -186,11 +209,12 @@ private:
     int h; // depth of the ordered tree: roughly max_prio/2
            // the even tree (max_prio/2)+1: 1=>1, 2=>2, 3=>2, 4=>3, etc
            // the odd tree (max_prio+1)/2 : 1=>1, 2=>1, 3=>2, 4=>2, etc
-    // per slot <l> codes: the depth of each bit shifted left by one, plus the bit; a slot is
-    // Top if its first code is TOP (so copy is a memcpy, and compare finds the first different
-    // code and then only looks at that position)
-    std::vector<uint32_t> code;
-    static constexpr uint32_t TOP = 0xFFFFFFFFu;
+    // per slot <l> codes: the depth (0..h) of each bit shifted left by one, plus the bit; a slot
+    // is Top if its first code is TOP (so copy is a memcpy, and compare finds the first different
+    // code and then only looks at that position). <Code> is an unsigned integer type in which
+    // the codes are below TOP (see measure_code_size)
+    std::vector<Code> code;
+    static constexpr Code TOP = std::numeric_limits<Code>::max();
     long N; // nodecount
 
     void trunc(int target, int pindex);
@@ -234,6 +258,7 @@ private:
  * the whole game can be solved with it. (STRPM tries pairs up to k = min(t+2, max(h0,h1)),
  * which can be one too small for that, but it solves the game in parts.)
  */
+template<class Code>
 class Strahler final : public Measures
 {
 public:
@@ -255,6 +280,7 @@ public:
     void inc(int i) override; // smallest increment to <tgt>
     std::vector<std::byte> store(int tgt) const override;
     void load(int tgt, const std::vector<std::byte>& blob) override;
+    int code_size() const override { return sizeof(Code); }
 
     int get_k() const { return k; }
     int get_t() const { return t; }
@@ -268,9 +294,10 @@ private:
     long N; // nodecount
     // per slot (slots -4..-1 and the vertices) <stride> codes, one per position: bit 0 at
     // level d is d, bit 1 at level d is 2*END-d, and the positions after the label are END;
-    // Top is TOP and then END. Then comparing labels is comparing codes lexicographically
+    // Top is TOP and then END. Then comparing labels is comparing codes lexicographically.
+    // <Code> is an unsigned integer type that holds TOP (see measure_code_size)
     uint32_t END, TOP;
-    std::vector<uint32_t> code;
+    std::vector<Code> code;
 
     // work space for prog and trunc
     std::vector<uint8_t> tb;
@@ -282,6 +309,33 @@ private:
     void trunc_tmp(int pindex); // tmp := min { m | m =_p tmp }
     int skip_until_next_level(int i);
 };
+
+
+/**
+ * Call <f> with <pm> as its concrete class: the class of <kind> with the size of its codes, so
+ * that the lifting loops of the solvers can call the operations of the measures directly.
+ */
+template<class F>
+decltype(auto) with_measure(MeasureKind kind, Measures &pm, F &&f)
+{
+    const int size = pm.code_size();
+    switch (kind) {
+        case MeasureKind::Small:
+            return f(static_cast<Small&>(pm));
+        case MeasureKind::Ordered:
+            if (size == 1) return f(static_cast<Ordered<int8_t>&>(pm));
+            return f(static_cast<Ordered<int32_t>&>(pm));
+        case MeasureKind::Succinct:
+            if (size == 1) return f(static_cast<Succinct<uint8_t>&>(pm));
+            if (size == 2) return f(static_cast<Succinct<uint16_t>&>(pm));
+            return f(static_cast<Succinct<uint32_t>&>(pm));
+        case MeasureKind::Strahler:
+            if (size == 1) return f(static_cast<Strahler<uint8_t>&>(pm));
+            if (size == 2) return f(static_cast<Strahler<uint16_t>&>(pm));
+            return f(static_cast<Strahler<uint32_t>&>(pm));
+    }
+    LOGIC_ERROR;
+}
 
 
 class GPMSolver : public Solver

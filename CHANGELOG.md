@@ -24,6 +24,11 @@ All notable changes to Oink will be documented in this file.
 
 ### Changed
 
+- GPM, PMTL and PMA store the Ordered, Succinct and Strahler measures in 8
+  bits per component (Succinct and Strahler also 16) instead of 32 when the
+  priorities allow it, with the same lifts: up to 12 GiB less peak memory on
+  the largest equivalence games, and 10 to 31% faster per game on model and
+  equivalence checking.
 - ZLKQ is marked experimental: ZLKW and ZLKWJ are the quasi-polynomial
   Zielonka solvers to use.
 - `bench_solvers` skips later rounds of a game and solver configuration

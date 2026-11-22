@@ -18,6 +18,7 @@
 #include <cassert>
 #include <cstring>
 #include <memory>
+#include <type_traits>
 
 #include "pmtl.hpp"
 #include "oink/uintqueue.hpp"
@@ -1073,13 +1074,11 @@ template<bool GoUp, bool UseTangles>
 bool
 PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
 {
-    switch (measure_kind) {
-        case MeasureKind::Small: return updateMeasure<Small, GoUp, UseTangles>(static_cast<Small&>(pm), static_cast<Small&>(target_pm), player);
-        case MeasureKind::Succinct: return updateMeasure<Succinct, GoUp, UseTangles>(static_cast<Succinct&>(pm), static_cast<Succinct&>(target_pm), player);
-        case MeasureKind::Ordered: return updateMeasure<Ordered, GoUp, UseTangles>(static_cast<Ordered&>(pm), static_cast<Ordered&>(target_pm), player);
-        case MeasureKind::Strahler: return updateMeasure<Strahler, GoUp, UseTangles>(static_cast<Strahler&>(pm), static_cast<Strahler&>(target_pm), player);
-    }
-    LOGIC_ERROR;
+    // (both tables of a player have the same concrete class, see measure_code_size)
+    return with_measure(measure_kind, pm, [&](auto &concrete) {
+        using Measure = std::remove_reference_t<decltype(concrete)>;
+        return updateMeasure<Measure, GoUp, UseTangles>(concrete, static_cast<Measure&>(target_pm), player);
+    });
 }
 
 

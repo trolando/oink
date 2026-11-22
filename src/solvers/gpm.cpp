@@ -326,7 +326,8 @@ void Small::load(int tgt, const std::vector<std::byte>& blob)
     top[tgt + 4] = read_le_advance<uint8_t>(blob, cur);
 }
 
-Ordered::Ordered(const Game &game, const int player)
+template<class Code>
+Ordered<Code>::Ordered(const Game &game, const int player)
 {
     this->player = player;
     this->n = game.nodecount();                  // n := number of vertices
@@ -364,14 +365,18 @@ Ordered::Ordered(const Game &game, const int player)
     //std::cout << "n=" << N << std::endl;
     //std::cout << "l=" << l << std::endl;
 
+    // the codes are the priorities (and 1, see bump and inc) and -1 (see measure_code_size)
+    if (std::max(d, 1) > std::numeric_limits<Code>::max()) THROW_ERROR("priorities do not fit the codes");
+
     // allocate and initialize the vertices
-    const size_t size = measure_table_size((long)n+4, l, sizeof(int));
-    data = new int[size];
-    std::fill(data, data + size, -1);
+    const size_t size = measure_table_size((long)n+4, l, sizeof(Code));
+    data = new Code[size];
+    std::fill(data, data + size, (Code)-1);
     top.resize(n+4);
 }
 
-Ordered::Ordered(const Ordered &src)
+template<class Code>
+Ordered<Code>::Ordered(const Ordered &src)
 {
     this->player = src.player;
     this->n = src.n;
@@ -380,26 +385,28 @@ Ordered::Ordered(const Ordered &src)
     this->l = src.l;
     this->max_pr = src.max_pr;
     this->max_opp_pr = src.max_opp_pr;
-    this->data = new int[measure_table_size((long)n+4, l, sizeof(int))];
-    std::copy(src.data, src.data+measure_table_size((long)n+4, l, sizeof(int)), this->data);
+    this->data = new Code[measure_table_size((long)n+4, l, sizeof(Code))];
+    std::copy(src.data, src.data+measure_table_size((long)n+4, l, sizeof(Code)), this->data);
     this->top = src.top;
     this->priorities = src.priorities;
 }
 
-Ordered::~Ordered()
+template<class Code>
+Ordered<Code>::~Ordered()
 {
     delete[] data;
 }
 
+template<class Code>
 void
-Ordered::set(const Measures &other)
+Ordered<Code>::set(const Measures &other)
 {
     auto src = dynamic_cast<const Ordered*>(&other);
 
     if (src == this) return;
     if (n != src->n or d != src->d or l != src->l) {
         delete[] data;
-        data = new int[measure_table_size((long)src->n+4, src->l, sizeof(int))];
+        data = new Code[measure_table_size((long)src->n+4, src->l, sizeof(Code))];
     }
 
     this->player = src->player;
@@ -409,49 +416,55 @@ Ordered::set(const Measures &other)
     this->l = src->l;
     this->max_pr = src->max_pr;
     this->max_opp_pr = src->max_opp_pr;
-    std::copy(src->data, src->data+measure_table_size((long)n+4, l, sizeof(int)), this->data);
+    std::copy(src->data, src->data+measure_table_size((long)n+4, l, sizeof(Code)), this->data);
     this->top = src->top;
     this->priorities = src->priorities;
 }
 
-void Ordered::copy(int from, int to)
+template<class Code>
+void Ordered<Code>::copy(int from, int to)
 {
-    int *fp = data + measure_offset(from, l);
-    int *tp = data + measure_offset(to, l);
+    const Code *fp = data + measure_offset(from, l);
+    Code *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = *fp++;
     top[to+4] = top[from+4];
 }
 
-void Ordered::copy_from(const Measures& mother, int from, int to)
+template<class Code>
+void Ordered<Code>::copy_from(const Measures& mother, int from, int to)
 {
     const Ordered *other = dynamic_cast<const Ordered*>(&mother);
-    int *fp = other->data + measure_offset(from, l);
-    int *tp = data + measure_offset(to, l);
+    const Code *fp = other->data + measure_offset(from, l);
+    Code *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = *fp++;
     top[to+4] = other->top[from+4];
 }
 
-void Ordered::copy_bot(int to)
+template<class Code>
+void Ordered<Code>::copy_bot(int to)
 {
-    int *tp = data + measure_offset(to, l);
+    Code *tp = data + measure_offset(to, l);
     for (int i=0; i<l; i++) *tp++ = -1;
     top[to+4] = 0;
 }
 
-void Ordered::copy_top(int to)
+template<class Code>
+void Ordered<Code>::copy_top(int to)
 {
     top[to+4] = 1;
 }
 
-bool Ordered::is_top(int tgt) const
+template<class Code>
+bool Ordered<Code>::is_top(int tgt) const
 {
     return top[tgt+4];
 }
 
-int Ordered::val(int tgt) const
+template<class Code>
+int Ordered<Code>::val(int tgt) const
 {
     int res = 0;
-    int *tp = data + measure_offset(tgt, l);
+    Code *tp = data + measure_offset(tgt, l);
     bool found = false;
     for (int x=l-1; x>=0; x--) {
         res *= 2;
@@ -465,7 +478,8 @@ int Ordered::val(int tgt) const
     return res;
 }
 
-void Ordered::see(int tgt, int priority)
+template<class Code>
+void Ordered<Code>::see(int tgt, int priority)
 {
     if (top[tgt+4]) return; // nothing to do
     assert(tgt != -3); // (scratch slot; the solvers use -1)
@@ -489,9 +503,10 @@ void Ordered::see(int tgt, int priority)
     }
 }
 
-bool Ordered::up(int tgt, int p)
+template<class Code>
+bool Ordered<Code>::up(int tgt, int p)
 {
-    int *tp = data + measure_offset(tgt, l);
+    Code *tp = data + measure_offset(tgt, l);
 
     // return if already top
     if (top[tgt+4]) return false;
@@ -499,7 +514,7 @@ bool Ordered::up(int tgt, int p)
     // first set the first _ or non-<player> value to "priority"
     for (int i=0; i<l; i++) {
         if (tp[i] == -1 or ((tp[i] & 1) != player)) {
-            tp[i] = p; // set it
+            tp[i] = (Code)p; // set it
             break;
         } else {
             tp[i] = -1;
@@ -515,7 +530,7 @@ bool Ordered::up(int tgt, int p)
         } else {
             if (tp[i] > p) continue;
         }
-        tp[i] = p;
+        tp[i] = (Code)p;
         for (int j=i-1; j>=0; j--) tp[j] = -1; // set rest to -1
         return true;
     }
@@ -523,18 +538,19 @@ bool Ordered::up(int tgt, int p)
     return true;
 }
 
-bool Ordered::bump(int tgt)
+template<class Code>
+bool Ordered<Code>::bump(int tgt)
 {
     if (top[tgt+4]) return false; // nothing to do
 
-    int *tp = data + measure_offset(tgt, l);
+    Code *tp = data + measure_offset(tgt, l);
 
     if (tp[0] == -1) return false; // nothing to do
 
     for (int i = 1; i<l; i++) {
         if (tp[i] == -1) {
             // if the current is _, then the smallest increase is max_opp_pr
-            tp[i] = max_opp_pr;
+            tp[i] = (Code)max_opp_pr;
             for (int z=i-1; z>=0; z--) tp[z] = -1;
             return true;
         } else if ((tp[i] & 1) != player) {
@@ -546,7 +562,7 @@ bool Ordered::bump(int tgt)
                 return true;
             } else if (i < l-1 and tp[i+1] >= player) {
                 // if is 1/0, then can set to 0/1 if the previous is set and we're not the highest...
-                tp[i] = player;
+                tp[i] = (Code)player;
                 for (int z=i-1; z>=0; z--) tp[z] = -1;
                 return true;
             }
@@ -565,11 +581,12 @@ bool Ordered::bump(int tgt)
     return false;
 }
 
-void Ordered::inc(int tgt)
+template<class Code>
+void Ordered<Code>::inc(int tgt)
 {
     if (top[tgt+4]) return;
 
-    int *tp = data + measure_offset(tgt, l);
+    Code *tp = data + measure_offset(tgt, l);
 
     for (int i=0; i<l; i++) {
         int min = d;
@@ -578,7 +595,7 @@ void Ordered::inc(int tgt)
             if (tp[j] < min) min = tp[j];
         }
         if (tp[i] == -1) {
-            tp[i] = (min&1) == player && min != 0 ? min-1 : min;
+            tp[i] = (Code)((min&1) == player && min != 0 ? min-1 : min);
             return;
         } else if ((tp[i]&1) == player) {
             // only bump if the next higher allows it
@@ -610,7 +627,8 @@ void Ordered::inc(int tgt)
  * Return  0 if value[i] = value[j]
  * Return  1 if value[i] > value[j]
  */
-int Ordered::compare(int i, int j) const
+template<class Code>
+int Ordered<Code>::compare(int i, int j) const
 {
     // Handle \Top cases
     if (top[i+4]) {
@@ -620,9 +638,9 @@ int Ordered::compare(int i, int j) const
     if (top[j+4]) return -1;
 
     // Compare tuples, starting at the highest (last) value
-    int *ip = data + measure_offset(i, l);
-    int *jp = data + measure_offset(j, l);
-    if (std::memcmp(ip, jp, sizeof(int)*l) == 0) return 0;
+    const Code *ip = data + measure_offset(i, l);
+    const Code *jp = data + measure_offset(j, l);
+    if (std::memcmp(ip, jp, sizeof(Code)*l) == 0) return 0;
     for (int x=l-1; x>=0; x--) {
         if (ip[x] == jp[x]) continue;
         // cases where i.x is _ or j.x is _
@@ -640,7 +658,8 @@ int Ordered::compare(int i, int j) const
     return 0;
 }
 
-bool Ordered::eq(int i, int j) const
+template<class Code>
+bool Ordered<Code>::eq(int i, int j) const
 {
     if (top[i+4]) {
         if (top[j+4]) return true;
@@ -649,35 +668,37 @@ bool Ordered::eq(int i, int j) const
     if (top[j+4]) return false;
 
 
-    int *ip = data + measure_offset(i, l);
-    int *jp = data + measure_offset(j, l);
+    const Code *ip = data + measure_offset(i, l);
+    const Code *jp = data + measure_offset(j, l);
     for (int x = 0; x < l; x++) {
         if (ip[x] != jp[x]) return false;
     }
     return true;
 }
 
-void Ordered::stream(std::ostream &out, int i) const
+template<class Code>
+void Ordered<Code>::stream(std::ostream &out, int i) const
 {
-    int *ip = data + measure_offset(i, l);
+    const Code *ip = data + measure_offset(i, l);
     if (top[i+4]) {
         out << "Top";
     } else {
         out << "[";
         for (int x = l - 1; x >= 0; x--) {
             if (ip[x] == -1) out << " _";
-            else out << " " << ip[x];
+            else out << " " << (int)ip[x];
         }
         out << " ]";
     }
 }
 
-std::vector<std::byte> Ordered::store(int tgt) const
+template<class Code>
+std::vector<std::byte> Ordered<Code>::store(int tgt) const
 {
     std::vector<std::byte> blob;
-    blob.reserve(static_cast<size_t>(l) * sizeof(int) + 1); // perf: avoid reallocs
+    blob.reserve(static_cast<size_t>(l) * sizeof(Code) + 1); // perf: avoid reallocs
         
-    int *tp = data + measure_offset(tgt, l); 
+    Code *tp = data + measure_offset(tgt, l); 
     for (int i=0; i<l; i++) {
         push_le<int>(blob, *tp++);
     }
@@ -686,20 +707,25 @@ std::vector<std::byte> Ordered::store(int tgt) const
     return blob;
 }       
     
-void Ordered::load(int tgt, const std::vector<std::byte>& blob)
+template<class Code>
+void Ordered<Code>::load(int tgt, const std::vector<std::byte>& blob)
 {       
     size_t cur = 0;
 
-    int* tp = data + measure_offset(tgt, l);
+    Code* tp = data + measure_offset(tgt, l);
     for (int i = 0; i < l; ++i) {
-        *tp++ = read_le_advance<int>(blob, cur);
+        *tp++ = (Code)read_le_advance<int>(blob, cur);
     }
 
     top[tgt + 4] = read_le_advance<uint8_t>(blob, cur);
 }
 
+template class Ordered<int8_t>;
+template class Ordered<int32_t>;
 
-Succinct::Succinct(const Game &game, const int player)
+
+template<class Code>
+Succinct<Code>::Succinct(const Game &game, const int player)
 {
     this->player = player;
     this->N = game.nodecount();
@@ -707,11 +733,14 @@ Succinct::Succinct(const Game &game, const int player)
     while ((1L<<(this->l)) <= N) this->l++;
     int max_pr = game.priority(game.nodecount()-1);
     this->h = player == 0 ? (max_pr/2)+1 : (max_pr+1)/2;
+    // the depths are 0..h, so the codes are below 2*h+2 (see measure_code_size)
+    if (2ULL*h+1 >= TOP) THROW_ERROR("depths do not fit the codes");
     code.assign((size_t)l*(4+N), 0); // all bits 0 at depth 0
 }
 
+template<class Code>
 void
-Succinct::set(const Measures &other)
+Succinct<Code>::set(const Measures &other)
 {
     // (not via operator=: Measures::operator= calls set)
     auto src = dynamic_cast<const Succinct*>(&other);
@@ -722,47 +751,55 @@ Succinct::set(const Measures &other)
     this->code = src->code;
 }
 
-void Succinct::copy(int from, int to)
+template<class Code>
+void Succinct<Code>::copy(int from, int to)
 {
-    std::memcpy(&code[(size_t)l*(4+to)], &code[(size_t)l*(4+from)], sizeof(uint32_t)*l);
+    std::memcpy(&code[(size_t)l*(4+to)], &code[(size_t)l*(4+from)], sizeof(Code)*l);
 }
 
-void Succinct::copy_from(const Measures& mother, int from, int to)
+template<class Code>
+void Succinct<Code>::copy_from(const Measures& mother, int from, int to)
 {
     const Succinct *other = dynamic_cast<const Succinct*>(&mother);
     // assuming that the two Measures have the same value for l...
-    std::memcpy(&code[(size_t)l*(4+to)], &other->code[(size_t)l*(4+from)], sizeof(uint32_t)*l);
+    std::memcpy(&code[(size_t)l*(4+to)], &other->code[(size_t)l*(4+from)], sizeof(Code)*l);
 }
 
-void Succinct::copy_bot(int to)
+template<class Code>
+void Succinct<Code>::copy_bot(int to)
 {
-    std::fill_n(&code[(size_t)l*(4+to)], l, 0u);
+    std::fill_n(&code[(size_t)l*(4+to)], l, (Code)0);
 }
 
-void Succinct::copy_top(int to)
+template<class Code>
+void Succinct<Code>::copy_top(int to)
 {
     code[(size_t)l*(4+to)] = TOP;
 }
 
-bool Succinct::is_top(int target) const
+template<class Code>
+bool Succinct<Code>::is_top(int target) const
 {
     return code[(size_t)l*(4+target)] == TOP;
 }
 
 // the code for bit <b> at depth <d>
-static inline uint32_t succ_code(int d, uint32_t b) { return ((uint32_t)d << 1) | b; }
+template<class Code>
+static inline Code succ_code(int d, uint32_t b) { return (Code)(((uint32_t)d << 1) | b); }
 
-void Succinct::trunc(int target, int pindex)
+template<class Code>
+void Succinct<Code>::trunc(int target, int pindex)
 {
-    uint32_t *c = &code[(size_t)l*(4+target)];
+    Code *c = &code[(size_t)l*(4+target)];
     // check if Top
     if (c[0] != TOP) {
         // [pindex],....,....,.... => [pindex],0*
-        for (int i=l-1; i>=0 and (int)(c[i]>>1) > pindex; i--) c[i] = succ_code(pindex+1, 0);
+        for (int i=l-1; i>=0 and (int)(c[i]>>1) > pindex; i--) c[i] = succ_code<Code>(pindex+1, 0);
     }
 }
 
-void Succinct::see(int target, int priority)
+template<class Code>
+void Succinct<Code>::see(int target, int priority)
 {
     int pindex = player == 0 ? h-(priority+1)/2-1 : h-priority/2-1;
 
@@ -771,7 +808,7 @@ void Succinct::see(int target, int priority)
         return;
     }
 
-    uint32_t *c = &code[(size_t)l*(4+target)];
+    Code *c = &code[(size_t)l*(4+target)];
     auto depth = [&](int i) { return (int)(c[i] >> 1); };
     auto bit = [&](int i) { return c[i] & 1u; };
 
@@ -783,7 +820,7 @@ void Succinct::see(int target, int priority)
         // we know the last one is below pindex. So pindex ends with epsilon currently.
         // i.e., xxxe,...,... => xxx10*
         int i;
-        for (i=l-1; i>=0 and depth(i) > pindex; i--) c[i] = succ_code(pindex, 0);
+        for (i=l-1; i>=0 and depth(i) > pindex; i--) c[i] = succ_code<Code>(pindex, 0);
         c[i+1] |= 1u;
         return;
     }
@@ -814,7 +851,7 @@ void Succinct::see(int target, int priority)
     for (int i=l-1; i>=0; i--) {
         if (depth(i) == deepest) {
             if (bit(i) == 0) {
-                for (int j=i; j<l; j++) c[j] = succ_code(deepest+1, bit(j));
+                for (int j=i; j<l; j++) c[j] = succ_code<Code>(deepest+1, bit(j));
                 return;
             } else {
                 // set every later bit to 0
@@ -822,7 +859,7 @@ void Succinct::see(int target, int priority)
             }
         } else {
             c[i+1] |= 1u;
-            for (int j=i+1; j<l; j++) c[j] = succ_code(deepest-1, bit(j));
+            for (int j=i+1; j<l; j++) c[j] = succ_code<Code>(deepest-1, bit(j));
             return;
         }
     }
@@ -834,12 +871,13 @@ void Succinct::see(int target, int priority)
         c[0] = TOP; // to Top!
     } else {
         // everything else is set to 0 already
-        c[0] = succ_code(deepest-1, 1);
-        for (int i=1; i<l; i++) c[i] = succ_code(deepest-1, bit(i));
+        c[0] = succ_code<Code>(deepest-1, 1);
+        for (int i=1; i<l; i++) c[i] = succ_code<Code>(deepest-1, bit(i));
     }
 }
 
-void Succinct::inc(int target)
+template<class Code>
+void Succinct<Code>::inc(int target)
 {
     see(target, player);
 }
@@ -849,17 +887,18 @@ void Succinct::inc(int target)
  * Return  0 if value[i] = value[j]
  * Return  1 if value[i] > value[j]
  */
-int Succinct::compare(int u, int v) const
+template<class Code>
+int Succinct<Code>::compare(int u, int v) const
 {
-    const uint32_t *cu = &code[(size_t)l*(4+u)];
-    const uint32_t *cv = &code[(size_t)l*(4+v)];
+    const Code *cu = &code[(size_t)l*(4+u)];
+    const Code *cv = &code[(size_t)l*(4+v)];
 
     // Handle \Top cases
     if (cu[0] == TOP) return cv[0] == TOP ? 0 : 1;
     if (cv[0] == TOP) return -1;
 
     // Non-\Top case: only the first position where the codes differ matters
-    if (std::memcmp(cu, cv, sizeof(uint32_t)*l) == 0) return 0;
+    if (std::memcmp(cu, cv, sizeof(Code)*l) == 0) return 0;
     int i = 0;
     while (i < l and cu[i] == cv[i]) i++;
     if (i == l) return 0;
@@ -870,17 +909,19 @@ int Succinct::compare(int u, int v) const
     return bu < bv ? -1 : 1; // same depth, different bit
 }
 
-bool Succinct::eq(int u, int v) const
+template<class Code>
+bool Succinct<Code>::eq(int u, int v) const
 {
-    const uint32_t *cu = &code[(size_t)l*(4+u)];
-    const uint32_t *cv = &code[(size_t)l*(4+v)];
+    const Code *cu = &code[(size_t)l*(4+u)];
+    const Code *cv = &code[(size_t)l*(4+v)];
     if (cu[0] == TOP or cv[0] == TOP) return cu[0] == cv[0];
-    return std::memcmp(cu, cv, sizeof(uint32_t)*l) == 0;
+    return std::memcmp(cu, cv, sizeof(Code)*l) == 0;
 }
 
-void Succinct::stream(std::ostream &out, int target) const
+template<class Code>
+void Succinct<Code>::stream(std::ostream &out, int target) const
 {
-    const uint32_t *c = &code[(size_t)l*(4+target)];
+    const Code *c = &code[(size_t)l*(4+target)];
     if (c[0] == TOP) {
         out << "\033[1;33mTop\033[m";
     } else {
@@ -900,13 +941,14 @@ void Succinct::stream(std::ostream &out, int target) const
     }
 }
 
-std::vector<std::byte> Succinct::store(int tgt) const
+template<class Code>
+std::vector<std::byte> Succinct<Code>::store(int tgt) const
 {
     // per bit: the bit (uint8) and its depth (int); depth -1 at the first bit means Top
     std::vector<std::byte> blob;
     blob.reserve(static_cast<size_t>(l) * (sizeof(uint8_t) + sizeof(int))); // perf: avoid reallocs
 
-    const uint32_t *c = &code[(size_t)l*(4+tgt)];
+    const Code *c = &code[(size_t)l*(4+tgt)];
     for (int i=0; i<l; i++) {
         if (i == 0 and c[0] == TOP) {
             push_le<uint8_t>(blob, 0);
@@ -920,17 +962,22 @@ std::vector<std::byte> Succinct::store(int tgt) const
     return blob;
 }
 
-void Succinct::load(int tgt, const std::vector<std::byte>& blob)
+template<class Code>
+void Succinct<Code>::load(int tgt, const std::vector<std::byte>& blob)
 {
     size_t cur = 0;
 
-    uint32_t *c = &code[(size_t)l*(4+tgt)];
+    Code *c = &code[(size_t)l*(4+tgt)];
     for (int i = 0; i < l; ++i) {
         const uint32_t b = read_le_advance<uint8_t>(blob, cur) != 0 ? 1u : 0u;
         const int d = read_le_advance<int>(blob, cur);
-        c[i] = (i == 0 and d == -1) ? TOP : succ_code(d, b);
+        c[i] = (i == 0 and d == -1) ? TOP : succ_code<Code>(d, b);
     }
 }
+
+template class Succinct<uint8_t>;
+template class Succinct<uint16_t>;
+template class Succinct<uint32_t>;
 
 
 /**
@@ -958,7 +1005,8 @@ count_distinct_nondecreasing(std::vector<int>::const_iterator first, std::vector
     return distinct;
 }
 
-Strahler::Strahler(const Game &game, const int player)
+template<class Code>
+Strahler<Code>::Strahler(const Game &game, const int player)
 {
     this->player = player;
     this->N = game.nodecount();
@@ -975,14 +1023,16 @@ Strahler::Strahler(const Game &game, const int player)
     this->stride = cap + 1;
     this->END = (uint32_t)h + 1; // above every level (0..h-2)
     this->TOP = 2*END + 1; // above every code of a label
-    code.assign((size_t)stride*(N+4), END);
+    if (TOP > std::numeric_limits<Code>::max()) THROW_ERROR("levels do not fit the codes");
+    code.assign((size_t)stride*(N+4), (Code)END);
     tb.reserve(cap + 1);
     td.reserve(cap + 1);
     for (int i=-4; i<N; i++) copy_bot(i);
 }
 
+template<class Code>
 void
-Strahler::set(const Measures &other)
+Strahler<Code>::set(const Measures &other)
 {
     // (not via operator=: Measures::operator= calls set)
     const Strahler *src = dynamic_cast<const Strahler*>(&other);
@@ -998,40 +1048,46 @@ Strahler::set(const Measures &other)
     code = src->code;
 }
 
-void Strahler::copy(int from, int to)
+template<class Code>
+void Strahler<Code>::copy(int from, int to)
 {
-    std::memcpy(&code[(size_t)stride*(to+4)], &code[(size_t)stride*(from+4)], sizeof(uint32_t)*stride);
+    std::memcpy(&code[(size_t)stride*(to+4)], &code[(size_t)stride*(from+4)], sizeof(Code)*stride);
 }
 
-void Strahler::copy_from(const Measures& mother, int from, int to)
+template<class Code>
+void Strahler<Code>::copy_from(const Measures& mother, int from, int to)
 {
     const Strahler *other = dynamic_cast<const Strahler*>(&mother);
-    std::memcpy(&code[(size_t)stride*(to+4)], &other->code[(size_t)stride*(from+4)], sizeof(uint32_t)*stride);
+    std::memcpy(&code[(size_t)stride*(to+4)], &other->code[(size_t)stride*(from+4)], sizeof(Code)*stride);
 }
 
-void Strahler::copy_bot(int to)
+template<class Code>
+void Strahler<Code>::copy_bot(int to)
 {
     // the leftmost leaf: t+1 zeros at level 0, then a single zero at levels 1..k-2
-    uint32_t *c = &code[(size_t)stride*(to+4)];
-    for (int i=0; i<cap; i++) c[i] = i <= t ? 0 : (uint32_t)(i - t);
-    c[cap] = END;
+    Code *c = &code[(size_t)stride*(to+4)];
+    for (int i=0; i<cap; i++) c[i] = (Code)(i <= t ? 0 : i - t);
+    c[cap] = (Code)END;
 }
 
-void Strahler::copy_top(int to)
+template<class Code>
+void Strahler<Code>::copy_top(int to)
 {
-    uint32_t *c = &code[(size_t)stride*(to+4)];
-    std::fill_n(c, stride, END);
-    c[0] = TOP;
+    Code *c = &code[(size_t)stride*(to+4)];
+    std::fill_n(c, stride, (Code)END);
+    c[0] = (Code)TOP;
 }
 
-bool Strahler::is_top(int tgt) const
+template<class Code>
+bool Strahler<Code>::is_top(int tgt) const
 {
     return code[(size_t)stride*(tgt+4)] == TOP;
 }
 
-void Strahler::load_tmp(int slot)
+template<class Code>
+void Strahler<Code>::load_tmp(int slot)
 {
-    const uint32_t *c = &code[(size_t)stride*(slot+4)];
+    const Code *c = &code[(size_t)stride*(slot+4)];
     tb.resize(cap);
     td.resize(cap);
     int n = 0;
@@ -1044,22 +1100,24 @@ void Strahler::load_tmp(int slot)
     td.resize(n);
 }
 
-void Strahler::store_tmp(int slot)
+template<class Code>
+void Strahler<Code>::store_tmp(int slot)
 {
     if (!td.empty() and td[0] == -1) {
         copy_top(slot);
         return;
     }
-    uint32_t *c = &code[(size_t)stride*(slot+4)];
+    Code *c = &code[(size_t)stride*(slot+4)];
     const int n = (int)td.size();
     for (int i=0; i<n; i++) {
         assert(td[i] >= 0 and (uint32_t)td[i] < END);
-        c[i] = tb[i] ? 2*END - (uint32_t)td[i] : (uint32_t)td[i];
+        c[i] = (Code)(tb[i] ? 2*END - (uint32_t)td[i] : (uint32_t)td[i]);
     }
-    std::fill(c + n, c + stride, END);
+    std::fill(c + n, c + stride, (Code)END);
 }
 
-int Strahler::skip_until_next_level(int i)
+template<class Code>
+int Strahler<Code>::skip_until_next_level(int i)
 {
     while (((long)i == (long)td.size() - 1) || (i >= 0 && td[i] == td[i+1])) {
         tb[i] = 0;
@@ -1068,7 +1126,8 @@ int Strahler::skip_until_next_level(int i)
     return i;
 }
 
-void Strahler::prog_tmp(int pindex)
+template<class Code>
+void Strahler<Code>::prog_tmp(int pindex)
 {
     if (td.empty()) { // the only label (no levels)
         tb.assign(1, 0);
@@ -1201,7 +1260,8 @@ void Strahler::prog_tmp(int pindex)
     }
 }
 
-void Strahler::trunc_tmp(int pindex)
+template<class Code>
+void Strahler<Code>::trunc_tmp(int pindex)
 {
     if (!td.empty() and td[0] == -1) return; // Top
     if (k == 1) {
@@ -1230,7 +1290,8 @@ void Strahler::trunc_tmp(int pindex)
     }
 }
 
-void Strahler::see(int tgt, int priority)
+template<class Code>
+void Strahler<Code>::see(int tgt, int priority)
 {
     if (is_top(tgt)) return;
     const int pindex = player == 0 ? (h-1)-(priority+1)/2-1 : (h-1)-priority/2-1;
@@ -1242,7 +1303,8 @@ void Strahler::see(int tgt, int priority)
     store_tmp(tgt);
 }
 
-void Strahler::inc(int tgt)
+template<class Code>
+void Strahler<Code>::inc(int tgt)
 {
     see(tgt, player);
 }
@@ -1257,28 +1319,31 @@ void Strahler::inc(int tgt)
  * same level the bits decide. The codes d < (higher levels and END) < 2*END-d give exactly
  * this, so the labels compare as their codes do.
  */
-int Strahler::compare(int u, int v) const
+template<class Code>
+int Strahler<Code>::compare(int u, int v) const
 {
-    const uint32_t *cu = &code[(size_t)stride*(u+4)], *cv = &code[(size_t)stride*(v+4)];
-    if (std::memcmp(cu, cv, sizeof(uint32_t)*stride) == 0) return 0;
+    const Code *cu = &code[(size_t)stride*(u+4)], *cv = &code[(size_t)stride*(v+4)];
+    if (std::memcmp(cu, cv, sizeof(Code)*stride) == 0) return 0;
     for (int i=0; i<stride; i++) {
         if (cu[i] != cv[i]) return cu[i] < cv[i] ? -1 : 1;
     }
     return 0;
 }
 
-bool Strahler::eq(int u, int v) const
+template<class Code>
+bool Strahler<Code>::eq(int u, int v) const
 {
-    return std::memcmp(&code[(size_t)stride*(u+4)], &code[(size_t)stride*(v+4)], sizeof(uint32_t)*stride) == 0;
+    return std::memcmp(&code[(size_t)stride*(u+4)], &code[(size_t)stride*(v+4)], sizeof(Code)*stride) == 0;
 }
 
-void Strahler::stream(std::ostream &out, int tgt) const
+template<class Code>
+void Strahler<Code>::stream(std::ostream &out, int tgt) const
 {
     if (is_top(tgt)) {
         out << "\033[1;33mTop\033[m";
         return;
     }
-    const uint32_t *c = &code[(size_t)stride*(tgt+4)];
+    const Code *c = &code[(size_t)stride*(tgt+4)];
     out << "[ ";
     int j = 0;
     for (int level=0; level<h-1; level++) {
@@ -1294,11 +1359,12 @@ void Strahler::stream(std::ostream &out, int tgt) const
     out << " ]";
 }
 
-std::vector<std::byte> Strahler::store(int tgt) const
+template<class Code>
+std::vector<std::byte> Strahler<Code>::store(int tgt) const
 {
     // the label length (-1 for Top), then per position its bit and level
     std::vector<std::byte> blob;
-    const uint32_t *c = &code[(size_t)stride*(tgt+4)];
+    const Code *c = &code[(size_t)stride*(tgt+4)];
     if (c[0] == TOP) {
         push_le<int>(blob, -1);
         return blob;
@@ -1314,7 +1380,8 @@ std::vector<std::byte> Strahler::store(int tgt) const
     return blob;
 }
 
-void Strahler::load(int tgt, const std::vector<std::byte>& blob)
+template<class Code>
+void Strahler<Code>::load(int tgt, const std::vector<std::byte>& blob)
 {
     size_t cur = 0;
     const int n = read_le_advance<int>(blob, cur);
@@ -1322,14 +1389,18 @@ void Strahler::load(int tgt, const std::vector<std::byte>& blob)
         copy_top(tgt);
         return;
     }
-    uint32_t *c = &code[(size_t)stride*(tgt+4)];
+    Code *c = &code[(size_t)stride*(tgt+4)];
     for (int i=0; i<n; i++) {
         const uint8_t b = read_le_advance<uint8_t>(blob, cur);
         const int d = read_le_advance<int>(blob, cur);
-        c[i] = b ? 2*END - (uint32_t)d : (uint32_t)d;
+        c[i] = (Code)(b ? 2*END - (uint32_t)d : (uint32_t)d);
     }
-    std::fill(c + n, c + stride, END);
+    std::fill(c + n, c + stride, (Code)END);
 }
+
+template class Strahler<uint8_t>;
+template class Strahler<uint16_t>;
+template class Strahler<uint32_t>;
 
 
 GPMSolver::GPMSolver(Oink& oink, Game& game, MeasureKind kind) : Solver(oink, game), measure_kind(kind)
@@ -1484,15 +1555,9 @@ GPMSolver::updateMeasure(Measure &pm, const int player) {
 bool
 GPMSolver::update(Measures &pm, const int player)
 {
-    // The kind also selects the measure objects in run(). Dispatch once per
-    // update wave so the lifting loop can call the concrete operations directly.
-    switch (measure_kind) {
-        case MeasureKind::Small: return updateMeasure(static_cast<Small&>(pm), player);
-        case MeasureKind::Succinct: return updateMeasure(static_cast<Succinct&>(pm), player);
-        case MeasureKind::Ordered: return updateMeasure(static_cast<Ordered&>(pm), player);
-        case MeasureKind::Strahler: return updateMeasure(static_cast<Strahler&>(pm), player);
-    }
-    LOGIC_ERROR;
+    // The kind (and the size of the codes) also selects the measure objects in run(). Dispatch
+    // once per update wave so the lifting loop can call the concrete operations directly.
+    return with_measure(measure_kind, pm, [&](auto &concrete) { return updateMeasure(concrete, player); });
 }
 
 
@@ -1866,16 +1931,48 @@ std::optional<MeasureKind> parse_measure_kind(std::string& opts) {
     return std::nullopt;
 }
 
+int measure_code_size(const MeasureKind kind, const Game &game) {
+    const long long d = game.priority(game.nodecount()-1); // the highest priority
+    switch (kind) {
+        case MeasureKind::Small:
+            return sizeof(int);
+        case MeasureKind::Ordered: {
+            // the priorities 0..d, and -1 for _ (bump and inc can also write 1); not 16 bits, see gpm.hpp
+            const long long max = std::max(d, 1LL);
+            return max <= INT8_MAX ? 1 : 4;
+        }
+        case MeasureKind::Succinct: {
+            // depth << 1 | bit with depths 0..h, h = d/2+1 for Even (and (d+1)/2 for Odd), all
+            // below TOP, the largest value
+            const long long max = 2*(d/2+1)+1;
+            return max < UINT8_MAX ? 1 : max < UINT16_MAX ? 2 : 4;
+        }
+        case MeasureKind::Strahler: {
+            // TOP = 2*END+1 is the largest code, with END = h+1 and h = d/2+2 for Even (one more
+            // than the depth of the tree, which is (d+1)/2 for Odd)
+            const long long max = 2*(d/2+3)+1;
+            return max <= UINT8_MAX ? 1 : max <= UINT16_MAX ? 2 : 4;
+        }
+    }
+    THROW_ERROR("Measure kind exists but is not implemented");
+}
+
 Measures *new_measure(const MeasureKind kind, const Game &game, const int player) {
+    const int size = measure_code_size(kind, game);
     switch (kind) {
         case MeasureKind::Small:
             return new Small(game, player);
         case MeasureKind::Ordered:
-            return new Ordered(game, player);
+            if (size == 1) return new Ordered<int8_t>(game, player);
+            return new Ordered<int32_t>(game, player);
         case MeasureKind::Succinct:
-            return new Succinct(game, player);
+            if (size == 1) return new Succinct<uint8_t>(game, player);
+            if (size == 2) return new Succinct<uint16_t>(game, player);
+            return new Succinct<uint32_t>(game, player);
         case MeasureKind::Strahler:
-            return new Strahler(game, player);
+            if (size == 1) return new Strahler<uint8_t>(game, player);
+            if (size == 2) return new Strahler<uint16_t>(game, player);
+            return new Strahler<uint32_t>(game, player);
         default:
             THROW_ERROR("Measure kind exists but is not implemented");
     }

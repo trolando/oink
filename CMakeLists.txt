@@ -409,6 +409,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         endif()
 
         add_test(NAME TestMeasureOps COMMAND test_unit measure-ops)
+        add_test(NAME TestMeasureCodes COMMAND test_unit measure-codes)
         add_test(NAME TestParser COMMAND test_unit parser)
         set(parser_input "${CMAKE_CURRENT_SOURCE_DIR}/test/parser-input/records.pg")
         foreach(parser fast renumber)

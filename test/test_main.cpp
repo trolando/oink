@@ -24,6 +24,7 @@
 #include <vector>
 
 int test_measure_ops();
+int test_measure_codes();
 int test_parser();
 int test_parser_input(bool renumber, const std::string& path);
 int test_io();
@@ -60,6 +61,7 @@ struct Test {
 
 const Test tests[] = {
     {"measure-ops", test_measure_ops},
+    {"measure-codes", test_measure_codes},
     {"parser", test_parser},
     {"io", test_io},
     {"solution", test_solution},

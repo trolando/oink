@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -138,6 +139,205 @@ test_measure_ops()
         }
         require(rejected, "a negative table size was not rejected");
         std::cout << "measure operations passed" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * A game without edges, with <n> vertices, of the priorities in <priorities> in turn.
+ */
+static Game
+make_game_of(int n, const std::vector<int>& priorities)
+{
+    Game game(n);
+    game.vec_init();
+    for (int v = 0; v < n; v++) {
+        const int p = priorities[v % priorities.size()];
+        game.init_vertex(v, p, p&1);
+    }
+    game.vec_finish();
+    game.sort();
+    return game;
+}
+
+/**
+ * Apply the same operations to the measures <a> and <b> (of the same kind, game and player, but
+ * codes of different sizes) and require that they keep the same values: store() writes a value
+ * independently of the size of the codes. First walk with inc from bottom to Top (all measures
+ * of a small tree, at most <walk> steps), then do <steps> pseudo-random operations on the slots
+ * -2, -1 and the first (at most six) vertices of the game of <n> vertices. (Ordered::see uses -3,
+ * and PMTL reserves -4.)
+ */
+static void
+check_same_values(Measures& a, Measures& b, int n, int maxp, int walk, int steps, unsigned seed)
+{
+    // (only the values: the codes after the first of a Top slot are not used, and can differ
+    // when an empty tree of Succinct overflows its codes to Top, with depth -1)
+    auto same = [&](int slot) {
+        require(a.is_top(slot) == b.is_top(slot), "codes of different sizes differ in Top");
+        if (!a.is_top(slot) and a.store(slot) != b.store(slot)) {
+            std::ostringstream msg;
+            msg << "codes of different sizes give different measures: ";
+            a.stream(msg, slot);
+            msg << " and ";
+            b.stream(msg, slot);
+            throw std::runtime_error(msg.str());
+        }
+    };
+    a.copy_bot(-1);
+    b.copy_bot(-1);
+    for (int i = 0; i < walk and !a.is_top(-1); i++) {
+        a.copy(-1, -2);
+        b.copy(-1, -2);
+        a.inc(-1);
+        b.inc(-1);
+        same(-1);
+        require(a.compare(-2, -1) == -1 and b.compare(-2, -1) == -1, "inc did not increase");
+    }
+    same(-1);
+    // pseudo-random see, inc, copies and comparisons
+    unsigned x = seed;
+    auto next = [&](unsigned m) { x = x * 1103515245u + 12345u; return (int)((x >> 8) % m); };
+    const int slots = 2 + std::min(n, 6);
+    for (int s = -2; s < slots-2; s++) {
+        a.copy_bot(s);
+        b.copy_bot(s);
+    }
+    for (int i = 0; i < steps; i++) {
+        const int slot = next(slots) - 2, other = next(slots) - 2;
+        const int op = next(16);
+        if (op < 9) {
+            // see a priority, mostly the highest and lowest few (the boundary codes)
+            const int r = next(6);
+            const int p = r == 0 ? next(maxp+1) : r < 3 ? std::max(0, maxp - next(3)) : std::min(maxp, next(3));
+            a.see(slot, p);
+            b.see(slot, p);
+        } else if (op < 11) {
+            a.inc(slot);
+            b.inc(slot);
+        } else if (op < 13) {
+            a.copy(other, slot);
+            b.copy(other, slot);
+        } else if (op == 13) {
+            a.copy_bot(slot);
+            b.copy_bot(slot);
+        } else if (op == 14 and next(8) == 0) {
+            a.copy_top(slot);
+            b.copy_top(slot);
+        } else {
+            a.load(slot, b.store(other));
+            b.load(slot, a.store(other));
+        }
+        same(slot);
+        require(a.compare(slot, other) == b.compare(slot, other), "codes of different sizes compare differently");
+        require(a.eq(slot, other) == b.eq(slot, other), "codes of different sizes are equal differently");
+    }
+}
+
+template<class Narrow, class Wide>
+static void
+check_codes(const Game& game, int player, int walk, int steps)
+{
+    Narrow narrow(game, player);
+    Wide wide(game, player);
+    const int n = game.nodecount(), maxp = game.priority(n-1);
+    check_same_values(narrow, wide, n, maxp, walk, steps, 1u + (unsigned)maxp*2u + (unsigned)player);
+    // a copy keeps the values (copy_from and set between equal types)
+    Narrow other(game, player);
+    other.copy_from(narrow, -1, 0);
+    require(other.store(0) == narrow.store(-1), "copy_from changed a measure");
+    other.set(narrow);
+    require(other.store(-1) == narrow.store(-1), "set changed a measure");
+}
+
+template<class M>
+static bool
+fits(const Game& game)
+{
+    try {
+        M m0(game, 0), m1(game, 1);
+        return true;
+    } catch (const pg::Error&) {
+        return false;
+    }
+}
+
+int
+test_measure_codes()
+{
+    try {
+        // the size of the codes at the boundaries: the largest priority of each size, and one more
+        struct Boundary { MeasureKind kind; int d; int size; };
+        const Boundary boundaries[] = {
+            {MeasureKind::Ordered, 0, 1}, {MeasureKind::Ordered, 127, 1}, {MeasureKind::Ordered, 128, 4},
+            {MeasureKind::Ordered, 32768, 4},
+            {MeasureKind::Succinct, 0, 1}, {MeasureKind::Succinct, 251, 1}, {MeasureKind::Succinct, 252, 2},
+            {MeasureKind::Succinct, 65531, 2}, {MeasureKind::Succinct, 65532, 4},
+            {MeasureKind::Strahler, 0, 1}, {MeasureKind::Strahler, 249, 1}, {MeasureKind::Strahler, 250, 2},
+            {MeasureKind::Strahler, 65529, 2}, {MeasureKind::Strahler, 65530, 4},
+            {MeasureKind::Small, 2, (int)sizeof(int)},
+        };
+        for (const auto& b : boundaries) {
+            for (int low = 0; low < 2; low++) {
+                // a vertex of the highest priority, and one of priority 0 or 1 (both parities)
+                const auto game = make_game_of(2, {low, b.d});
+                require(measure_code_size(b.kind, game) == b.size, "wrong size of codes at a boundary");
+                for (int player = 0; player < 2; player++) {
+                    std::unique_ptr<Measures> pm(new_measure(b.kind, game, player));
+                    require(pm->code_size() == b.size, "new_measure did not select the size");
+                }
+            }
+        }
+
+        // the narrower codes hold every code up to the boundary, and not one priority more
+        // (as the measures check in their constructors)
+        for (int low = 0; low < 2; low++) {
+            require(fits<Ordered<int8_t>>(make_game_of(2, {low, 127})), "Ordered: 127 does not fit 8 bits");
+            require(!fits<Ordered<int8_t>>(make_game_of(2, {low, 128})), "Ordered: 128 fits 8 bits");
+            require(fits<Succinct<uint8_t>>(make_game_of(2, {low, 251})), "Succinct: 251 does not fit 8 bits");
+            require(!fits<Succinct<uint8_t>>(make_game_of(2, {low, 252})), "Succinct: 252 fits 8 bits");
+            require(fits<Succinct<uint16_t>>(make_game_of(2, {low, 65531})), "Succinct: 65531 does not fit 16 bits");
+            require(!fits<Succinct<uint16_t>>(make_game_of(2, {low, 65532})), "Succinct: 65532 fits 16 bits");
+            require(fits<Strahler<uint8_t>>(make_game_of(2, {low, 249})), "Strahler: 249 does not fit 8 bits");
+            require(!fits<Strahler<uint8_t>>(make_game_of(2, {low, 250})), "Strahler: 250 fits 8 bits");
+            require(fits<Strahler<uint16_t>>(make_game_of(2, {low, 65529})), "Strahler: 65529 does not fit 16 bits");
+            require(!fits<Strahler<uint16_t>>(make_game_of(2, {low, 65530})), "Strahler: 65530 fits 16 bits");
+        }
+
+        // the same values in every size: games with 1, 2 and 3 priorities, more priorities, and
+        // the largest priorities of the narrower sizes
+        struct Shape { int n; std::vector<int> priorities; };
+        const Shape small[] = {
+            {1, {0}}, {1, {1}}, {7, {0}}, {7, {1}}, {9, {0, 1}}, {200, {0, 1}}, {6, {1, 2}},
+            {13, {0, 1, 2}}, {300, {0, 1, 2}}, {40, {1, 2, 3}}, {25, {0, 1, 2, 3, 4, 5, 6, 7}},
+            {64, {0, 3, 4, 9}}, {1000, {0, 1, 2, 5, 6}},
+        };
+        for (const auto& shape : small) {
+            const auto game = make_game_of(shape.n, shape.priorities);
+            for (int player = 0; player < 2; player++) {
+                check_codes<Ordered<int8_t>, Ordered<int32_t>>(game, player, 20000, 5000);
+                check_codes<Succinct<uint8_t>, Succinct<uint32_t>>(game, player, 20000, 5000);
+                check_codes<Succinct<uint16_t>, Succinct<uint32_t>>(game, player, 1000, 1000);
+                check_codes<Strahler<uint8_t>, Strahler<uint32_t>>(game, player, 20000, 5000);
+                check_codes<Strahler<uint16_t>, Strahler<uint32_t>>(game, player, 1000, 1000);
+            }
+        }
+        // (with two vertices, the walks reach Top: they pass the deepest codes)
+        for (int low = 0; low < 2; low++) {
+            for (int n : {2, 5}) {
+                for (int player = 0; player < 2; player++) {
+                    check_codes<Ordered<int8_t>, Ordered<int32_t>>(make_game_of(n, {low, 126, 127}), player, 100000, 20000);
+                    check_codes<Succinct<uint8_t>, Succinct<uint32_t>>(make_game_of(n, {low, 250, 251}), player, 100000, 20000);
+                    check_codes<Strahler<uint8_t>, Strahler<uint32_t>>(make_game_of(n, {low, 248, 249}), player, 100000, 20000);
+                    check_codes<Succinct<uint16_t>, Succinct<uint32_t>>(make_game_of(n, {low, 65530, 65531}), player, 100000, 5000);
+                    check_codes<Strahler<uint16_t>, Strahler<uint32_t>>(make_game_of(n, {low, 65528, 65529}), player, 100000, 5000);
+                }
+            }
+        }
+        std::cout << "measure codes passed" << std::endl;
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return 1;
