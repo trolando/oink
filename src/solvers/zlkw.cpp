@@ -91,6 +91,35 @@ namespace pg {
  *     opened again at the start of the next step that does work. If the precision runs out
  *     instead, they are the result as they are.
  *
+ * [O] A call that solves the same subgame with the same precisions as an earlier call takes
+ *     the result of that call. The extra step at precision po solves the rest of the previous
+ *     step again, with a higher precision for the opponent, and below it the same subgames
+ *     come back with the same precisions. On sparse random games with as many priorities as
+ *     vertices, the calls form a lattice of a few hundred distinct calls that the recursion
+ *     unfolds into a tree of millions (rn-1000-1000-1-2-13: 116 distinct subgames, 397,650
+ *     calls). The computation of a call depends only on its subgame, which is the set of open
+ *     vertices (their escape counters count their successors in the subgame), and on its two
+ *     precisions; and not on the precision of a player whose precision never ran out in the
+ *     call, if it is not lower (no step of that player is then presumed, and its flag is
+ *     false, so the size test never decides). So the result and the flags of an earlier call
+ *     are exactly what the computation would give, if the subgame is the same and each
+ *     precision is equal, or higher with the flag of that player false. The subgame is found
+ *     by a hash, a sum over its vertices that every step updates, and compared vertex by
+ *     vertex. Until a precision runs out somewhere, nothing can be stored, so subgames are not
+ *     hashed (the calls that are running then never store; a call that starts later without a
+ *     hash from its parent sums over its vertices). Storing a result copies it, which costs more than the call itself when the
+ *     call attracts few vertices of a large subgame; so a call stores its result only if a
+ *     precision ran out in it and the same subgame with the same precisions came before (a
+ *     fingerprint in a table of FILTER entries). On games where precision never runs out (most
+ *     practical games) nothing is stored; on tc, where calls hardly recur, almost nothing; in
+ *     a lattice, each distinct call is computed twice and then taken. An equal result is kept
+ *     once with all the precisions that gave it. Every depth keeps at least SLOTS results, and
+ *     more while all results together take at most BUDGET ints (16 MiB); a depth without a
+ *     free slot replaces its least recently used result. So small games (the counter families)
+ *     keep nearly every result, and large games take at most 2 SLOTS ints per vertex of the
+ *     largest subgame at each depth beyond the budget, the order of what the per-depth
+ *     vectors of ZLKW hold.
+ *
  * Strategies are computed as in ZLK: attractor strategies, the strategies of the recursive
  * calls, and at the end of a call every vertex of the player of the call whose strategy is not
  * in the call's region gets a successor in the region (the heads, and vertices whose successor
@@ -288,15 +317,176 @@ ZLKWSolver::attractLosing(const int r, const int pl, const std::vector<int> &H, 
 }
 
 /**
+ * Take the result of an earlier call on the subgame of the open vertices (<n> of them, with hash
+ * <key>) with the precisions <pc> and <po>, if there is one whose computation was the same: each
+ * precision equal, or higher with the flag of that player false. The stored subgame is the
+ * subgame if its <n> vertices are all open. The vertices get the stored winners and strategies,
+ * W[0] and W[1] the stored result, and <rb_cur> and <rb_opo> the stored flags.
+ */
+bool
+ZLKWSolver::reuse(const long n, const long pc, const long po, const uint64_t key, bool &rb_cur, bool &rb_opo)
+{
+    auto range = index.equal_range(key);
+    for (auto it = range.first; it != range.second; ++it) {
+        Slot &M = slots[it->second];
+        if ((long)M.n0 + (long)M.n1 != n) continue;
+
+        const Prec *P = nullptr;
+        for (const Prec &q : M.precs) {
+            if (pc != q.pc and (pc < q.pc or q.rbc)) continue;
+            if (po != q.po and (po < q.po or q.rbo)) continue;
+            P = &q;
+            break;
+        }
+        if (P == nullptr) continue;
+
+        const int *V = M.V.data();
+        long k = 0;
+        while (k < n and region[V[k]] < 0 and region[V[k]] != DIS) k++;
+        if (k != n) continue; // another subgame with the same hash
+
+        const int r = new_region();
+        const int *S = V + n;
+        for (k = 0; k < n; k++) {
+            const int v = V[k];
+            region[v] = r;
+            open.reset(v);
+            winning[v] = k < (long)M.n0 ? 0 : 1;
+            strategy[v] = S[k];
+        }
+        W[0].assign(V, V + M.n0);
+        W[1].assign(V + M.n0, V + n);
+        rb_cur |= P->rbc;
+        rb_opo |= P->rbo;
+        res_hash[0] = M.h0;
+        res_hash[1] = key - M.h0;
+        touch(it->second);
+        reused++;
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Store the result of the call at depth <d> that just ended (in W[0] and W[1], with the strategies
+ * of its vertices), its precisions, its flags and the hash <key> of its subgame.
+ */
+void
+ZLKWSolver::store(const int d, const long pc, const long po, const uint64_t key, const bool rbc, const bool rbo)
+{
+    const size_t n0 = W[0].size(), n1 = W[1].size(), n = n0 + n1;
+
+    // the same result as an earlier call on this subgame: add the precisions to its slot
+    auto range = index.equal_range(key);
+    for (auto it = range.first; it != range.second; ++it) {
+        Slot &M = slots[it->second];
+        if (M.n0 != n0 or M.n1 != n1) continue;
+        const int *V = M.V.data();
+        if (!std::equal(W[0].begin(), W[0].end(), V)) continue;
+        if (!std::equal(W[1].begin(), W[1].end(), V + n0)) continue;
+        size_t k = 0;
+        while (k < n and V[n+k] == strategy[V[k]]) k++;
+        if (k != n) continue;
+        M.precs.push_back(Prec{pc, po, rbc, rbo});
+        touch(it->second);
+        return;
+    }
+
+    if (depth_head.size() <= (size_t)d) {
+        depth_head.resize(d+1, UINT32_MAX);
+        depth_tail.resize(d+1, UINT32_MAX);
+        depth_count.resize(d+1, 0);
+    }
+
+    // Over the budget, a depth with more than SLOTS slots gives up its least recently used
+    // slots until the result fits, and a depth with SLOTS slots replaces its least recently
+    // used one; otherwise it takes a new slot.
+    uint32_t s = UINT32_MAX;
+    while (depth_count[d] >= SLOTS and pool + 2*n > BUDGET) {
+        const uint32_t t = depth_head[d];
+        auto old = index.equal_range(slots[t].key);
+        for (auto it = old.first; it != old.second; ++it) {
+            if (it->second == t) {
+                index.erase(it);
+                break;
+            }
+        }
+        const bool replace = depth_count[d] == SLOTS or pool - slots[t].V.size() + 2*n <= BUDGET;
+        unlink(t);
+        if (replace) {
+            s = t;
+            break;
+        }
+        pool -= slots[t].V.size();
+        std::vector<int>().swap(slots[t].V);
+        free_slots.push_back(t);
+    }
+    if (s == UINT32_MAX) {
+        if (free_slots.empty()) {
+            s = (uint32_t)slots.size();
+            slots.emplace_back();
+        } else {
+            s = free_slots.back();
+            free_slots.pop_back();
+        }
+    }
+    Slot &M = slots[s];
+    pool -= M.V.size();
+    pool += 2*n;
+
+    M.key = key;
+    M.h0 = res_hash[0];
+    M.n0 = (uint32_t)n0;
+    M.n1 = (uint32_t)n1;
+    M.V.resize(2*n);
+    int *V = M.V.data();
+    std::copy(W[0].begin(), W[0].end(), V);
+    std::copy(W[1].begin(), W[1].end(), V + n0);
+    for (size_t k = 0; k < n; k++) V[n+k] = strategy[V[k]];
+    M.precs.assign(1, Prec{pc, po, rbc, rbo});
+    index.emplace(key, (uint32_t)s);
+    link(s, d);
+}
+
+/**
+ * The hash of the subgame of the <n> open vertices at or below <top>.
+ */
+uint64_t
+ZLKWSolver::hash_open(int v, const long n)
+{
+    uint64_t h = 0;
+    for (long k = 0; k < n; k++) {
+        v = highest_at_most(open, v);
+        h += vhash(v);
+        v--;
+    }
+    return h;
+}
+
+/**
  * Solve the subgame of the open vertices (all at or below <top>; there are <n> > 0 of them) for
  * the player <pl>, with precision <pc> for <pl> and <po> for the opponent, as solve() with
  * ZLK_WARSAW in zlkpp.cpp. <rb_cur> and <rb_opo> are set when the precision of <pl> or of the
- * opponent runs out below. On return, W[0] and W[1] hold the subgame split by the winner.
+ * opponent runs out below. If <hashed>, <hg> is the hash of the subgame. On return, W[0] and
+ * W[1] hold the subgame split by the winner.
  */
 void
-ZLKWSolver::solve(const int top, const int pl, long n, const long pc, const long po, bool &rb_cur, bool &rb_opo)
+ZLKWSolver::solve(const int top, const int pl, long n, const long pc, const long po, bool &rb_cur_out, bool &rb_opo_out, uint64_t hg, bool hashed)
 {
+    // Until a precision runs out, nothing is stored, and subgames are not hashed. A call that
+    // starts later has a hash: from its parent, or from its vertices if the parent has none.
+    if (memo_on) {
+        if (!hashed) {
+            hg = hash_open(top, n);
+            hashed = true;
+        }
+        if (reuse(n, pc, po, hg, rb_cur_out, rb_opo_out)) return;
+    }
+
     calls++;
+    const uint64_t key = hg;
+    uint64_t hy = 0; // the hash of what the opponent won (L.Y)
+    bool rb_cur = false, rb_opo = false; // the flags of this call; passed up at the end
 
     const int d = depth++;
     struct DepthGuard { int &depth; ~DepthGuard() { depth--; } } guard{depth};
@@ -328,6 +518,7 @@ ZLKWSolver::solve(const int top, const int pl, long n, const long pc, const long
         if (p < min_dominion) {
             rb_step = true;
             presumed++;
+            memo_on = true;
             return false;
         }
         iterations++;
@@ -353,11 +544,25 @@ ZLKWSolver::solve(const int top, const int pl, long n, const long pc, const long
 #endif
 
         // the opponent solves the rest with its precision <p> and ours <pc>
-        if (nh > 0) solve(j, 1-pl, nh, p, pc, rb_step, rb_cur);
+        if (nh > 0) {
+            uint64_t hr = hg;
+            if (hashed) {
+                for (int v : L.A) hr -= vhash(v);
+            }
+            solve(j, 1-pl, nh, p, pc, rb_step, rb_cur, hr, hashed);
+        }
         num_h = nh;
 
         // the opponent attracts to what it won in the rest
+        const size_t w0 = Wo.size();
         const long count = Wo.empty() ? -1 : attractLosing(r, pl, L.H, Wo);
+        if (hashed) {
+            // the hash of the opponent's part of the rest comes with the result of the call
+            uint64_t hw = nh > 0 ? res_hash[1-pl] : 0;
+            for (size_t k = w0; k < Wo.size(); k++) hw += vhash(Wo[k]);
+            hg -= hw;
+            hy += hw;
+        }
 
         // remove the opponent's attractor from the subgame (merge the smaller vector into the larger)
         n -= (long)Wo.size();
@@ -447,6 +652,13 @@ ZLKWSolver::solve(const int top, const int pl, long n, const long pc, const long
     // pass the result up
     Wm.swap(L.G);
     Wo.swap(L.Y);
+    if (hashed) {
+        res_hash[1-pl] = hy;
+        res_hash[pl] = key - hy;
+    }
+    if (hashed and (rb_cur or rb_opo) and seen_before(key, pc, po)) store(d, pc, po, key, rb_cur, rb_opo);
+    rb_cur_out |= rb_cur;
+    rb_opo_out |= rb_opo;
 
     // keep the vectors of this depth, unless they are large
     for (auto *vec : {&L.A, &L.H, &L.G, &L.Y}) {
@@ -499,8 +711,11 @@ ZLKWSolver::run()
     long prec = 1;
     while (prec < n) prec = 2*prec+1;
 
+    filter.assign(FILTER, 0);
+    memo_on = false;
+
     bool rb_cur = false, rb_opo = false;
-    solve(top, priority(top)&1, n, prec, prec, rb_cur, rb_opo);
+    solve(top, priority(top)&1, n, prec, prec, rb_cur, rb_opo, 0, false);
 
     for (long v = 0; v < N; v++) {
         if (disabled[v]) continue;
@@ -513,11 +728,18 @@ ZLKWSolver::run()
     W[0].clear();
     W[1].clear();
     levels.clear();
+    slots.clear();
+    depth_head.clear();
+    depth_tail.clear();
+    depth_count.clear();
+    free_slots.clear();
+    index.clear();
+    std::vector<uint64_t>().swap(filter);
     region.reset();
     winning.reset();
     strategy.reset();
 
-    logger << "solved with " << iterations << " iterations (" << calls << " calls, " << presumed << " presumed)." << std::endl;
+    logger << "solved with " << iterations << " iterations (" << calls << " calls, " << presumed << " presumed, " << reused << " reused)." << std::endl;
 }
 
 }

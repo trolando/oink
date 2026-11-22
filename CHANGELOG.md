@@ -11,7 +11,8 @@ All notable changes to Oink will be documented in this file.
   Wojtczak 2021, as in ZLKPP-WAW), on the data structures of ZLK and with
   priority compression. Unlike ZLKQ, it halves the precision only from
   one priority to the next and stops as Zielonka's algorithm does when
-  the precision never ran out.
+  the precision never ran out. A call on the same subgame with the same
+  precisions as an earlier call takes its stored result.
 - `bench_solvers --fresh-process` loads, prepares, solves and verifies
   every trial in a new process. It reports load and parse times and peak
   resident memory per trial on Linux and macOS. The default reuse mode
