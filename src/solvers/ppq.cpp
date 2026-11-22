@@ -306,31 +306,63 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
 
     // A u region ranks just above an r region of the same priority. Keep
     // the seeds of the highest region in FIFO order while scanning L.
-    L = G;
+    //
+    // A vertex keeps its rank until it is attracted, and then it leaves L.
+    // So we scan L only once: the vertices of the highest rank go to Q, and
+    // those of the lower ranks above the cutoff to a bucket per rank. Then we
+    // attract to each rank in descending order, seeded by those vertices of
+    // the rank that are still in L. These are the same rounds as rescanning L
+    // for the highest rank, but cost one scan of L plus the number of ranks
+    // above the cutoff. Between rounds, <candidates> is exactly L, so we do
+    // not need L itself.
     const int64_t cutoff = 2LL * pr;
-    while (true) {
-        int64_t best = cutoff;
-        for (auto v = L.find_first(); v != bitset::npos; v = L.find_next(v)) {
-            assert((r[v] == -1) != (u[v] == -1));
-            const int64_t rank = r[v] != -1 ? 2LL * r[v] : 2LL * u[v] + 1;
-            if (rank > best) {
-                best = rank;
-                Q.clear();
+    int64_t top = cutoff;
+    for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
+        assert((r[v] == -1) != (u[v] == -1));
+        const int64_t rank = r[v] != -1 ? 2LL * r[v] : 2LL * u[v] + 1;
+        if (rank <= cutoff) continue;
+        if (rank > top) {
+            // the vertices of the previous highest rank go to its bucket
+            if (top > cutoff) {
+                for (unsigned i = 0; i < Q.size(); ++i) {
+                    rank_next[Q[i]] = rank_first[top];
+                    rank_first[top] = Q[i];
+                }
             }
-            if (rank == best && rank > cutoff) Q.push(v);
+            Q.clear();
+            top = rank;
         }
-        if (Q.empty()) break;
+        if (rank == top) {
+            Q.push(v);
+        } else {
+            // prepend, so each bucket is in descending vertex order
+            rank_next[v] = rank_first[rank];
+            rank_first[rank] = v;
+        }
+    }
+    candidates = G;
+    R.reset();
+    for (int64_t best = top; best > cutoff; best--) {
+        if (best != top) {
+            // the vertices of this rank that are still in L, in ascending order
+            for (int v = rank_first[best]; v != -1; v = rank_next[v]) {
+                if (candidates[v]) Q.push(v);
+            }
+            rank_first[best] = -1;
+            if (Q.empty()) continue;
+            std::reverse(&Q[0], &Q[0] + Q.size());
+        }
+        const unsigned seeds = Q.size();
+        for (unsigned i = 0; i < seeds; ++i) {
+            R[Q[i]] = true;
+            candidates[Q[i]] = false;
+        }
         const int apr = int(best / 2);
         const bool is_u = (best & 1) != 0;
         const int attractor = (apr & 1) ^ is_u;
 #ifndef NDEBUG
         if (trace >= 2) logger << "maximizing to " << (is_u ? 'u' : 'r') << ' ' << apr << std::endl;
 #endif
-        R.reset();
-        const unsigned seeds = Q.size();
-        for (unsigned i = 0; i < seeds; ++i) R[Q[i]] = true;
-        candidates = L;
-        candidates -= R;
         for (unsigned i = 0; i < Q.size(); ++i) {
             const int v = Q[i];
             if (is_u) setU(v, apr);
@@ -338,8 +370,13 @@ PPQSolver::maybePromote(int pr, int pl, bitset &R, bitset &L)
             attractVertices(attractor, v, R);
         }
         finishSeeds(attractor, R, seeds);
+        // empty R for the next round, by its members if they are few
+        if (Q.size() < R.size() / 64) {
+            for (unsigned i = 0; i < Q.size(); ++i) R[Q[i]] = false;
+        } else {
+            R.reset();
+        }
         Q.clear();
-        L -= R;
     }
 
 #ifndef NDEBUG
@@ -639,6 +676,10 @@ PPQSolver::run()
     G.flip();
 
     if (G.any()) {
+        // buckets by rank for the maximization after a promotion (vertices are sorted by priority)
+        rank_first.assign(2 * (size_t)maxprio + 2, -1);
+        rank_next.resize(nodecount());
+
         solve(nodecount()-1, r[G.find_last()], INT_MAX, nodecount(), nodecount()); // caller has INT_MAX priority...
     }
 

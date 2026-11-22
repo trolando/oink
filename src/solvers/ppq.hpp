@@ -57,6 +57,9 @@ protected:
     std::vector<int> rsize, usize;
     bitset rprios, uprios;
 
+    std::vector<int> rank_first; // per rank, the first vertex of its bucket (or -1)
+    std::vector<int> rank_next;  // per vertex, the next vertex in its bucket
+
     inline void leave(int v);
     inline void enter(int v);
     inline void setR(int v, int p);

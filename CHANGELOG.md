@@ -54,7 +54,9 @@ All notable changes to Oink will be documented in this file.
   reactive synthesis.
 - PPQ keeps the size of each of its regions, so a call whose subgame is
   empty returns at once instead of walking down through the vertices
-  that are solved or in higher regions.
+  that are solved or in higher regions. It also sorts the vertices by
+  rank once per maximisation after a promotion, instead of scanning the
+  game again for every region.
 
 ### Fixed
 
