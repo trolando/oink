@@ -653,29 +653,73 @@ TLQSolver::solve(bitset &SG, int vtop, int pe, int po)
      */
 
     if (!leaky) {
-        if (!pea_vidx) {
-            pea_vidx.reset(new unsigned int[nodecount()]);
-            pea_root.resize(nodecount());
-            S.resize(nodecount());
-            escapes.resize(nodecount());
-        }
-        std::fill_n(pea_vidx.get(), nodecount(), '\0');
-        pea_curidx = 1;
-        // Extract this batch against a fixed H and strategy. Maximize its dominions
-        // before using the new tangles to re-maximize all regions once.
         const auto T = tangles, D = dominions;
-        for (const int v : heads) extractTangles(v, H);
-        if (D != dominions) {
-            // maximize the found dominions
-            for (auto v = S.find_last(); v != bitset::npos; v = S.find_prev(v)) {
-                Q.push(v);
+        if (!heads.empty() and Rs.size() == 1 and *Rs[0] == G) {
+            /**
+             * A closed region of the top level, while the top level is the whole unsolved game
+             * <G>, is a dominion, as the first region in TL. It was attracted in <G> with every
+             * tangle of <pl>, so the opponent can only leave it to dominions of <pl> that were
+             * already removed from <G> (a vertex with an edge into a dominion of the opponent was
+             * attracted to that dominion), and it is already closed under attraction in <G>.
+             * So it is solved at once: without extracting its SCCs, which could only be learned
+             * as tangles inside it, and without maximizing it again. Every vertex of <pl> in it
+             * has its strategy: from its attraction, from its tangle, or (a head) from the first
+             * successor in <H> that attracted from it. It is assigned to <Wm> here, and the
+             * re-maximization below removes it from the top level.
+             * This is not safe below the top level, or after the top level removed vertices
+             * presumed won by the opponent (its right side): the opponent may escape to vertices
+             * outside the subgame that are only presumed to be won by <pl> or by itself.
+             */
+#ifndef NDEBUG
+            if (trace) {
+                logger << "\033[1;38;5;201mdominion \033[36m" << pr << "\033[m (top region)";
+                if (trace >= 2) {
+                    for (auto v = H.find_last(); v != bitset::npos; v = H.find_prev(v)) {
+                        logger << " \033[1;36m" << label_vertex(v) << "\033[m";
+                        if (str[v] != -1) logger << "->" << label_vertex(str[v]);
+                    }
+                }
+                logger << std::endl;
             }
-            attract(pl, S, G);
-            // remove them from the game
-            Wm |= S;
-            Wo -= S;
-            G -= S;
-            S.reset();
+            // (check that it is closed in <G> and that <pl> has a strategy in it)
+            for (auto v = H.find_first(); v != bitset::npos; v = H.find_next(v)) {
+                if (owner(v) == pl) {
+                    if (str[v] == -1 or !H[str[v]]) THROW_ERROR("top region dominion without strategy");
+                } else {
+                    for (auto curedge = outs(v); *curedge != -1; curedge++) {
+                        if (G[*curedge] and !H[*curedge]) THROW_ERROR("top region dominion is not closed");
+                    }
+                }
+            }
+#endif
+            dominions++;
+            Wm |= H;
+            Wo -= H;
+            G -= H;
+        } else {
+            if (!pea_vidx) {
+                pea_vidx.reset(new unsigned int[nodecount()]);
+                pea_root.resize(nodecount());
+                S.resize(nodecount());
+                escapes.resize(nodecount());
+            }
+            std::fill_n(pea_vidx.get(), nodecount(), '\0');
+            pea_curidx = 1;
+            // Extract this batch against a fixed H and strategy. Maximize its dominions
+            // before using the new tangles to re-maximize all regions once.
+            for (const int v : heads) extractTangles(v, H);
+            if (D != dominions) {
+                // maximize the found dominions
+                for (auto v = S.find_last(); v != bitset::npos; v = S.find_prev(v)) {
+                    Q.push(v);
+                }
+                attract(pl, S, G);
+                // remove them from the game
+                Wm |= S;
+                Wo -= S;
+                G -= S;
+                S.reset();
+            }
         }
         if (D != dominions or T != tangles) {
             // now we need to re-maximize all regions

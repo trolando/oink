@@ -40,6 +40,9 @@ All notable changes to Oink will be documented in this file.
   address space by up to 1.6 GiB on large games. With the previous
   change, PMTL is 15 to 22% faster per game on model and equivalence
   checking.
+- TLQ solves a closed region of its top level as a dominion while the
+  top level is the whole unsolved game, as TL does with its first region,
+  instead of splitting it into tangles.
 
 ### Fixed
 
