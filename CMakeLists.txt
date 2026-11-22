@@ -203,6 +203,7 @@ target_sources(oink
     src/solvers/zlk.cpp
     src/solvers/zlkj.cpp
     src/solvers/zlkq.cpp
+    src/solvers/zlkw.cpp
     src/solvers/npp.cpp
     src/solvers/ppj.cpp
     src/solvers/pp.cpp
@@ -518,6 +519,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverZLKseq COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w -1)
             add_test(NAME TestSolverZLKpar COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlk -w 0 --force-parallel)
             add_test(NAME TestSolverZLKQ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkq)
+            add_test(NAME TestSolverZLKW COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkw)
             add_test(NAME TestSolverUZLK COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --uzlk)
             add_test(NAME TestSolverZLKJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkj)
             add_test(NAME TestSolverZLKPP1 COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --zlkpp-std)
