@@ -56,7 +56,7 @@ namespace pg {
 
 Solvers::Solvers()
 {
-    _add("zlkq", "qpt Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKQSolver>(oink, game); });
+    _add("zlkq", "qpt Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKQSolver>(oink, game); }, true);
     _add("zlkw", "Warsaw quasi-polynomial Zielonka", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKWSolver>(oink, game); });
     _add("zlkwj", "Warsaw quasi-polynomial Zielonka with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<ZLKWJSolver>(oink, game); });
     _add("zlk", "parallel Zielonka", 1, [] (Oink& oink, Game& game) { return std::make_unique<ZLKSolver>(oink, game); });

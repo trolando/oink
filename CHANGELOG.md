@@ -24,6 +24,8 @@ All notable changes to Oink will be documented in this file.
 
 ### Changed
 
+- ZLKQ is marked experimental: ZLKW and ZLKWJ are the quasi-polynomial
+  Zielonka solvers to use.
 - `bench_solvers` skips later rounds of a game and solver configuration
   after a measured solve timeout by default. Skipped rounds count as
   timeouts and are marked in the reports and live table. Change the
