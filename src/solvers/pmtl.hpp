@@ -18,6 +18,7 @@
 #define PMTL_HPP
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <queue>
 
@@ -25,6 +26,8 @@
 #include "gpm.hpp"
 
 namespace pg {
+
+class EnergyCredits;
 
 class PMTLSolver : public Solver
 {
@@ -45,6 +48,7 @@ private:
     unsigned int escape_epoch = 0;
     std::uint64_t lifts = 0;
     MeasureKind measure_kind = MeasureKind::Ordered;
+    const bool energy_only;
     bool use_tangles = true;
     bool go_up = false;
     bool use_shortcuts = true;
@@ -60,7 +64,9 @@ private:
     bitset has_tin;
     std::vector<int*> tv; // the tangle (vertex-strategy pairs)
     std::vector<int> tpr; // priority of a tangle
-    std::vector<std::vector<int>> tangles_of_pr; // for each priority, its tangles (in order of creation)
+    std::map<int, std::vector<int>> tangles_of_pr; // for each present priority, its tangles in discovery order
+    std::vector<int> up_levels; // priority thresholds at which the up pass can change
+    std::vector<int> credit_slot; // maps members of the current energy tangle to local indexes
     std::vector<int> Zlist; // the vertices added to <Z> (some may have been removed again), so that
                             // work per region is proportional to its size, not to the whole game
 
@@ -88,11 +94,17 @@ private:
     bool attractTangle(const int t, const int pl, bitset &R, bitset &Z, bitset &G, const int max_prio);
     inline void attractTangles(const int pl, int v, bitset &R, bitset &Z, bitset &G, const int max_prio);
 
+    bool update(Measures &pm, Measures &target_pm, int player);
     template<bool GoUp, bool UseTangles> bool update(Measures &pm, Measures &target_pm, const int player);
     template<class Measure, bool GoUp, bool UseTangles> bool updateMeasure(Measure &pm, Measure &target_pm, const int player);
     void solve(Measures &pm, const int player);
     void initOrder(const int pl);
     void shortcuts(const int player, Measures &src, Measures &target1, Measures &target2);
+    void runMeasures(std::uint64_t (&by_player)[2]);
+    bool validCreditPolicy(const std::vector<int>& vertices, int player, const int* policy, bool closed) const;
+    bool liftCreditTangle(EnergyCredits& pm, int t);
+    void certifyCredits(const EnergyCredits& pm, int player);
+    void runCredits(std::uint64_t (&by_player)[2]);
 
     /** stuff for extractTangles (the arrays are allocated by prepareExtraction) **/
     std::vector<unsigned int> pea_vS; // vS

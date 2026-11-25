@@ -38,7 +38,7 @@ The interactive solver chooser of the test tools hides them by default.
 
 ### Tangle learning family
 
-The tangle learning algorithms are a focus of research for finding a polynomial-time algorithm to solve parity games.
+One research question for tangle learning is whether a polynomial number of tangle lifts suffices to solve every parity game.
 
 See also:  
 * Tom van Dijk (2018) [Attracting Tangles to Solve Parity Games](https://doi.org/10.1007/978-3-319-96142-2/_14). In: CAV 2018.
@@ -56,7 +56,7 @@ TLQ             | Tangle Learning applied to the quasi-polynomial time recursive
 
 ### Fixpoint algorithms
 
-The fixpoint algorithms are based on a translation of parity games to a formula of the modal mu-calculus, which can be solved
+The FPI and FPJ families are based on a translation of parity games to a formula of the modal mu-calculus, which can be solved
 using a naive fixpoint algorithm. Despite its atrocious behavior on constructed hard games, for practical parity games
 they are among the fastest algorithms.
 The FPI algorithm has a scalable parallel implementation.
@@ -152,10 +152,11 @@ The QPT ordered progress measures algorithm was published by Fearnley et al in S
 
 The bounded variants `BSSPM` and `BQPT` are an idea by Tom van Dijk and Marcin Jurdzinski.
 
-The generic progress measures solver `GPM` runs one algorithm with different kinds of measures: small, ordered, succinct and Strahler measures.
-`PMTL` combines progress measures with tangle learning, also with any of these kinds of measures.
-The kind is chosen with `-c small`, `-c ordered`, `-c succinct` or `-c strahler`, or with the shorthands `--gpm-small` etc. and `--pmtl-small` etc.
+GPM lifts individual vertices, PMA uses attractors, and PMTL also learns tangles.
+Use `-c` to select small, ordered, succinct or Strahler measures (e.g. `--gpm -c small` or `--gpm-small`).
 The Strahler measures are the leaves of the Strahler-universal trees of Daviaud, Jurdziński and Thejaswini; the implementation is adapted from the STRPM solver by Vanessa Flügel and Guillermo A. Pérez (https://github.com/vfluegel/oink).
+
+With `-c energy`, all three solvers run in polynomial time. They limit the number of lifting rounds and use Extremal Prices (EP) to solve any remaining vertices.
 
 See also:
 * Marcin Jurdzinski (2000) [Small Progress Measures for Solving Parity Games](https://doi.org/10.1007/3-540-46541-3_24). In: STACS 2000.
@@ -173,9 +174,11 @@ SSPM (e)        | Quasi-polynomial time succinct progress measures
 BSSPM (e)       | Quasi-polynomial time succinct progress measures (bounding variant by TvD and MJ, often faster)
 QPT (e)         | Quasi-polynomial time ordered progress measures
 BQPT (e)        | Quasi-polynomial time ordered progress measures (bounding variant by TvD and MJ, often faster)
-GPM (e)         | Generic progress measures (small, ordered, succinct or Strahler measures)
-PMTL (e)        | Progress measures with tangle learning (small, ordered, succinct or Strahler measures)
-PMA (e)         | Progress measures with attractors (small, ordered, succinct or Strahler measures)
+GPM (e)         | Generic progress measures
+PMTL (e)        | Progress measures with tangle learning
+PMA (e)         | Progress measures with attractors
+EP (clipped)    | Polynomial-time Extremal Prices with a clipped energy measure
+EP (sign)       | Polynomial-time Extremal Prices with the winner-sign oracle
 
 ### Preprocessing
 
@@ -247,8 +250,10 @@ Some algorithms can solve the two binary counters games in polynomial time:
 - A C++17 compiler (GCC 9 or newer, or Clang) and CMake 3.14 or newer. On Windows, the library and the tests build with MSYS2.
 - [Lace](https://github.com/trolando/lace), the work-stealing framework used by the parallel solvers. By default CMake downloads it automatically with `git` during configuration, so the first build needs network access. To build offline, install Lace yourself and CMake will pick it up via `find_package(lace)`.
 - Optional: the `zlib`, `libbz2` and `liblzma` development packages enable transparent decompression of `.gz`, `.bz2` and `.xz` parity games. They are detected automatically; a missing library simply disables that input format.
-
-Oink does **not** require Boost.
+- Extremal Prices and the energy progress measures build by default. CMake uses installed Boost.Multiprecision
+  headers when available and otherwise downloads the [standalone header package](https://github.com/boostorg/multiprecision/releases/tag/Boost_1_92_0).
+  For an offline build, point `OINK_MULTIPRECISION_INCLUDE_DIR` at the directory containing
+  `boost/multiprecision/cpp_int.hpp`, or use `-DOINK_ENABLE_EP=OFF` to omit these solvers.
 
 ### Building
 

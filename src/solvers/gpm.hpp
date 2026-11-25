@@ -82,7 +82,8 @@ enum class MeasureKind {
     Small,
     Ordered,
     Succinct,
-    Strahler
+    Strahler,
+    Energy
 };
 
 /**
@@ -340,6 +341,8 @@ decltype(auto) with_measure(MeasureKind kind, Measures &pm, F &&f)
             if (size == 1) return f(static_cast<Strahler<uint8_t>&>(pm));
             if (size == 2) return f(static_cast<Strahler<uint16_t>&>(pm));
             return f(static_cast<Strahler<uint32_t>&>(pm));
+        case MeasureKind::Energy:
+            return f(pm); // the optional energy implementation uses the Measures interface
     }
     LOGIC_ERROR;
 }
@@ -359,6 +362,7 @@ private:
     bitset G; // remaining unsolved game
     int *str; // stores currently assigned strategy of each vertex
     MeasureKind measure_kind = MeasureKind::Ordered;
+    const bool energy_only;
     std::vector<int> escape_offset;
     std::vector<unsigned int> escape_stamp;
     unsigned int escape_epoch = 0;
@@ -395,10 +399,10 @@ private:
 };
 
 
-std::optional<MeasureKind> parse_measure_kind(std::string&);
+std::optional<MeasureKind> parse_measure_kind(const std::string&, bool energy_only = false);
 Measures *new_measure(const MeasureKind kind, const Game &game, const int player);
 void stream_measure_kind(std::ostream&, MeasureKind);
-void stream_measure_kinds(std::ostream&);
+void stream_measure_kinds(std::ostream&, bool energy_only = false);
 
 }
 

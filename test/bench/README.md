@@ -7,6 +7,7 @@ earlier `test_solvers --benchmark`; `test_solvers` itself tests solvers.
 
 ```
 ./build/bench_solvers examples                         # the default solvers on a directory
+./build/bench_solvers --ep-clipped --ep-sign --gpm-energy --pmtl-energy examples
 ./build/bench_solvers --fresh-process --quick --tl examples  # a fresh process per trial
 ./build/bench_solvers --tl --tlq --ppq --reference=tl --jsonl=run.jsonl --csv=run.csv examples
 ./build/bench_solvers -i examples                      # setup screen, live table, review

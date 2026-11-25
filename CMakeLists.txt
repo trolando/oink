@@ -91,6 +91,33 @@ target_include_directories(oink
 
 target_link_libraries(oink PUBLIC Threads::Threads lace::lace)
 
+# EP and the energy progress measures use exact, variable-width integers.
+option(OINK_ENABLE_EP "Build Extremal Prices and the energy progress measure solvers" ON)
+if(OINK_ENABLE_EP)
+    add_library(oink_ep_headers INTERFACE)
+    target_compile_definitions(oink_ep_headers INTERFACE OINK_HAVE_EP)
+    find_path(OINK_MULTIPRECISION_INCLUDE_DIR boost/multiprecision/cpp_int.hpp)
+    if(OINK_MULTIPRECISION_INCLUDE_DIR)
+        target_include_directories(oink_ep_headers SYSTEM INTERFACE "${OINK_MULTIPRECISION_INCLUDE_DIR}")
+    else()
+        if(NOT TARGET Boost::multiprecision)
+            if(POLICY CMP0135)
+                cmake_policy(SET CMP0135 NEW)
+            endif()
+            FetchContent_Declare(oink_multiprecision
+                URL https://codeload.github.com/boostorg/multiprecision/tar.gz/refs/tags/Boost_1_92_0
+                URL_HASH SHA256=d53a907779b1ba88c80c15953c24106bf92b1b4731678441a8655e527c9d3df1
+            )
+            FetchContent_MakeAvailable(oink_multiprecision)
+        endif()
+        target_link_libraries(oink_ep_headers INTERFACE Boost::multiprecision)
+    endif()
+    target_link_libraries(oink PRIVATE "$<BUILD_INTERFACE:oink_ep_headers>")
+    target_sources(oink PRIVATE src/solvers/ep.cpp src/solvers/energy_credit.cpp src/solvers/ep_clipped.cpp src/solvers/ep_sign.cpp src/solvers/ep_search.cpp
+        src/solvers/ep_market.cpp src/solvers/ep_experts.cpp)
+    message(STATUS "Oink: Extremal Prices and energy progress measures enabled")
+endif()
+
 # Optional transparent decompression of input parity games (.gz/.bz2/.xz).
 # These are private implementation details of the parser: each backend is
 # independent, a missing library simply disables that format (reported as an
@@ -304,6 +331,9 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         set_target_props(bench_solvers)
         add_executable(test_measures)
         target_sources(test_measures PRIVATE test/test_measures.cpp)
+        if(OINK_ENABLE_EP)
+            target_link_libraries(test_measures oink_ep_headers)
+        endif()
         set_target_props(test_measures)
     endif()
 
@@ -403,6 +433,11 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         target_link_libraries(test_unit oink_bench oink_testtools)
         set_target_props(test_unit)
         target_compile_definitions(test_unit PRIVATE OINK_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
+        if(OINK_ENABLE_EP)
+            target_sources(test_unit PRIVATE test/test_ep.cpp test/test_ep_market.cpp test/test_ep_experts.cpp)
+            target_link_libraries(test_unit oink_ep_headers)
+            add_test(NAME TestEP COMMAND test_unit ep)
+        endif()
         if(BZIP2_FOUND)
             target_link_libraries(test_unit BZip2::BZip2)
             target_compile_definitions(test_unit PRIVATE OINK_HAVE_BZIP2=1)
@@ -473,6 +508,11 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
             add_test(NAME TestSolverFPJ COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpj)
             add_test(NAME TestSolverFPJG COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjg)
             add_test(NAME TestSolverFPJM COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --fpjm)
+            if(OINK_ENABLE_EP)
+                add_test(NAME TestSolverEP COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ep-clipped --ep-sign --ep --ep=sign)
+                add_test(NAME TestSolverEnergyMeasures COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests
+                    --gpm-energy --gpa-energy --pmtl-energy --gpm=energy --pma=energy --pmtl=energy)
+            endif()
             # test strategy iteration
             add_test(NAME TestSolverPSIs COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w -1)
             add_test(NAME TestSolverPSIp COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w 0 --force-parallel -c parmin=1,chunk=4)

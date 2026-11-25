@@ -20,6 +20,7 @@
  * inspect its state and the rendered screen.
  */
 
+#include <algorithm>
 #include <iostream>
 #include <string>
 
@@ -95,9 +96,20 @@ test_available()
     bool experimental = false;
     for (const auto& id : chooser.available()) experimental = experimental || Solvers::isExperimental(id);
     check("experimental solvers hidden by default", !experimental && !chooser.available().empty());
+#ifdef OINK_HAVE_EP
+    const auto& available = chooser.available();
+    for (const char* id : {"ep-clipped", "ep-sign", "gpm-energy", "pmtl-energy"}) {
+        check(id, std::find(available.begin(), available.end(), id) != available.end());
+    }
+    check("bare EP is experimental", Solvers::isExperimental("ep"));
+#endif
     const size_t standard = chooser.available().size();
     press(chooser, 'x');
     check("x shows experimental solvers", chooser.experimental_shown() && chooser.available().size() > standard);
+#ifdef OINK_HAVE_EP
+    check("x shows experimental gpa-energy", Solvers::isExperimental("gpa-energy") &&
+          std::find(available.begin(), available.end(), "gpa-energy") != available.end());
+#endif
     press(chooser, 'x');
     check("x hides them again", chooser.available().size() == standard);
 

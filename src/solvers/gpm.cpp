@@ -20,11 +20,16 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 
 #include "gpm.hpp"
+#ifdef OINK_HAVE_EP
+#include "ep.hpp"
+#include "energy_credit.hpp"
+#endif
 #include "oink/oink.hpp"
 #include "oink/uintqueue.hpp"
 
@@ -1445,7 +1450,8 @@ template class Strahler<uint16_t>;
 template class Strahler<uint32_t>;
 
 
-GPMSolver::GPMSolver(Oink& oink, Game& game, MeasureKind kind) : Solver(oink, game), measure_kind(kind)
+GPMSolver::GPMSolver(Oink& oink, Game& game, MeasureKind kind)
+    : Solver(oink, game), measure_kind(kind), energy_only(kind == MeasureKind::Energy)
 {
 }
 
@@ -1839,12 +1845,12 @@ GPMSolver::parseOptions(std::string& opts)
         if (opt == "noshortcuts" || opt == "no-shortcuts") {
             use_shortcuts = false;
         } else {
-            std::optional<MeasureKind> parsed = parse_measure_kind(opt);
+            std::optional<MeasureKind> parsed = parse_measure_kind(opt, energy_only);
             if (parsed.has_value()) {
                 measure_kind = *parsed;
             } else {
                 logger << "unrecognised option for GPM solver, possible options: ";
-                stream_measure_kinds(logger);
+                stream_measure_kinds(logger, energy_only);
                 logger << ", no-shortcuts (separated by commas and no spaces)" << std::endl;
                 return false;
             }
@@ -1920,7 +1926,8 @@ void
 GPMSolver::run()
 {
     if (runSparseSubgame()) return;
-    str = new int[nodecount()];
+    std::unique_ptr<int[]> strategy(new int[nodecount()]);
+    str = strategy.get();
     if (use_shortcuts) {
         escape_offset.resize(nodecount());
         escape_stamp.resize(nodecount());
@@ -1940,13 +1947,16 @@ GPMSolver::run()
     L0.resize(nodecount());
     L1.resize(nodecount());
 
-    Measures *pm0 = new_measure(measure_kind, game, 0);
-    Measures *pm1 = new_measure(measure_kind, game, 1);
+    std::unique_ptr<Measures> pm0(new_measure(measure_kind, game, 0));
+    std::unique_ptr<Measures> pm1(new_measure(measure_kind, game, 1));
 
     bool c0 = true;
     bool c1 = true;
 
     std::uint64_t iterations = 0;
+#ifdef OINK_HAVE_EP
+    const auto credit_budget = measure_kind == MeasureKind::Energy ? G.count() : 0;
+#endif
 
     while (true) {
         iterations++;
@@ -1965,19 +1975,32 @@ GPMSolver::run()
         }
 
         if (!c0 && !c1) break;
+#ifdef OINK_HAVE_EP
+        // Credits have polynomial bit length but can take exponentially many
+        // unit lifts. Only the price solver may continue beyond this prefix.
+        if (measure_kind == MeasureKind::Energy && iterations >= credit_budget) {
+            if (trace) logger << "GPM credit wave limit reached, continuing with EP." << std::endl;
+            finish_with<EPSolver>();
+            break;
+        }
+#endif
     }
 
-    solve(*pm1, 0);
-    solve(*pm0, 1);
+    if (!c0 && !c1) {
+        solve(*pm1, 0);
+        solve(*pm0, 1);
+    }
 
     logger << "solved with " << lifts << " lifts, " << lift_attempts << " lift attempts, " << iterations << " iterations." << std::endl;
-
-    delete[] str;
-    delete pm0;
-    delete pm1;
 }
 
-std::optional<MeasureKind> parse_measure_kind(std::string& opts) {
+std::optional<MeasureKind> parse_measure_kind(const std::string& opts, bool energy_only) {
+#ifdef OINK_HAVE_EP
+    if (opts == "energy" || opts == "ENERGY" || opts == "epm" || opts == "EPM")
+        return MeasureKind::Energy;
+#endif
+    // The named energy variants keep their polynomial bound under all their options.
+    if (energy_only) return std::nullopt;
     if (opts.empty()) {
         return MeasureKind::Ordered;
     } else if (opts == "opm" || opts == "qpt" || opts == "ordered" || opts == "OPM" || opts == "QPT" || opts == "ORDERED") {
@@ -1994,10 +2017,16 @@ std::optional<MeasureKind> parse_measure_kind(std::string& opts) {
 }
 
 int measure_code_size(const MeasureKind kind, const Game &game) {
-    const long long d = game.priority(game.nodecount()-1); // the highest priority
+    const long long d = game.nodecount() ? game.priority(game.nodecount()-1) : 0;
     switch (kind) {
         case MeasureKind::Small:
             return sizeof(int);
+        case MeasureKind::Energy:
+#ifdef OINK_HAVE_EP
+            return 1; // credits serialize as bytes
+#else
+            break;
+#endif
         case MeasureKind::Ordered: {
             // the priorities 0..d, and -1 for _ (bump and inc can also write 1); not 16 bits, see gpm.hpp
             const long long max = std::max(d, 1LL);
@@ -2022,6 +2051,10 @@ int measure_code_size(const MeasureKind kind, const Game &game) {
 Measures *new_measure(const MeasureKind kind, const Game &game, const int player) {
     const int size = measure_code_size(kind, game);
     switch (kind) {
+#ifdef OINK_HAVE_EP
+        case MeasureKind::Energy:
+            return new EnergyCredits(game, player);
+#endif
         case MeasureKind::Small:
             return new Small(game, player);
         case MeasureKind::Ordered:
@@ -2054,14 +2087,26 @@ void stream_measure_kind(std::ostream& logger, MeasureKind kind) {
         case MeasureKind::Strahler:
             logger << "Strahler Progress Measures (STRPM)";
             break;
+#ifdef OINK_HAVE_EP
+        case MeasureKind::Energy:
+            logger << "Energy Progress Measures (EPM)";
+            break;
+#endif
         default:
             THROW_ERROR("Measure kind exists but is not implemented");
             break;
     }
 }
 
-void stream_measure_kinds(std::ostream& logger) {
+void stream_measure_kinds(std::ostream& logger, bool energy_only) {
+    if (energy_only) {
+        logger << "energy";
+        return;
+    }
     logger << "small, ordered, succinct, strahler";
+#ifdef OINK_HAVE_EP
+    logger << ", energy";
+#endif
 }
 
 }

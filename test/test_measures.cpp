@@ -199,14 +199,18 @@ int main(int, char**)
         MeasureKind::Small,
         MeasureKind::Ordered,
         MeasureKind::Succinct,
-        MeasureKind::Strahler
+        MeasureKind::Strahler,
+#ifdef OINK_HAVE_EP
+        MeasureKind::Energy,
+#endif
     };
 
     for (auto kind : kinds) {
         const char* kindName = (kind == MeasureKind::Small)    ? "Small" :
                                (kind == MeasureKind::Ordered)  ? "Ordered" :
                                (kind == MeasureKind::Succinct) ? "Succinct" :
-                               (kind == MeasureKind::Strahler) ? "Strahler" : "?";
+                               (kind == MeasureKind::Strahler) ? "Strahler" :
+                               (kind == MeasureKind::Energy) ? "Energy Progress Measures (EPM)" : "?";
 
         std::cout << "\n=== MeasureKind: " << kindName << " ===\n";
 

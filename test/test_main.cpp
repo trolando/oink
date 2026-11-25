@@ -39,6 +39,9 @@ int test_lace_restart();
 int test_fpj_batch();
 int test_fpi_frontier();
 int test_fpi_parallel();
+#ifdef OINK_HAVE_EP
+int test_ep();
+#endif
 int test_tlq_cache();
 int test_tlj_cache();
 int test_gpm_cache();
@@ -74,6 +77,9 @@ const Test tests[] = {
     {"fpj-batch", test_fpj_batch},
     {"fpi-frontier", test_fpi_frontier},
     {"fpi-parallel", test_fpi_parallel},
+#ifdef OINK_HAVE_EP
+    {"ep", test_ep},
+#endif
     {"tlq-cache", test_tlq_cache},
     {"tlj-cache", test_tlj_cache},
     {"gpm-cache", test_gpm_cache},

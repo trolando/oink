@@ -17,6 +17,7 @@
 #include "oink/solvers.hpp"
 #include <algorithm>
 #include <initializer_list>
+#include <sstream>
 
 #include "solvers/zlk.hpp"
 #include "solvers/zlkj.hpp"
@@ -27,6 +28,9 @@
 #include "solvers/dp.hpp"
 #include "solvers/rrdp.hpp"
 #include "solvers/fpi.hpp"
+#ifdef OINK_HAVE_EP
+#include "solvers/ep.hpp"
+#endif
 #include "solvers/fpim.hpp"
 #include "solvers/fpj.hpp"
 #include "solvers/fpjm.hpp"
@@ -74,6 +78,14 @@ Solvers::Solvers()
     _add("rrdp", "priority promotion RR with DP strategy", 0, [] (Oink& oink, Game& game) { return std::make_unique<RRDPSolver>(oink, game); }, true);
     _add("ppq", "qpt Zielonka accelerated by priority promotion", 0, [] (Oink& oink, Game& game) { return std::make_unique<PPQSolver>(oink, game); });
     _add("fpi", "fixpoint iteration", 1, [] (Oink& oink, Game& game) { return std::make_unique<FPISolver>(oink, game); });
+#ifdef OINK_HAVE_EP
+    _add("ep", "polynomial-time extremal prices for parity games", 0, [] (Oink& oink, Game& game) { return std::make_unique<EPSolver>(oink, game); }, true);
+    _add("ep-clipped", "polynomial-time extremal prices with a clipped energy measure", 0, [] (Oink& oink, Game& game) { return std::make_unique<EPSolver>(oink, game, EPSolver::Mode::Clipped); });
+    _add("ep-sign", "polynomial-time extremal prices with the winner-sign oracle", 0, [] (Oink& oink, Game& game) { return std::make_unique<EPSolver>(oink, game, EPSolver::Mode::Sign); });
+    _add("gpm-energy", "polynomial-time energy progress measures", 0, [] (Oink& oink, Game& game) { return std::make_unique<GPMSolver>(oink, game, MeasureKind::Energy); });
+    _add("gpa-energy", "polynomial-time energy progress measures with attractors", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Energy, false); }, true);
+    _add("pmtl-energy", "polynomial-time energy progress measures with tangle learning", 0, [] (Oink& oink, Game& game) { return std::make_unique<PMTLSolver>(oink, game, MeasureKind::Energy, true); });
+#endif
     _add("fpim", "fixpoint iteration (multi-strategy)", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPIMSolver>(oink, game); });
     _add("fpj", "fixpoint iteration with justifications", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPJSolver>(oink, game); });
     _add("fpjm", "fixpoint iteration with justifications (multi-strategy)", 0, [] (Oink& oink, Game& game) { return std::make_unique<FPJMSolver>(oink, game); });
@@ -121,11 +133,29 @@ Solvers::Solvers()
         }
     };
     group(Family::TangleLearning, {"tl", "tlpar", "tlj", "tlq", "rtl", "ortl", "dtl", "idtl",
-          "pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler"});
+          "pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler",
+#ifdef OINK_HAVE_EP
+          "pmtl-energy",
+#endif
+    });
     group(Family::ProgressMeasures, {"spm", "tspm", "mspm", "sspm", "bsspm", "qpt", "bqpt",
           "gpm", "gpm-small", "gpm-succinct", "gpm-ordered", "gpm-strahler",
-          "pma", "pma-small", "pma-succinct", "pma-ordered", "pma-strahler"});
+#ifdef OINK_HAVE_EP
+          "gpm-energy",
+#endif
+          "pma", "pma-small", "pma-succinct", "pma-ordered", "pma-strahler",
+#ifdef OINK_HAVE_EP
+          "gpa-energy", "ep", "ep-clipped", "ep-sign",
+#endif
+    });
     group(Family::FixpointIteration, {"fpi", "fpim", "fpj", "fpjg", "fpjm"});
+#ifdef OINK_HAVE_EP
+    for (const char* id : {"ep", "ep-clipped", "ep-sign"}) solvers[id].needsInEdges = false;
+    solvers["ep"].optionsHelp = "clipped (default) | sign";
+    solvers["gpm-energy"].optionsHelp = "energy, no-shortcuts (comma separated)";
+    solvers["gpa-energy"].optionsHelp = "energy, up/noup, tangles/notangles (default: notangles), no-shortcuts (comma separated)";
+    solvers["pmtl-energy"].optionsHelp = "energy, up/noup, tangles/notangles, no-shortcuts (comma separated)";
+#endif
     group(Family::PriorityPromotion, {"npp", "pp", "ppj", "ppp", "rr", "dp", "rrdp", "ppq"});
     group(Family::StrategyImprovement, {"psi", "ssi"});
     group(Family::Zielonka, {"zlk", "zlkj", "uzlk", "zlkq", "zlkw", "zlkwj", "zlkpp-std", "zlkpp-waw", "zlkpp-liv"});
@@ -133,13 +163,15 @@ Solvers::Solvers()
     solvers["mspm"].optionsHelp = "even | odd (default: smaller measure domain)";
     solvers["psi"].optionsHelp = "parmin=N,chunk=N (positive integers; defaults: 2048,256)";
     solvers["tlpar"].optionsHelp = "parmin=N,chunk=N (positive integers; defaults: 2048,256)";
+    std::ostringstream measures;
+    stream_measure_kinds(measures);
     for (const char* id : {"gpm", "gpm-small", "gpm-succinct", "gpm-ordered", "gpm-strahler"})
-        solvers[id].optionsHelp = "small, succinct, ordered, strahler, no-shortcuts (comma separated)";
+        solvers[id].optionsHelp = measures.str() + ", no-shortcuts (comma separated)";
     for (const char* id : {"pmtl", "pmtl-small", "pmtl-succinct", "pmtl-ordered", "pmtl-strahler"})
-        solvers[id].optionsHelp = "small, succinct, ordered, strahler, up/noup, tangles/notangles, no-shortcuts (comma separated)";
+        solvers[id].optionsHelp = measures.str() + ", up/noup, tangles/notangles, no-shortcuts (comma separated)";
 
     for (const char* id : {"pma", "pma-small", "pma-succinct", "pma-ordered", "pma-strahler"})
-        solvers[id].optionsHelp = "small, succinct, ordered, strahler, up/noup, tangles/notangles (default: notangles), no-shortcuts (comma separated)";
+        solvers[id].optionsHelp = measures.str() + ", up/noup, tangles/notangles (default: notangles), no-shortcuts (comma separated)";
 
     // No incoming edges required up front; sequential FPI may build them lazily.
     for (const char* id : {"fpi", "fpim", "psi"}) solvers[id].needsInEdges = false;

@@ -80,6 +80,15 @@ protected:
     void solve(int node, int winner, int strategy) { oink.solve(node, winner, strategy); }
     void flush() { oink.flush(); }
 
+    // Transfer the residual arena to another solver on the same controller.
+    // Flush first so that the new solver sees a total, attractor-closed subgame.
+    template<class Subsolver>
+    void finish_with()
+    {
+        flush();
+        Subsolver(oink, game).run();
+    }
+
     /** Whether to run in parallel (with Lace), as decided by Oink, see Oink::parallel(). */
     [[nodiscard]] bool parallel() const { return oink.parallel(); }
 

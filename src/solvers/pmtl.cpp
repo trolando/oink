@@ -22,6 +22,10 @@
 
 #include "pmtl.hpp"
 #include "oink/uintqueue.hpp"
+#ifdef OINK_HAVE_EP
+#include "ep.hpp"
+#include "energy_credit.hpp"
+#endif
 
 // #define CHECK_UNIQUE 1
 
@@ -29,7 +33,7 @@ namespace pg {
 
 
 PMTLSolver::PMTLSolver(Oink& oink, Game& game, MeasureKind kind, bool enable_tangles)
-    : Solver(oink, game), measure_kind(kind), use_tangles(enable_tangles)
+    : Solver(oink, game), measure_kind(kind), energy_only(kind == MeasureKind::Energy), use_tangles(enable_tangles)
 {
 }
 
@@ -303,10 +307,13 @@ pearce_again:
             }
         } else {
 #ifndef NDEBUG
+#ifdef OINK_HAVE_EP
+            if (measure_kind != MeasureKind::Energy)
+#endif
             if (str[n] == -1 or !R[str[n]]) LOGIC_ERROR; // our strategy must stay in the region
 #endif
             const int s = str[n];
-            if (i == 0) {
+            if (s >= 0 && R[s] && i == 0) {
                 // beginEdge
                 if (pea_vidx[s] == 0) {
                     pea_iS.back() = 1;
@@ -319,7 +326,7 @@ pearce_again:
                 }
             }
             // finishEdge
-            if (pea_vidx[s] < pea_vidx[n]) {
+            if (s >= 0 && R[s] && pea_vidx[s] < pea_vidx[n]) {
                 pea_vidx[n] = pea_vidx[s];
                 pea_root[n] = false;
             }
@@ -359,6 +366,12 @@ pearce_again:
             tangle.clear();
             continue;
         }
+#ifdef OINK_HAVE_EP
+        if (measure_kind == MeasureKind::Energy && !validCreditPolicy(tangle, pl, str, false)) {
+            tangle.clear();
+            continue;
+        }
+#endif
 
         /**
          * We have a tangle. Compute the outgoing edges (into <tangleto>) and the next highest region.
@@ -499,7 +512,6 @@ pearce_again:
 
         // and set p to pr
         tpr.push_back(pr);
-        if ((int)tangles_of_pr.size() <= pr) tangles_of_pr.resize(pr+1);
         tangles_of_pr[pr].push_back(tidx);
 
         tangles++;
@@ -517,6 +529,11 @@ template<class Measure, bool GoUp, bool UseTangles>
 bool
 PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
 {
+#ifdef OINK_HAVE_EP
+    constexpr bool native_credits = std::is_same_v<Measure, EnergyCredits>;
+#else
+    constexpr bool native_credits = false;
+#endif
     // sort function to sort by value (desc) then priority (desc)
     auto max_pm_first = [&](int const & a, int const & b) {
             int pmc = pm.compare(a, b);
@@ -580,20 +597,61 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
     Updated.reset();
     Deferred.reset();
     bool any_updated = false;
+    bitset visited;
+    if constexpr (native_credits) visited.resize(nodecount());
+
+    auto record_lift = [&](int v) {
+        Updated[v] = true;
+        any_updated = true;
+#ifndef NDEBUG
+        if (trace >= 2) {
+            logger << "updating vertex " << label_vertex(v) << " to ";
+            target_pm.stream(logger, v);
+            logger << std::endl;
+        }
+#endif
+        lifts++;
+    };
+
+    auto lift_credit_row = [&](int v) {
+        if constexpr (native_credits) {
+            if (visited[v]) return;
+            visited[v] = true;
+            int best = -1;
+            const bool maximize = owner(v) == player;
+            for (auto edge = outs(v); *edge != -1; ++edge) {
+                const int to = *edge;
+                if (!G[to]) continue;
+                if (best == -1 || (maximize ? target_pm.compare(to, best) > 0
+                                            : target_pm.compare(to, best) < 0)) best = to;
+            }
+            if (best == -1) THROW_ERROR("energy measure vertex has no active successor");
+            if (target_pm.raise(v, target_pm.progress(target_pm.value(best), priority(v)))) record_lift(v);
+        }
+    };
 
     // go from "best" to "worst" vertex
     for (int x=0; x<norder; x++) {
         auto top = order[x];
         if (!R[top]) continue; // not in remainder
 
-        // Source measures and their bounds remain fixed during this update.
-        // Ordered::see uses -3 internally; -4 is reserved here for this cache.
+        // Ordinal measures use the fixed source head. Credit lifts compose the
+        // signed weight at each actual edge, in attractor order.
         int cached_priority = -1;
-        auto see_top = [&](int p) {
-            if (p != cached_priority) {
-                pm.copy(top, -4);
-                pm.see(-4, p);
-                cached_priority = p;
+        auto lift_region = [&](int v, bool strict = true) {
+            if constexpr (native_credits) {
+                lift_credit_row(v);
+            } else {
+                // Ordered::see uses -3 internally; -4 caches the head lift.
+                const int p = priority(v);
+                if (p != cached_priority) {
+                    pm.copy(top, -4);
+                    pm.see(-4, p);
+                    cached_priority = p;
+                }
+                if (strict ? pm.compare(-4, v) <= 0 : pm.eq(-4, v)) return;
+                target_pm.copy_from(pm, -4, v);
+                record_lift(v);
             }
         };
 
@@ -604,8 +662,9 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
             // if so, this "initializes" Z with that tangle
             // (only the tangles of this priority, in order of creation; deleted ones have tpr -1)
             const int pr = priority(top);
-            if (pr < (int)tangles_of_pr.size()) {
-                const auto& ts = tangles_of_pr[pr];
+            const auto bucket = tangles_of_pr.find(pr);
+            if (bucket != tangles_of_pr.end()) {
+                const auto& ts = bucket->second;
                 for (size_t j=0; j<ts.size(); j++) {
                     const int i = ts[j];
                     if (tpr[i] != pr) continue;
@@ -673,27 +732,13 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
                     logger << "special case " << label_vertex(v) << " with U==" << Updated[v] << std::endl;
                 }
 #endif
-                if (!Updated[v]) {
+                if constexpr (native_credits) {
+                    lift_credit_row(v);
+                } else if (!Updated[v]) {
                     // in this case we might lift v too high if our top vertex was already lifted to higher measure in a higher region.
                     // An example of when this occurs is if player(v) != player, there is an edge from v to itself and priority(v) & 1
                     // != player, i.e. v has a winning self loop for !player.
-                    if (pm.compare(top, v) <= 0) {
-                        see_top(priority(v));
-                        if (pm.compare(-4, v) > 0) {
-                            Updated[v] = true;
-                            any_updated = true;
-                            //pm.copy(-4, v);
-                            target_pm.copy_from(pm, -4, v);
-#ifndef NDEBUG
-                            if (trace >= 2) {
-                                logger << "updating vertex " << label_vertex(v) << " to ";
-                                target_pm.stream(logger, v);
-                                logger << std::endl;
-                            }
-#endif
-                            lifts++;
-                        }
-                    }
+                    if (pm.compare(top, v) <= 0) lift_region(v);
                 }
             }
         }
@@ -745,7 +790,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
         // so we skip the region. (This is also why there is the if statement in the special case above) Another possible
         // solution is to keep track of a separate new set of measures pm2 and only replace pm with pm2 at the end. That
         // is likely faster.
-        if (Updated[top]) {
+        if (!native_credits && Updated[top]) {
             // the lifts of this region are postponed to the next round, so shortcuts() must
             // treat its vertices as changed (like lifted vertices)
             for (const int v : Zlist) if (Z[v]) Deferred[v] = true;
@@ -758,24 +803,8 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
         // update all vertices with prog
         for (const int v : Zlist) {
             if (!Z[v]) continue;
-            if (OpenHead[v]) continue;
-            if (Updated[v]) continue; // already updated to a higher pm
-
-            see_top(priority(v));
-            if (!pm.eq(-4, v)) {
-                Updated[v] = true;
-                any_updated = true;
-                //pm.copy(-4, v);
-                target_pm.copy_from(pm, -4, v);
-#ifndef NDEBUG
-                if (trace >= 2) {
-                    logger << "updating vertex " << label_vertex(v) << " to ";
-                    target_pm.stream(logger, v);
-                    logger << std::endl;
-                }
-#endif
-                lifts++;
-            }
+            if (!native_credits && (OpenHead[v] || Updated[v])) continue;
+            lift_region(v, false);
         }
 
         {
@@ -867,40 +896,34 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
 
         if (GoUp) {
             // attract with increasing priority
-            const int d = priority(nodecount()-1);
-            for (max_pr=priority(top)+1; max_pr<=d; max_pr++) {
-                for (const int v : Zlist) if (Z[v]) Q.push(v);
+            for (auto level = std::upper_bound(up_levels.begin(), up_levels.end(), priority(top));
+                 level != up_levels.end(); ++level) {
+                const auto next = level + 1;
+                const std::int64_t end = next == up_levels.end() ? std::int64_t(*level) + 1 : *next;
+                for (std::int64_t threshold = *level; threshold < end; ++threshold) {
+                    max_pr = int(threshold);
+                    const auto before = Zlist.size();
+                    for (const int v : Zlist) if (Z[v]) Q.push(v);
 
 #ifndef NDEBUG
-                if (trace >= 2) {
-                    logger << "attracting with max priority " << max_pr << std::endl;
-                }
-#endif
-                while (Q.nonempty()) {
-                    const int v = Q.pop();
-
-                    attractVertices(player, v, R, Z, E, max_pr);
-                    if (UseTangles) {
-                        attractTangles(player, v, R, Z, E, max_pr);
+                    if (trace >= 2) {
+                        logger << "attracting with max priority " << max_pr << std::endl;
                     }
-
-                    if (!Updated[v] && priority(v) >= max_pr) {
-                        see_top(priority(v));
-                        if (pm.compare(-4, v) > 0) {
-                            Updated[v] = true;
-                            any_updated = true;
-                            //pm.copy(-4, v);
-                            target_pm.copy_from(pm, -4, v);
-#ifndef NDEBUG
-                            if (trace >= 2) {
-                                logger << "updating vertex " << label_vertex(v) << " to ";
-                                target_pm.stream(logger, v);
-                                logger << std::endl;
-                            }
 #endif
-                            lifts++;
+                    while (Q.nonempty()) {
+                        const int v = Q.pop();
+
+                        attractVertices(player, v, R, Z, E, max_pr);
+                        if (UseTangles) {
+                            attractTangles(player, v, R, Z, E, max_pr);
                         }
+
+                        if (native_credits || (!Updated[v] && priority(v) >= max_pr)) lift_region(v);
                     }
+
+                    // Thresholds inside a gap have identical eligibility. A
+                    // growing region can still make a prior tangle eligible.
+                    if (Zlist.size() == before) break;
                 }
             }
         } else { // !GoUp
@@ -917,23 +940,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
                     }
 #endif
                     if (owner(from) == player) {
-                        if (!Updated[from]) {
-                            see_top(priority(from));
-                            if (pm.compare(-4, from) > 0) {
-                                Updated[from] = true;
-                                any_updated = true;
-                                // pm.copy(-4, from);
-                                target_pm.copy_from(pm, -4, from);
-#ifndef NDEBUG
-                                if (trace >= 2) {
-                                    logger << "updating vertex " << label_vertex(from) << " to ";
-                                    target_pm.stream(logger, from);
-                                    logger << std::endl;
-                                }
-#endif
-                                lifts++;
-                            }
-                        }
+                        if (!Updated[from]) lift_region(from);
                     } else {
                         bool attracted = true;
                         for (auto edge = outs(from); *edge != -1; edge++) {
@@ -948,23 +955,7 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
                                 break;
                             }
                         }
-                        if (attracted &&!Updated[from]) {
-                            see_top(priority(from));
-                            if (pm.compare(-4, from) > 0) {
-                                Updated[from] = true;
-                                any_updated = true;
-                                // pm.copy(-4, from);
-                                target_pm.copy_from(pm, -4, from);
-#ifndef NDEBUG
-                                if (trace >= 2) {
-                                    logger << "updating vertex " << label_vertex(from) << " to ";
-                                    target_pm.stream(logger, from);
-                                    logger << std::endl;
-                                }
-#endif
-                                lifts++;
-                            }
-                        }
+                        if (attracted && !Updated[from]) lift_region(from);
                     }
                 }
             }
@@ -994,6 +985,22 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
      */
 
     {
+#ifdef OINK_HAVE_EP
+        if constexpr (native_credits) {
+            if (!dom_vector.empty()) {
+                std::vector<int> members;
+                for (std::size_t i = 0; i < dom_vector.size(); i += 2) {
+                    const int v = dom_vector[i];
+                    members.push_back(v);
+                    str[v] = dom_vector[i + 1];
+                }
+                if (!validCreditPolicy(members, player, str, true)) {
+                    dom_vector.clear();
+                    S.reset();
+                }
+            }
+        }
+#endif
         if (!dom_vector.empty()) {
             for (unsigned i = 0; i<dom_vector.size(); i+=2) {
                 int v = dom_vector[i];
@@ -1016,9 +1023,22 @@ PMTLSolver::updateMeasure(Measure &pm, Measure &target_pm, const int player)
             Updated |= S;
             G -= S; // and remove from G
             S.reset();
+            if constexpr (native_credits) return true; // restart the credit tables on the new arena
         }
     }
 
+#ifdef OINK_HAVE_EP
+    if constexpr (native_credits) {
+        // Region ordering is a schedule. A full pass still visits every live
+        // Bellman row, including open/deferred vertices, before reporting stability.
+        for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) lift_credit_row(v);
+        if constexpr (UseTangles) {
+            for (int t = 0; t < (int)tpr.size(); ++t) {
+                if (tpr[t] >= 0 && (tpr[t]&1) == player && liftCreditTangle(target_pm, t)) any_updated = true;
+            }
+        }
+    } else
+#endif
     if (UseTangles and !GoUp) {
         // A tangle head can follow its strategy until the opponent escapes, or win inside
         // the tangle. Its priority dominates every opponent priority on such a path, so
@@ -1074,12 +1094,195 @@ template<bool GoUp, bool UseTangles>
 bool
 PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
 {
+#ifdef OINK_HAVE_EP
+    if (measure_kind == MeasureKind::Energy) {
+        return updateMeasure<EnergyCredits, GoUp, UseTangles>(static_cast<EnergyCredits&>(pm),
+                                                         static_cast<EnergyCredits&>(target_pm), player);
+    }
+#endif
     // (both tables of a player have the same concrete class, see measure_code_size)
     return with_measure(measure_kind, pm, [&](auto &concrete) {
         using Measure = std::remove_reference_t<decltype(concrete)>;
         return updateMeasure<Measure, GoUp, UseTangles>(concrete, static_cast<Measure&>(target_pm), player);
     });
 }
+
+bool
+PMTLSolver::update(Measures &pm, Measures &target_pm, const int player)
+{
+    if (go_up) {
+        return use_tangles ? update<true, true>(pm, target_pm, player) : update<true, false>(pm, target_pm, player);
+    }
+    return use_tangles ? update<false, true>(pm, target_pm, player) : update<false, false>(pm, target_pm, player);
+}
+
+#ifdef OINK_HAVE_EP
+// Tangle lifts retain every live minimizer exit. The fixed maximizer policy
+// must stay inside and give every internal cycle the maximizer's parity.
+bool
+PMTLSolver::validCreditPolicy(const std::vector<int>& vertices, int player, const int* policy, bool closed) const
+{
+    bitset inside(nodecount());
+    for (int v : vertices) inside[v] = true;
+    for (int v : vertices) {
+        if (owner(v) == player) {
+            const int to = policy[v];
+            if (to < 0 || !inside[to] || !game.has_edge(v, to)) return false;
+        } else if (closed) {
+            for (auto edge = outs(v); *edge != -1; ++edge) {
+                if (G[*edge] && !inside[*edge]) return false;
+            }
+        }
+    }
+
+    std::vector<int> seen(nodecount(), -1), stack;
+    for (int top : vertices) {
+        const int pr = priority(top);
+        if ((pr & 1) == player) continue;
+        stack.push_back(top);
+        seen[top] = top;
+        auto visits = [&](int to) {
+            if (to == top) return false;
+            if (inside[to] && seen[to] != top && priority(to) <= pr) {
+                seen[to] = top;
+                stack.push_back(to);
+            }
+            return true;
+        };
+        while (!stack.empty()) {
+            const int v = stack.back();
+            stack.pop_back();
+            if (owner(v) == player) {
+                if (!visits(policy[v])) return false;
+            } else {
+                for (auto edge = outs(v); *edge != -1; ++edge) {
+                    if (!visits(*edge)) return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+bool
+PMTLSolver::liftCreditTangle(EnergyCredits& pm, int t)
+{
+    const int* members = tv[t];
+    std::size_t count = 0;
+    for (const int* pair = members; *pair != -1; pair += 2) {
+        if (!G[pair[0]]) {
+            tpr[t] = -1;
+            return false;
+        }
+        ++count;
+    }
+    if (credit_slot.empty()) credit_slot.assign(nodecount(), -1);
+    for (std::size_t i = 0; i < count; ++i) credit_slot[members[2*i]] = int(i);
+
+    pm.copy_top(-1);
+    ep::Prices credit(count, pm.value(-1));
+    const int player = tpr[t] & 1;
+    auto value = [&](int v) -> const ep::Integer& {
+        const int i = credit_slot[v];
+        return i == -1 ? pm.value(v) : credit[i];
+    };
+
+    // At any fixed point, finite optimal choices lead to a pinned exit. An
+    // internal cycle of finite choices would telescope to positive weight.
+    // Following the exit path bounds the descent from Top by that fixed
+    // point after |T| sweeps. Thus the fixed point is unique. It is a lower
+    // bound since the maximizer's moves are restricted and exits are pinned
+    // at lower bounds.
+    for (std::size_t pass = 0; pass < count; ++pass) {
+        bool changed = false;
+        for (std::size_t i = 0; i < count; ++i) {
+            const int v = members[2*i];
+            int best = members[2*i + 1];
+            if (owner(v) != player) {
+                best = -1;
+                for (auto edge = outs(v); *edge != -1; ++edge) {
+                    const int to = *edge;
+                    if (G[to] && (best == -1 || value(to) < value(best))) best = to;
+                }
+            }
+            if (best == -1) THROW_ERROR("energy tangle vertex has no active successor");
+            auto next = pm.progress(value(best), priority(v));
+            if (next == credit[i]) continue;
+            credit[i] = std::move(next);
+            changed = true;
+        }
+        if (!changed) break;
+    }
+
+    std::size_t raised = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        const int v = members[2*i];
+        credit_slot[v] = -1;
+        if (!pm.raise(v, credit[i])) continue;
+        Updated[v] = true;
+        ++raised;
+    }
+    lifts += raised;
+    if (trace && raised) logger << "PMTL energy tangle " << t << " raised " << raised << " vertices\n";
+    return raised != 0;
+}
+
+void
+PMTLSolver::certifyCredits(const EnergyCredits& pm, int player)
+{
+    // The finite credit on an edge supports the minimizing player if the
+    // next credit plus this priority's signed weight fits. Prune to the
+    // largest closed region with one supported minimizing move and every
+    // maximizing move supported. Summing around a cycle certifies its parity.
+    auto supports = [&](int v, int to) {
+        return pm.progress(pm.value(to), priority(v)) <= pm.value(v);
+    };
+    bitset stable = G;
+    std::vector<std::size_t> remaining(nodecount());
+    for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) {
+        bool bad = pm.is_top(v);
+        if (!bad) {
+            for (auto edge = outs(v); *edge != -1; ++edge) {
+                const int to = *edge;
+                if (!G[to]) continue;
+                if (supports(v, to)) ++remaining[v];
+                else if (owner(v) == player) bad = true;
+            }
+        }
+        if (!bad && remaining[v] != 0) continue;
+        stable[v] = false;
+        Q.push(v);
+    }
+    while (Q.nonempty()) {
+        const int v = Q.pop();
+        for (auto edge = ins(v); *edge != -1; ++edge) {
+            const int from = *edge;
+            if (!stable[from]) continue;
+            if (owner(from) == player || (supports(from, v) && --remaining[from] == 0)) {
+                stable[from] = false;
+                Q.push(from);
+            }
+        }
+    }
+    if (stable.none()) return;
+
+    for (auto v = stable.find_first(); v != bitset::npos; v = stable.find_next(v)) {
+        int move = -1;
+        if (owner(v) != player) {
+            for (auto edge = outs(v); *edge != -1; ++edge) {
+                if (stable[*edge] && supports(v, *edge)) {
+                    move = *edge;
+                    break;
+                }
+            }
+            if (move == -1) THROW_ERROR("energy credit certificate has no supported move");
+        }
+        Solver::solve(v, 1-player, move);
+    }
+    ++dominions;
+    G -= stable;
+}
+#endif
 
 
 void
@@ -1239,13 +1442,13 @@ PMTLSolver::parseOptions(std::string& opts) {
         } else if (opt == "noshortcuts" || opt == "no-shortcuts" || opt == "NOSHORTCUTS" || opt == "NO-SHORTCUTS") {
             use_shortcuts = false;
         } else {
-            std::optional<MeasureKind> parsed = parse_measure_kind(opt);
+            std::optional<MeasureKind> parsed = parse_measure_kind(opt, energy_only);
             if (parsed.has_value()) {
                 measure_kind = *parsed;
             } else {
                 logger << "unrecognised option for PMTL solver, possible options: ";
-                stream_measure_kinds(logger);
-                logger << ", up, noup, tangles, notangles (separated by commas and no spaces)" << std::endl;
+                stream_measure_kinds(logger, energy_only);
+                logger << ", up, noup, tangles, notangles, no-shortcuts (separated by commas and no spaces)" << std::endl;
                 return false;
             }
         }
@@ -1306,19 +1509,62 @@ PMTLSolver::initOrder(const int pl)
     sorted[pl] = true;
 }
 
+#ifdef OINK_HAVE_EP
 void
-PMTLSolver::run()
+PMTLSolver::runCredits(std::uint64_t (&by_player)[2])
 {
-    str = new int[nodecount()];
+    if (G.none()) return;
+    EnergyCredits even(game, 0), odd(game, 1);
+    EnergyCredits even_next(even), odd_next(odd);
+    EnergyCredits* source[] = {&even, &odd};
+    EnergyCredits* target[] = {&even_next, &odd_next};
+    initOrder(0);
+    initOrder(1);
+
+    const auto limit = G.count();
+    for (std::size_t round = 0; round < limit && G.any(); ++round) {
+        ++iterations;
+        for (int player : {0, 1}) {
+            if (G.none()) break;
+            const auto active = G.count();
+            const auto previous_lifts = lifts;
+            const bool changed = update(*source[player], *target[player], player);
+            by_player[player] += lifts - previous_lifts;
+            if (G.count() == active && (use_shortcuts || !changed)) certifyCredits(*target[player], player);
+
+            if (G.count() != active) {
+                Solver::flush();
+                G = disabled;
+                G.flip();
+                // Deleting an outgoing choice can change either credit. The
+                // unchanged signed weights still encode all surviving cycles.
+                for (int p : {0, 1}) {
+                    for (auto v = G.find_first(); v != bitset::npos; v = G.find_next(v)) source[p]->copy_bot(v);
+                    target[p]->set(*source[p]);
+                    Changed[p].reset();
+                    initOrder(p);
+                }
+            } else {
+                source[player]->set(*target[player]);
+            }
+        }
+    }
+
+    if (G.any()) {
+        if (trace) logger << "PMTL handing off " << G.count() << " vertices after "
+                          << limit << " paired credit rounds\n";
+        finish_with<EPSolver>();
+    }
+}
+#endif
+
+void
+PMTLSolver::runMeasures(std::uint64_t (&by_player)[2])
+{
     if (use_shortcuts) {
         escape_offset.resize(nodecount());
         escape_stamp.resize(nodecount());
     }
-    G = disabled;
-    G.flip();
-    S.resize(nodecount());
-    // (the tangle storage and the workspace of tangle learning are allocated when used)
-    Q.resize(nodecount());
 
     // Even updates first. The order and the measures of Odd are only made once an update of
     // Even leaves unsolved vertices, before the shortcuts of Even can write Odd's measures.
@@ -1327,21 +1573,8 @@ PMTLSolver::run()
     std::unique_ptr<Measures> pm0b(new_measure(measure_kind, game, 0));
     std::unique_ptr<Measures> pm1, pm1b;
 
-    G = disabled;
-    G.flip();
-
-    Z.resize(nodecount());
-    R.resize(nodecount());
-    E.resize(nodecount());
-    Updated = disabled;
-    Deferred.resize(nodecount());
-    OpenHead.resize(nodecount());
-    WasHead.resize(nodecount());
     bool c0 = true;
     bool c1 = true;
-
-    std::uint64_t evenlifts = 0;
-    std::uint64_t oddlifts = 0;
 
     while (true) {
 #ifndef NDEBUG
@@ -1354,18 +1587,8 @@ PMTLSolver::run()
             if (trace) logger << "\033[1;38;5;196mfor player Even\033[m" << std::endl;
 #endif
             const auto previous_lifts = lifts;
-            if (go_up) {
-                if (use_tangles) {
-                    c0 = update<true, true>(*pm0, *pm0b, 0);
-                } else  {
-                    c0 = update<true, false>(*pm0, *pm0b, 0);
-                }
-            } else if (use_tangles) {
-                c0 = update<false, true>(*pm0, *pm0b, 0);
-            } else {
-                c0 = update<false, false>(*pm0, *pm0b, 0);
-            }
-            evenlifts += lifts - previous_lifts;
+            c0 = update(*pm0, *pm0b, 0);
+            by_player[0] += lifts - previous_lifts;
             // All remaining vertices may have been solved by dominion attraction.
             if (G.none()) break;
             if (!pm1) {
@@ -1387,18 +1610,8 @@ PMTLSolver::run()
             if (trace) logger << "\033[1;38;5;196mfor player Odd\033[m" << std::endl;
 #endif
             const auto previous_lifts = lifts;
-            if (go_up) {
-                if (use_tangles) {
-                    c1 = update<true, true>(*pm1, *pm1b, 1);
-                } else  {
-                    c1 = update<true, false>(*pm1, *pm1b, 1);
-                }
-            } else if (use_tangles) {
-                c1 = update<false, true>(*pm1, *pm1b, 1);
-            } else {
-                c1 = update<false, false>(*pm1, *pm1b, 1);
-            }
-            oddlifts += lifts - previous_lifts;
+            c1 = update(*pm1, *pm1b, 1);
+            by_player[1] += lifts - previous_lifts;
             // All remaining vertices may have been solved by dominion attraction.
             if (G.none()) break;
             pm1->set(*pm1b);
@@ -1412,6 +1625,43 @@ PMTLSolver::run()
 
         if (!c0 && !c1) break;
     }
+}
+
+void
+PMTLSolver::run()
+{
+    const std::unique_ptr<int[]> strategy(new int[nodecount()]);
+    str = strategy.get();
+    G = disabled;
+    G.flip();
+    S.resize(nodecount());
+    Q.resize(nodecount());
+    Z.resize(nodecount());
+    R.resize(nodecount());
+    E.resize(nodecount());
+    Updated = disabled;
+    Deferred.resize(nodecount());
+    OpenHead.resize(nodecount());
+    WasHead.resize(nodecount());
+
+    if (go_up && nodecount() != 0) {
+        const int highest = priority(nodecount()-1);
+        for (int v = 0; v < nodecount(); ++v) {
+            const int p = priority(v);
+            if (v != 0 && priority(v-1) == p) continue;
+            // Eligibility changes at p, and rows of rank p cease to be
+            // lift candidates immediately above p. Other levels repeat work.
+            if (up_levels.empty() || up_levels.back() != p) up_levels.push_back(p);
+            if (p < highest) up_levels.push_back(p+1);
+        }
+    }
+
+    std::uint64_t by_player[2] = {};
+#ifdef OINK_HAVE_EP
+    if (measure_kind == MeasureKind::Energy) runCredits(by_player);
+    else
+#endif
+    runMeasures(by_player);
 
 #ifndef NDEBUG
     // Check if the whole game is now solved
@@ -1422,12 +1672,11 @@ PMTLSolver::run()
 
     logger << "found " << dominions << " dominions and " << tangles << " tangles." << std::endl;
     logger << "solved in " << iterations << " iterations and " << lifts << " lifts." << std::endl;
-    logger << "number of lifts: " << evenlifts << " even lifts and " << oddlifts << " odd lifts." << std::endl;
+    logger << "number of lifts: " << by_player[0] << " even lifts and " << by_player[1] << " odd lifts." << std::endl;
 
     // Free all explicitly allocated memory
     for (auto &x : tv) delete[] x;
     for (auto &x : tout) delete[] x;
-    delete[] str;
 }
 
 }

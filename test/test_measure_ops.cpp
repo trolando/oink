@@ -111,7 +111,13 @@ test_measure_ops()
 {
     try {
         auto game = make_game(4);
-        for (auto kind : {MeasureKind::Small, MeasureKind::Ordered, MeasureKind::Succinct, MeasureKind::Strahler}) {
+        const MeasureKind kinds[] = {MeasureKind::Small, MeasureKind::Ordered,
+                                     MeasureKind::Succinct, MeasureKind::Strahler,
+#ifdef OINK_HAVE_EP
+                                     MeasureKind::Energy,
+#endif
+        };
+        for (auto kind : kinds) {
             for (int player = 0; player < 2; player++) {
                 std::unique_ptr<Measures> source(new_measure(kind, game, player));
                 std::unique_ptr<Measures> target(new_measure(kind, game, player));

@@ -27,6 +27,9 @@
 
 #include "oink/oink.hpp"
 #include "solvers/pmtl.hpp"
+#ifdef OINK_HAVE_EP
+#include "solvers/energy_credit.hpp"
+#endif
 #include "verifier.hpp"
 
 namespace pg {
@@ -34,6 +37,46 @@ namespace pg {
 class PMTLCacheProbe
 {
 public:
+#ifdef OINK_HAVE_EP
+    static void checkCreditTangle(int player)
+    {
+        // Vertex 1 is the head. At vertex 0 the opponent can return to the
+        // head or choose between two exits with known credits 2 and 4.
+        Game game(5);
+        const int priorities[] = {1, 2, 4, 4, 5};
+        const int owners[] = {1, 0, 0, 0, 1};
+        const std::vector<std::vector<int>> edges{{1, 2, 3}, {0}, {4}, {2}, {4}};
+        for (int v = 0; v < 5; ++v) {
+            game.init_vertex(v, priorities[v] + player, owners[v] ^ player);
+            game.e_start(v);
+            for (int to : edges[v]) game.e_add(v, to);
+            game.e_finish();
+        }
+        std::ostringstream log;
+        Oink controller(game, log, true);
+        PMTLSolver solver(controller, game, MeasureKind::Energy);
+        solver.G.resize(5);
+        solver.G.flip();
+        solver.Updated.resize(5);
+        int members[] = {1, 0, 0, -1, -1};
+        solver.tv.push_back(members);
+        solver.tpr.push_back(priorities[1] + player);
+        EnergyCredits pm(game, player);
+        pm.see(2, priorities[2] + player);
+        pm.copy(2, 3);
+        pm.see(3, priorities[3] + player);
+        if (pm.value(2) != 2 || pm.value(3) != 4 ||
+            pm.progress(pm.value(0), priorities[1] + player) != 2)
+            throw std::runtime_error("incorrect credit tangle fixture");
+        if (!solver.liftCreditTangle(pm, 0) || pm.value(1) != 3 || pm.value(0) != 1 ||
+            pm.value(2) != 2 || pm.value(3) != 4 || solver.liftCreditTangle(pm, 0))
+            throw std::runtime_error("credit tangle did not compute its exact frozen-exit values");
+        pm.copy_top(2);
+        pm.copy_top(3);
+        if (!solver.liftCreditTangle(pm, 0) || !pm.is_top(1) || !pm.is_top(0))
+            throw std::runtime_error("a winning tangle with only Top exits should lift to Top");
+    }
+#endif
     static void checkCounters(Game& input, MeasureKind kind, bool tangles)
     {
         struct Counts {
@@ -134,6 +177,10 @@ int
 test_pmtl_cache()
 {
     using namespace pg;
+#ifdef OINK_HAVE_EP
+    PMTLCacheProbe::checkCreditTangle(0);
+    PMTLCacheProbe::checkCreditTangle(1);
+#endif
     Game game(7);
     for (int v = 6; v >= 0; --v) game.init_vertex(v, v < 2 ? 0 : 1, v == 1 || v == 4 ? 1 : 0);
     // The Even tangle {0,1} escapes to 2. LIFO seeds 6 then 3 produce a live
