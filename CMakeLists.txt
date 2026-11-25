@@ -445,6 +445,10 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 
         add_test(NAME TestMeasureOps COMMAND test_unit measure-ops)
         add_test(NAME TestMeasureCodes COMMAND test_unit measure-codes)
+        if(OINK_ENABLE_SANITIZERS)
+            # Comparing compact measure codes at their boundaries can take over a minute.
+            set_tests_properties(TestMeasureCodes PROPERTIES TIMEOUT 180)
+        endif()
         add_test(NAME TestParser COMMAND test_unit parser)
         set(parser_input "${CMAKE_CURRENT_SOURCE_DIR}/test/parser-input/records.pg")
         foreach(parser fast renumber)
