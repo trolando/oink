@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "oink/oink.hpp"
+#include "oink/pgparser.hpp"
 #include "oink/solvers.hpp"
 #include "solvers/ep_search.hpp"
 #include "solvers/ep_arena.hpp"
@@ -406,6 +407,29 @@ void bounded_energy_sweeps()
         throw std::runtime_error("EP failed to bound local energy iteration");
 }
 
+void bounded_policy_improvement()
+{
+    auto evaluate = [](const char* input) {
+        std::istringstream stream(input);
+        auto game = PGParser::parse_pgsolver_renumber(stream, false);
+        game.ensure_sorted();
+        const ep::Arena arena(game, bitset(game.nodecount()));
+        const ep::EnergyMeasure measure(arena);
+        std::vector<int> moves(arena.size());
+        auto winners = ep::improve_policy(measure, moves, nullptr);
+        if (!winners.empty() && !arena.certifies(winners, moves))
+            throw std::runtime_error("EP certified an invalid policy on the original arena");
+        return winners;
+    };
+    // Even's initial 0->1 loses. Switching to 0->2 wins against every Odd reply.
+    if (evaluate("parity 3;\n0 3 0 1,2,0;\n1 3 0 0;\n2 4 1 0,2,1;\n") != std::vector<int>(3, 0))
+        throw std::runtime_error("EP missed an improving policy switch");
+    // Only one Odd vertex branches. Neither of the two policies tried gives
+    // a certificate, so this pass must return control to the price search.
+    if (!evaluate("parity 4;\n0 0 1 3,2,0,1;\n1 5 0 2,0;\n2 5 0 3,1,2;\n3 6 1 0;\n").empty())
+        throw std::runtime_error("EP exceeded its policy evaluation budget");
+}
+
 void exact_price_labels()
 {
     // Check all maximizing slots against an independently iterated fixed
@@ -515,6 +539,7 @@ int test_ep()
     price_recursion();
     exact_price_labels();
     bounded_energy_sweeps();
+    bounded_policy_improvement();
     signed_credits();
     credit_handoff();
     exhaustive_games();

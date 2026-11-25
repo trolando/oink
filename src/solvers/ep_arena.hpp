@@ -149,11 +149,13 @@ struct EnergyMeasure
     explicit EnergyMeasure(const Arena& arena);
     std::vector<int> price_directions(const ep::Prices& trial, const ep::Integer& unit,
                                       std::vector<int>& greedy) const;
+    ep::Integer lift(int v, const ep::Integer& successor_score) const;
     ep::Integer lift(int v, const ep::Prices& x) const;
     std::vector<int> solution(const ep::Prices& x, std::vector<int>& moves) const;
 };
 
 std::vector<int> lift_measures(const EnergyMeasure& game, std::vector<int>& moves, std::ostream* trace);
+std::vector<int> improve_policy(const EnergyMeasure& game, std::vector<int>& moves, std::ostream* trace);
 std::vector<int> solve_measures(const EnergyMeasure& game, std::vector<int>& moves, std::ostream* trace);
 std::vector<int> sign_solution(const EnergyMeasure& game, std::vector<int>& moves, std::ostream* trace);
 

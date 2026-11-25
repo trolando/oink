@@ -512,6 +512,12 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
                 add_test(NAME TestSolverEP COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --ep-clipped --ep-sign --ep --ep=sign)
                 add_test(NAME TestSolverEnergyMeasures COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests
                     --gpm-energy --gpa-energy --pmtl-energy --gpm=energy --pma=energy --pmtl=energy)
+                if(TARGET tc+)
+                    add_test(NAME TestSolverEPTwoCounters COMMAND ${CMAKE_COMMAND}
+                        "-DGENERATOR=$<TARGET_FILE:tc+>" "-DTEST_SOLVERS=$<TARGET_FILE:test_solvers>"
+                        "-DGAME=${CMAKE_CURRENT_BINARY_DIR}/ep-tcplus-5.pg"
+                        -P ${CMAKE_CURRENT_SOURCE_DIR}/test/test_ep_tcplus.cmake)
+                endif()
             endif()
             # test strategy iteration
             add_test(NAME TestSolverPSIs COMMAND test_solvers ${CMAKE_CURRENT_SOURCE_DIR}/tests --psi -w -1)

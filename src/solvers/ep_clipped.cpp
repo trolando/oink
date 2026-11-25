@@ -74,10 +74,15 @@ EnergyMeasure::EnergyMeasure(const Arena& arena) : arena(arena), weight(arena.si
     }
 }
 
+Integer EnergyMeasure::lift(int v, const Integer& successor_score) const
+{
+    const Integer y = weight[v] + successor_score;
+    return std::clamp(y, lower, upper);
+}
+
 Integer EnergyMeasure::lift(int v, const Prices& x) const
 {
-    const Integer y = weight[v] + x[arena.best_successor(v, x)];
-    return std::clamp(y, lower, upper);
+    return lift(v, x[arena.best_successor(v, x)]);
 }
 
 std::vector<int> EnergyMeasure::solution(const Prices& x, std::vector<int>& moves) const
@@ -166,15 +171,24 @@ struct FreeRows
                 controller = 1 - player;
             }
         }
-        if (controller < 0) return;
+        if (controller >= 0)
+            find_cycles(arena, [&](int v) { return arena.successors(v); });
+    }
 
+    FreeRows(const Arena& arena, int player, const std::vector<int>& policy) : controller(1 - player)
+    {
+        find_cycles(arena, [&](int v) { return arena.policy_edges(v, player, policy); });
+    }
+
+    template<class Edges>
+    void find_cycles(const Arena& arena, const Edges& out)
+    {
         // The controller can follow any free cycle. At the top of a cycle
         // of its own parity every nonempty prefix has that sign, and a full
         // lap has nonzero weight. Its exact score is the favorable wall.
         rows.clear();
         std::vector<int> seen(arena.size(), -1), stack;
         for (int v : boundary) seen[v] = -2;
-        auto out = [&](int v) { return arena.successors(v); };
         for (int v = 0; v < arena.size(); ++v) {
             if (seen[v] == -2) continue;
             if (arena.colors[v] == controller && arena.cycle_at_rank(v, out, seen, stack)) {
@@ -284,6 +298,41 @@ std::vector<int> lift_measures(const EnergyMeasure& game, std::vector<int>& move
             high[v] = std::move(h);
         }
         if (!lower_changed || !upper_changed) return game.solution(lower_changed ? high : low, moves);
+    }
+    return {};
+}
+
+std::vector<int> improve_policy(const EnergyMeasure& game, std::vector<int>& moves, std::ostream* trace)
+{
+    const Arena& arena = game.arena;
+    const auto branching = arena.branching_vertices();
+    const int player = branching[1].size() < branching[0].size() ? 1 : 0;
+    const auto& choices = branching[player];
+    Prices x(arena.size());
+    std::vector<int> policy(arena.size());
+    arena.greedy_moves(x, policy);
+
+    // Evaluate the initial policy and at most one improvement round per
+    // branching vertex. Each evaluation keeps every opponent reply. Only
+    // the certificate on the full arena can publish a winning region.
+    const auto limit = choices.size() + 1;
+    for (std::size_t evaluation = 1; evaluation <= limit; ++evaluation) {
+        const FreeRows rows(arena, player, policy);
+        rows.restore(x, game.lower, game.upper, [&](int v) {
+            const int to = arena.owners[v] == player ? policy[v] : arena.best_successor(v, x);
+            return game.lift(v, x[to]);
+        });
+        auto winners = arena.supported_dominions(game.weight, x, x, 1, moves);
+        if (!winners.empty()) {
+            if (trace) *trace << "EP certified a dominion after " << evaluation
+                              << " policy evaluation" << (evaluation == 1 ? "\n" : "s\n");
+            return winners;
+        }
+        if (evaluation == limit) break;
+        for (int v : choices) {
+            const int to = arena.best_successor(v, x);
+            if (x[to] != x[policy[v]]) policy[v] = to;
+        }
     }
     return {};
 }

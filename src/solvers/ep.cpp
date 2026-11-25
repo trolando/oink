@@ -100,6 +100,7 @@ EPSolver::run()
         std::vector<int> moves(graph.size());
         auto* log = trace ? &logger : nullptr;
         auto winners = ep::lift_measures(measure, moves, log);
+        if (winners.empty()) winners = ep::improve_policy(measure, moves, log);
         if (winners.empty()) {
             winners = mode == Mode::Sign ? ep::sign_solution(measure, moves, log)
                                          : ep::solve_measures(measure, moves, log);
